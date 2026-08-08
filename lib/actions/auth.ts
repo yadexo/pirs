@@ -37,6 +37,25 @@ export async function staffSignInAction(_prevState: unknown, formData: FormData)
   return signInOrError({ portal: "staff", tenantSlug: workspace, email, password }, next);
 }
 
+/**
+ * The single sign-in used by /login. Role decides the landing page, so no
+ * workspace slug or portal picker is asked of the user.
+ */
+export async function unifiedSignInAction(_prevState: unknown, formData: FormData) {
+  const email = String(formData.get("email") ?? "");
+  const password = String(formData.get("password") ?? "");
+  if (!email || !password) return { error: "Email and password are required." };
+
+  const user = await rawDb.user.findFirst({
+    where: { email: email.toLowerCase(), role: { in: ["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF"] } },
+    select: { role: true, tenantId: true },
+  });
+
+  const destination = user?.role === "PLATFORM_ADMIN" ? "/agency" : user?.tenantId ? `/m/${user.tenantId}` : "/login";
+
+  return signInOrError({ portal: "unified", email, password }, destination);
+}
+
 export async function platformSignInAction(_prevState: unknown, formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");

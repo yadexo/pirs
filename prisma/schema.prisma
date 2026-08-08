@@ -75,6 +75,7 @@ model Tenant {
   notificationDeliveries NotificationDelivery[]
   auditLogs            AuditLog[]
   inventoryTransactions InventoryTransaction[]
+  impersonationSessions ImpersonationSession[]
 
   @@index([status])
 }
@@ -194,6 +195,7 @@ model User {
   customerProfile CustomerProfile?
   auditLogs       AuditLog[]
   passwordResets  PasswordResetToken[]
+  impersonationSessions ImpersonationSession[]
 
   @@unique([tenantId, email])
   @@index([role])
@@ -366,6 +368,11 @@ model CustomerProfile {
 
   loyaltyPointsBalance   Int @default(0)
   accountCreditBalanceCents Int @default(0)
+
+  /// Drives the Visits / Last Visit columns on Client Profiles. A client with
+  /// zero visits is what the "Leads" filter selects.
+  visitCount             Int       @default(0)
+  lastVisitAt            DateTime?
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -742,6 +749,10 @@ model CustomerMembership {
   cancelAtPeriodEnd   Boolean           @default(false)
   creditBalanceCents  Int               @default(0)
   stripeSubscriptionId String?
+
+  /// Card-failure retry state, surfaced in the Memberships dunning panel.
+  failedAttempts      Int               @default(0)
+  dunningState        String?
 
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
@@ -1442,4 +1453,50 @@ model AuditLog {
 
   @@index([tenantId, entityType, entityId])
   @@index([tenantId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Impersonation
+// ---------------------------------------------------------------------------
+
+/// One agency-admin "viewing as merchant" session. Open sessions have a null
+/// endedAt. Kept separate from AuditLog so sessions have a real duration.
+model ImpersonationSession {
+  id          String    @id @default(cuid())
+  actorUserId String
+  actorUser   User      @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+  merchantId  String
+  merchant    Tenant    @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+
+  @@index([actorUserId])
+  @@index([merchantId, startedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Agency (white-label owner)
+// ---------------------------------------------------------------------------
+
+/// Single-agency deployment: one row. Kept as a table rather than env vars so
+/// the agency can edit its own white-label settings at /agency/white-label.
+/// Distinct from TenantBranding, which is a *merchant's* own app branding.
+model AgencySettings {
+  id            String   @id @default(cuid())
+
+  name          String   @default("DezaAI")
+  logoLightUrl  String?
+  logoDarkUrl   String?
+  faviconUrl    String?
+  primaryColor  String   @default("#2DD4D9")
+
+  customDomain  String?
+  supportLabel  String?
+  supportUrl    String?
+  senderName    String?
+  loginBgUrl    String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

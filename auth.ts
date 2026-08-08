@@ -7,7 +7,7 @@ import { authConfig } from "@/auth.config";
 import type { SessionPermissions, SessionUserShape } from "@/types/next-auth";
 import type { UserRole } from "@prisma/client";
 
-type Portal = "customer" | "staff" | "platform";
+type Portal = "customer" | "staff" | "platform" | "unified";
 
 async function resolveTenantId(portal: Portal, slug: string | undefined) {
   if (portal === "platform") return null;
@@ -39,26 +39,43 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const { ok } = rateLimit(limitKey, 10, 10 * 60 * 1000);
         if (!ok) throw new Error("Too many sign-in attempts. Try again in a few minutes.");
 
-        let tenantId: string | null | undefined = null;
-        if (portal !== "platform") {
-          tenantId = await resolveTenantId(portal, tenantSlug);
-          if (tenantId === undefined) return null; // unknown/suspended workspace
+        const include = {
+          staffProfile: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
+          customerProfile: true,
+        } as const;
+
+        let user;
+
+        if (portal === "unified") {
+          // One login screen for every role. Email identifies the account;
+          // the role on it decides where they land afterwards.
+          const matches = await rawDb.user.findMany({
+            where: { email, role: { in: ["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF"] } },
+            include,
+          });
+          // Same address registered under two merchants is ambiguous — we
+          // cannot guess which, and picking one would be a security bug.
+          if (matches.length !== 1) return null;
+          user = matches[0];
+        } else {
+          let tenantId: string | null | undefined = null;
+          if (portal !== "platform") {
+            tenantId = await resolveTenantId(portal, tenantSlug);
+            if (tenantId === undefined) return null; // unknown/suspended workspace
+          }
+
+          const roleFilter: UserRole[] =
+            portal === "platform" ? ["PLATFORM_ADMIN"] : portal === "staff" ? ["TENANT_ADMIN", "STAFF"] : ["CUSTOMER"];
+
+          user = await rawDb.user.findFirst({
+            where: {
+              email,
+              tenantId: portal === "platform" ? null : tenantId,
+              role: { in: roleFilter },
+            },
+            include,
+          });
         }
-
-        const roleFilter: UserRole[] =
-          portal === "platform" ? ["PLATFORM_ADMIN"] : portal === "staff" ? ["TENANT_ADMIN", "STAFF"] : ["CUSTOMER"];
-
-        const user = await rawDb.user.findFirst({
-          where: {
-            email,
-            tenantId: portal === "platform" ? null : tenantId,
-            role: { in: roleFilter },
-          },
-          include: {
-            staffProfile: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
-            customerProfile: true,
-          },
-        });
 
         if (!user || user.status !== "ACTIVE") return null;
 
