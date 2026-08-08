@@ -1,0 +1,1445 @@
+// ---------------------------------------------------------------------------
+// Multi-tenant clinic/practice engagement platform — data model
+// Money is always stored as an integer number of minor currency units
+// (cents). Never use Float for anything financial.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Platform / tenancy
+// ---------------------------------------------------------------------------
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+}
+
+model Tenant {
+  id                 String              @id @default(cuid())
+  slug               String              @unique
+  name               String
+  status             TenantStatus        @default(ACTIVE)
+  subscriptionStatus SubscriptionStatus  @default(TRIAL)
+  suspendedAt        DateTime?
+  suspendedReason    String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  branding             TenantBranding?
+  settings             TenantSettings?
+  locations            Location[]
+  users                User[]
+  staffProfiles        StaffProfile[]
+  customerProfiles     CustomerProfile[]
+  customerTags         CustomerTag[]
+  leads                Lead[]
+  roles                Role[]
+  serviceCategories    ServiceCategory[]
+  services             Service[]
+  productCategories    ProductCategory[]
+  products             Product[]
+  packages             Package[]
+  customerPackages     CustomerPackage[]
+  membershipPlans      MembershipPlan[]
+  customerMemberships  CustomerMembership[]
+  loyaltyProgramme     LoyaltyProgramme?
+  loyaltyTransactions  LoyaltyTransaction[]
+  accountCreditTx      AccountCreditTransaction[]
+  promotions           Promotion[]
+  baskets              Basket[]
+  orders               Order[]
+  payments             Payment[]
+  refunds              Refund[]
+  appointments         Appointment[]
+  blockedTimes         BlockedTime[]
+  conversations        Conversation[]
+  messages             Message[]
+  notifications        Notification[]
+  notificationCampaigns NotificationCampaign[]
+  notificationDeliveries NotificationDelivery[]
+  auditLogs            AuditLog[]
+  inventoryTransactions InventoryTransaction[]
+
+  @@index([status])
+}
+
+model TenantBranding {
+  id                String   @id @default(cuid())
+  tenantId          String   @unique
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  businessName      String
+  logoUrl           String?
+  appIconUrl        String?
+  primaryColor      String   @default("#0f766e")
+  secondaryColor    String   @default("#0891b2")
+  accentColor       String   @default("#f59e0b")
+  coverImageUrl     String?
+
+  contactEmail      String?
+  contactPhone      String?
+  addressLine1      String?
+  addressLine2      String?
+  city              String?
+  region            String?
+  postalCode        String?
+  country           String?
+  website           String?
+  socialLinks       Json?
+
+  termsContent      String?
+  privacyContent    String?
+  cancellationPolicy String?
+
+  currency          String   @default("USD")
+  timeZone          String   @default("America/New_York")
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model TenantSettings {
+  id                          String   @id @default(cuid())
+  tenantId                    String   @unique
+  tenant                      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  taxRateBasisPoints           Int      @default(0)
+  appointmentCancellationHours Int      @default(24)
+  appointmentReminderHours     Int      @default(24)
+  dataRetentionDays            Int?
+  membershipMaxPauseMonths     Int      @default(2)
+  loyaltyEnabled                Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Location {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name        String
+  addressLine1 String?
+  addressLine2 String?
+  city        String?
+  region      String?
+  postalCode  String?
+  country     String?
+  phone       String?
+  timeZone    String?
+  openingHours Json?
+  isPrimary   Boolean  @default(false)
+  active      Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  staffLocations StaffLocation[]
+  appointments   Appointment[]
+  blockedTimes   BlockedTime[]
+
+  @@index([tenantId])
+}
+
+// ---------------------------------------------------------------------------
+// Auth / RBAC
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  PLATFORM_ADMIN
+  TENANT_ADMIN
+  STAFF
+  CUSTOMER
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  DISABLED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  tenantId     String?
+  tenant       Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  email        String
+  passwordHash String
+  role         UserRole
+  status       UserStatus @default(ACTIVE)
+  emailVerifiedAt DateTime?
+  lastLoginAt  DateTime?
+
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  staffProfile    StaffProfile?
+  customerProfile CustomerProfile?
+  auditLogs       AuditLog[]
+  passwordResets  PasswordResetToken[]
+
+  @@unique([tenantId, email])
+  @@index([role])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+}
+
+model Permission {
+  id       String @id @default(cuid())
+  key      String @unique
+  label    String
+  category String
+
+  rolePermissions RolePermission[]
+}
+
+model Role {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  permissions   RolePermission[]
+  staffProfiles StaffProfile[]
+
+  @@unique([tenantId, name])
+}
+
+model RolePermission {
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model StaffProfile {
+  id             String    @id @default(cuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId         String    @unique
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId         String?
+  role           Role?     @relation(fields: [roleId], references: [id], onDelete: SetNull)
+
+  firstName      String
+  lastName       String
+  title          String?
+  bio            String?
+  avatarUrl      String?
+  active         Boolean   @default(true)
+  invitedAt      DateTime?
+  activatedAt    DateTime?
+  deactivatedAt  DateTime?
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  locations        StaffLocation[]
+  services         StaffService[]
+  availability      StaffAvailability[]
+  blockedTimes      BlockedTime[]
+  appointments      Appointment[]
+  assignedLeads     Lead[]
+  assignedConversations Conversation[]
+  messages          Message[]
+  customerNotes     CustomerNote[]
+  loyaltyAdjustments LoyaltyTransaction[]
+  creditAdjustments AccountCreditTransaction[]
+  refundsCreated    Refund[]
+  campaignsCreated  NotificationCampaign[]
+
+  @@index([tenantId])
+}
+
+model StaffLocation {
+  staffProfileId String
+  staffProfile   StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  locationId     String
+  location       Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([staffProfileId, locationId])
+}
+
+model StaffService {
+  staffProfileId String
+  staffProfile   StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  serviceId      String
+  service        Service      @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([staffProfileId, serviceId])
+}
+
+model StaffAvailability {
+  id             String       @id @default(cuid())
+  tenantId       String
+  staffProfileId String
+  staffProfile   StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+
+  dayOfWeek      Int // 0 = Sunday .. 6 = Saturday
+  startMinute    Int // minutes after midnight
+  endMinute      Int
+  breakStartMinute Int?
+  breakEndMinute   Int?
+  active         Boolean      @default(true)
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([tenantId, staffProfileId, dayOfWeek])
+}
+
+model BlockedTime {
+  id             String        @id @default(cuid())
+  tenantId       String
+  tenant         Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  locationId     String?
+  location       Location?     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  staffProfileId String?
+  staffProfile   StaffProfile? @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+
+  startAt        DateTime
+  endAt          DateTime
+  reason         String?
+  createdAt      DateTime      @default(now())
+
+  @@index([tenantId, startAt, endAt])
+}
+
+// ---------------------------------------------------------------------------
+// Customers & leads
+// ---------------------------------------------------------------------------
+
+model CustomerProfile {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  firstName      String
+  lastName       String
+  phone          String?
+  dateOfBirth    DateTime?
+  addressLine1   String?
+  addressLine2   String?
+  city           String?
+  region         String?
+  postalCode     String?
+  country        String?
+
+  preferredLocationId String?
+
+  marketingConsent Boolean @default(false)
+  emailConsent     Boolean @default(true)
+  smsConsent       Boolean @default(false)
+  pushConsent      Boolean @default(false)
+
+  loyaltyPointsBalance   Int @default(0)
+  accountCreditBalanceCents Int @default(0)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tags            CustomerProfileTag[]
+  notes           CustomerNote[]
+  leads           Lead[]
+  packages        CustomerPackage[]
+  memberships     CustomerMembership[]
+  loyaltyTx       LoyaltyTransaction[]
+  creditTx        AccountCreditTransaction[]
+  promotionRedemptions PromotionRedemption[]
+  baskets         Basket[]
+  orders          Order[]
+  appointments    Appointment[]
+  conversations   Conversation[]
+  notifications   Notification[]
+  notificationDeliveries NotificationDelivery[]
+
+  @@index([tenantId])
+  @@index([tenantId, lastName, firstName])
+}
+
+model CustomerTag {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name     String
+  color    String @default("#0891b2")
+
+  customers CustomerProfileTag[]
+
+  @@unique([tenantId, name])
+}
+
+model CustomerProfileTag {
+  customerProfileId String
+  customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  tagId             String
+  tag               CustomerTag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([customerProfileId, tagId])
+}
+
+model CustomerNote {
+  id                String           @id @default(cuid())
+  tenantId          String
+  customerProfileId String
+  customerProfile   CustomerProfile  @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  authorStaffProfileId String?
+  authorStaffProfile StaffProfile?   @relation(fields: [authorStaffProfileId], references: [id], onDelete: SetNull)
+  body              String
+  createdAt         DateTime         @default(now())
+
+  @@index([tenantId, customerProfileId])
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  BOOKED
+  WON
+  LOST
+}
+
+model Lead {
+  id                  String       @id @default(cuid())
+  tenantId            String
+  tenant              Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name                String
+  email               String?
+  phone               String?
+  source              String?
+  assignedStaffProfileId String?
+  assignedStaffProfile StaffProfile? @relation(fields: [assignedStaffProfileId], references: [id], onDelete: SetNull)
+  status              LeadStatus   @default(NEW)
+  valueEstimateCents  Int?
+  notes               String?
+  nextFollowUpAt      DateTime?
+  lastContactedAt     DateTime?
+  convertedCustomerProfileId String?
+  convertedCustomerProfile CustomerProfile? @relation(fields: [convertedCustomerProfileId], references: [id], onDelete: SetNull)
+  convertedAt         DateTime?
+
+  createdAt           DateTime     @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  @@index([tenantId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Catalogue: services, products, packages
+// ---------------------------------------------------------------------------
+
+model ServiceCategory {
+  id        String    @id @default(cuid())
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  sortOrder Int       @default(0)
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  services  Service[]
+
+  @@index([tenantId])
+}
+
+model Service {
+  id                  String           @id @default(cuid())
+  tenantId            String
+  tenant              Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoryId          String
+  category            ServiceCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  name                String
+  description         String?
+  prepInstructions    String?
+  aftercareInstructions String?
+  durationMinutes     Int
+  priceCents          Int
+  taxable             Boolean          @default(true)
+  imageUrl            String?
+  sortOrder           Int              @default(0)
+  active              Boolean          @default(true)
+  archivedAt          DateTime?
+
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  staff               StaffService[]
+  packageItems        PackageItem[]
+  appointments        Appointment[]
+  basketItems         BasketItem[]
+  orderItems          OrderItem[]
+  promotionEligibility PromotionEligibility[]
+  loyaltyExclusions   LoyaltyExclusion[]
+  membershipBenefits  MembershipBenefit[]
+  loyaltyRewards      LoyaltyReward[]
+
+  @@index([tenantId, categoryId])
+}
+
+model ProductCategory {
+  id        String    @id @default(cuid())
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  sortOrder Int       @default(0)
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  products  Product[]
+
+  @@index([tenantId])
+}
+
+model Product {
+  id                String            @id @default(cuid())
+  tenantId          String
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoryId        String
+  category          ProductCategory   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  name              String
+  description       String?
+  images            Json?
+  priceCents        Int
+  taxable           Boolean           @default(true)
+  inventoryQuantity Int               @default(0)
+  sku               String
+  active            Boolean           @default(true)
+  archivedAt        DateTime?
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  basketItems       BasketItem[]
+  orderItems        OrderItem[]
+  inventoryTx       InventoryTransaction[]
+  promotionEligibility PromotionEligibility[]
+  loyaltyExclusions LoyaltyExclusion[]
+  loyaltyRewards    LoyaltyReward[]
+
+  @@unique([tenantId, sku])
+  @@index([tenantId, categoryId])
+}
+
+enum InventoryTransactionType {
+  RESTOCK
+  SALE
+  ADJUSTMENT
+  RETURN
+}
+
+model InventoryTransaction {
+  id             String                    @id @default(cuid())
+  tenantId       String
+  tenant         Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product                   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type           InventoryTransactionType
+  quantityChange Int
+  reason         String?
+  relatedOrderItemId String?
+  createdAt      DateTime                  @default(now())
+
+  @@index([tenantId, productId])
+}
+
+enum CustomerPackageStatus {
+  ACTIVE
+  EXPIRED
+  DEPLETED
+  TRANSFERRED
+}
+
+model Package {
+  id             String    @id @default(cuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name           String
+  description    String?
+  priceCents     Int
+  totalUses      Int
+  expiryDays     Int?
+  transferable   Boolean   @default(false)
+  imageUrl       String?
+  active         Boolean   @default(true)
+  archivedAt     DateTime?
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  items           PackageItem[]
+  customerPackages CustomerPackage[]
+  basketItems      BasketItem[]
+  orderItems       OrderItem[]
+  promotionEligibility PromotionEligibility[]
+
+  @@index([tenantId])
+}
+
+model PackageItem {
+  id        String  @id @default(cuid())
+  packageId String
+  package   Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  quantity  Int     @default(1)
+
+  @@index([packageId])
+}
+
+model CustomerPackage {
+  id                 String                 @id @default(cuid())
+  tenantId           String
+  tenant             Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId  String
+  customerProfile    CustomerProfile        @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  packageId          String
+  package            Package                @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  orderItemId        String?
+
+  remainingUses      Int
+  totalUses          Int
+  purchasedAt        DateTime               @default(now())
+  expiresAt          DateTime?
+  status             CustomerPackageStatus  @default(ACTIVE)
+
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  appointments        Appointment[]
+
+  @@index([tenantId, customerProfileId])
+}
+
+// ---------------------------------------------------------------------------
+// Memberships
+// ---------------------------------------------------------------------------
+
+enum BillingFrequency {
+  MONTHLY
+  ANNUAL
+}
+
+enum MembershipBenefitType {
+  INCLUDED_SERVICE
+  SERVICE_DISCOUNT
+  PRODUCT_DISCOUNT
+  EXCLUSIVE_PROMOTION
+  PRIORITY_ACCESS
+  OTHER
+}
+
+model MembershipPlan {
+  id                     String            @id @default(cuid())
+  tenantId               String
+  tenant                 Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name                   String
+  description            String?
+  billingFrequency       BillingFrequency
+  priceCents             Int
+  includedCreditCents    Int               @default(0)
+  serviceDiscountPercent Int?
+  productDiscountPercent Int?
+  priorityAccess         Boolean           @default(false)
+  minimumCommitmentMonths Int?
+  cancellationPolicy     String?
+  pauseAllowed           Boolean           @default(true)
+  maxPauseMonths         Int?
+  active                 Boolean           @default(true)
+  archivedAt             DateTime?
+
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  benefits               MembershipBenefit[]
+  customerMemberships    CustomerMembership[]
+  orderItems             OrderItem[]
+  promotionEligibility   PromotionEligibility[]
+
+  @@index([tenantId])
+}
+
+model MembershipBenefit {
+  id              String                 @id @default(cuid())
+  membershipPlanId String
+  membershipPlan  MembershipPlan         @relation(fields: [membershipPlanId], references: [id], onDelete: Cascade)
+  type            MembershipBenefitType
+  serviceId       String?
+  service         Service?               @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  description     String
+  valuePercent    Int?
+  valueCents      Int?
+  quantityPerPeriod Int?
+
+  @@index([membershipPlanId])
+}
+
+enum MembershipStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  PAUSED
+  CANCELLED
+  EXPIRED
+}
+
+model CustomerMembership {
+  id                  String            @id @default(cuid())
+  tenantId            String
+  tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId   String
+  customerProfile     CustomerProfile   @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  membershipPlanId    String
+  membershipPlan      MembershipPlan    @relation(fields: [membershipPlanId], references: [id], onDelete: Restrict)
+
+  status              MembershipStatus  @default(ACTIVE)
+  startedAt           DateTime          @default(now())
+  currentPeriodStart  DateTime          @default(now())
+  currentPeriodEnd    DateTime
+  nextBillingAt       DateTime?
+  pausedAt            DateTime?
+  resumesAt           DateTime?
+  cancelledAt         DateTime?
+  cancelAtPeriodEnd   Boolean           @default(false)
+  creditBalanceCents  Int               @default(0)
+  stripeSubscriptionId String?
+
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  billingEvents       MembershipBillingEvent[]
+  payments            Payment[]
+
+  @@index([tenantId, customerProfileId])
+  @@index([tenantId, status])
+}
+
+enum MembershipBillingEventType {
+  CHARGE
+  REFUND
+  CREDIT_GRANT
+  FAILED_PAYMENT
+  STATUS_CHANGE
+}
+
+model MembershipBillingEvent {
+  id                    String                      @id @default(cuid())
+  tenantId              String
+  customerMembershipId  String
+  customerMembership    CustomerMembership          @relation(fields: [customerMembershipId], references: [id], onDelete: Cascade)
+  type                  MembershipBillingEventType
+  amountCents           Int?
+  description           String?
+  occurredAt            DateTime                    @default(now())
+  paymentId             String?
+
+  @@index([tenantId, customerMembershipId])
+}
+
+// ---------------------------------------------------------------------------
+// Loyalty
+// ---------------------------------------------------------------------------
+
+model LoyaltyProgramme {
+  id                     String   @id @default(cuid())
+  tenantId               String   @unique
+  tenant                 Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name                   String   @default("Rewards")
+  pointsPerCents         Float    @default(0.01)
+  pointsPerVisit         Int      @default(0)
+  referralPoints         Int      @default(0)
+  birthdayPoints         Int      @default(0)
+  pointsExpiryDays       Int?
+  active                 Boolean  @default(true)
+
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  rules       LoyaltyRule[]
+  rewards     LoyaltyReward[]
+  exclusions  LoyaltyExclusion[]
+}
+
+enum LoyaltyRuleType {
+  EARN_PER_SPEND
+  EARN_PER_VISIT
+  REFERRAL
+  BIRTHDAY
+  PROMOTIONAL_MULTIPLIER
+}
+
+model LoyaltyRule {
+  id                  String            @id @default(cuid())
+  loyaltyProgrammeId  String
+  loyaltyProgramme    LoyaltyProgramme  @relation(fields: [loyaltyProgrammeId], references: [id], onDelete: Cascade)
+  type                LoyaltyRuleType
+  multiplier          Float?
+  pointsValue         Int?
+  startAt             DateTime?
+  endAt               DateTime?
+  active              Boolean           @default(true)
+  createdAt           DateTime          @default(now())
+
+  @@index([loyaltyProgrammeId])
+}
+
+enum LoyaltyRewardType {
+  DISCOUNT_PERCENT
+  DISCOUNT_AMOUNT
+  FREE_SERVICE
+  FREE_PRODUCT
+}
+
+model LoyaltyReward {
+  id                  String            @id @default(cuid())
+  tenantId            String
+  loyaltyProgrammeId  String
+  loyaltyProgramme    LoyaltyProgramme  @relation(fields: [loyaltyProgrammeId], references: [id], onDelete: Cascade)
+
+  name                String
+  description         String?
+  pointsCost          Int
+  rewardType          LoyaltyRewardType
+  discountPercent     Int?
+  discountAmountCents Int?
+  serviceId           String?
+  service             Service?          @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  productId           String?
+  product             Product?          @relation(fields: [productId], references: [id], onDelete: SetNull)
+  active              Boolean           @default(true)
+
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@index([tenantId])
+}
+
+model LoyaltyExclusion {
+  id                  String            @id @default(cuid())
+  loyaltyProgrammeId  String
+  loyaltyProgramme    LoyaltyProgramme  @relation(fields: [loyaltyProgrammeId], references: [id], onDelete: Cascade)
+  serviceId           String?
+  service             Service?          @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  productId           String?
+  product             Product?          @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([loyaltyProgrammeId])
+}
+
+enum LoyaltyTransactionType {
+  EARNED
+  REDEEMED
+  MANUAL_ADJUSTMENT
+  EXPIRED
+  REFUNDED
+}
+
+model LoyaltyTransaction {
+  id                    String                  @id @default(cuid())
+  tenantId              String
+  tenant                Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId     String
+  customerProfile       CustomerProfile         @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+
+  type                  LoyaltyTransactionType
+  points                Int
+  balanceAfter          Int
+  reason                String?
+  relatedOrderId        String?
+  relatedRewardId       String?
+  performedByStaffProfileId String?
+  performedByStaffProfile StaffProfile?         @relation(fields: [performedByStaffProfileId], references: [id], onDelete: SetNull)
+  expiresAt             DateTime?
+
+  createdAt             DateTime                @default(now())
+
+  @@index([tenantId, customerProfileId])
+}
+
+enum AccountCreditTransactionType {
+  MANUAL_ADJUSTMENT
+  MEMBERSHIP_GRANT
+  REFUND
+  REDEEMED
+  EXPIRED
+}
+
+model AccountCreditTransaction {
+  id                    String                        @id @default(cuid())
+  tenantId              String
+  tenant                Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId     String
+  customerProfile       CustomerProfile               @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+
+  type                  AccountCreditTransactionType
+  amountCents           Int
+  balanceAfterCents     Int
+  reason                String?
+  relatedOrderId        String?
+  performedByStaffProfileId String?
+  performedByStaffProfile StaffProfile?               @relation(fields: [performedByStaffProfileId], references: [id], onDelete: SetNull)
+
+  createdAt             DateTime                      @default(now())
+
+  @@index([tenantId, customerProfileId])
+}
+
+// ---------------------------------------------------------------------------
+// Promotions
+// ---------------------------------------------------------------------------
+
+enum DiscountType {
+  PERCENT
+  FIXED_AMOUNT
+}
+
+enum CustomerSegment {
+  ALL
+  NEW
+  MEMBERS
+  NON_MEMBERS
+  TAGGED
+}
+
+model Promotion {
+  id               String           @id @default(cuid())
+  tenantId         String
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  title            String
+  description      String?
+  imageUrl         String?
+  startAt          DateTime
+  endAt            DateTime
+  discountType     DiscountType
+  discountValue    Int
+  code             String?
+  usageLimit       Int?
+  perCustomerLimit Int?
+  appOnly          Boolean          @default(false)
+  customerSegment  CustomerSegment  @default(ALL)
+  segmentTagId     String?
+  active           Boolean          @default(true)
+
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  eligibility      PromotionEligibility[]
+  redemptions      PromotionRedemption[]
+  orders           Order[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, active, startAt, endAt])
+}
+
+model PromotionEligibility {
+  id               String    @id @default(cuid())
+  promotionId      String
+  promotion        Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  serviceId        String?
+  service          Service?  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  productId        String?
+  product          Product?  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  packageId        String?
+  package          Package?  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  membershipPlanId String?
+  membershipPlan   MembershipPlan? @relation(fields: [membershipPlanId], references: [id], onDelete: Cascade)
+
+  @@index([promotionId])
+}
+
+model PromotionRedemption {
+  id                 String          @id @default(cuid())
+  tenantId           String
+  promotionId        String
+  promotion          Promotion       @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  customerProfileId  String
+  customerProfile    CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  orderId            String?
+  discountAppliedCents Int
+  redeemedAt         DateTime        @default(now())
+
+  @@index([tenantId, promotionId])
+  @@index([tenantId, customerProfileId])
+}
+
+// ---------------------------------------------------------------------------
+// Basket / checkout / orders / payments
+// ---------------------------------------------------------------------------
+
+enum BasketStatus {
+  OPEN
+  CONVERTED
+  ABANDONED
+}
+
+model Basket {
+  id                String          @id @default(cuid())
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId String
+  customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  status            BasketStatus    @default(OPEN)
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  items             BasketItem[]
+
+  @@index([tenantId, customerProfileId, status])
+}
+
+enum CatalogItemType {
+  SERVICE
+  PRODUCT
+  PACKAGE
+  MEMBERSHIP
+}
+
+model BasketItem {
+  id         String          @id @default(cuid())
+  basketId   String
+  basket     Basket          @relation(fields: [basketId], references: [id], onDelete: Cascade)
+  itemType   CatalogItemType
+  serviceId  String?
+  service    Service?        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  productId  String?
+  product    Product?        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  packageId  String?
+  package    Package?        @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  quantity   Int             @default(1)
+  unitPriceCents Int
+
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([basketId])
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  CANCELLED
+}
+
+model Order {
+  id                     String          @id @default(cuid())
+  tenantId               String
+  tenant                 Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId      String
+  customerProfile        CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+
+  orderNumber            String
+  status                 OrderStatus     @default(PENDING)
+  subtotalCents          Int
+  discountCents          Int             @default(0)
+  taxCents               Int             @default(0)
+  creditAppliedCents     Int             @default(0)
+  loyaltyDiscountCents   Int             @default(0)
+  loyaltyPointsRedeemed  Int             @default(0)
+  totalCents             Int
+  currency               String          @default("USD")
+  promotionId            String?
+  promotion              Promotion?      @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  promotionCode          String?
+
+  placedAt               DateTime        @default(now())
+  paidAt                 DateTime?
+
+  createdAt              DateTime        @default(now())
+  updatedAt               DateTime       @updatedAt
+
+  items                  OrderItem[]
+  payments                Payment[]
+  appointments             Appointment[]
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId, customerProfileId])
+  @@index([tenantId, status])
+}
+
+model OrderItem {
+  id               String           @id @default(cuid())
+  orderId          String
+  order            Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  itemType         CatalogItemType
+  serviceId        String?
+  service          Service?         @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  productId        String?
+  product          Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+  packageId        String?
+  package          Package?         @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  membershipPlanId String?
+  membershipPlan   MembershipPlan?  @relation(fields: [membershipPlanId], references: [id], onDelete: SetNull)
+
+  name             String
+  quantity         Int              @default(1)
+  unitPriceCents   Int
+  totalCents       Int
+  taxCents         Int              @default(0)
+
+  @@index([orderId])
+}
+
+enum PaymentProviderName {
+  MOCK
+  STRIPE
+}
+
+enum PaymentStatus {
+  REQUIRES_ACTION
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+model Payment {
+  id                    String                @id @default(cuid())
+  tenantId              String
+  tenant                Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderId               String?
+  order                 Order?                @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  customerMembershipId  String?
+  customerMembership    CustomerMembership?   @relation(fields: [customerMembershipId], references: [id], onDelete: SetNull)
+
+  provider              PaymentProviderName   @default(MOCK)
+  providerPaymentId     String?
+  amountCents           Int
+  currency              String                @default("USD")
+  status                PaymentStatus         @default(PROCESSING)
+  failureReason         String?
+  method                String?
+
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  refunds               Refund[]
+
+  @@index([tenantId, orderId])
+  @@index([tenantId, status])
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+model Refund {
+  id                    String        @id @default(cuid())
+  tenantId              String
+  tenant                Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  paymentId             String
+  payment               Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  amountCents           Int
+  reason                String?
+  status                RefundStatus  @default(PENDING)
+  providerRefundId      String?
+  createdByStaffProfileId String?
+  createdByStaffProfile StaffProfile? @relation(fields: [createdByStaffProfileId], references: [id], onDelete: SetNull)
+
+  createdAt             DateTime      @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  @@index([tenantId, paymentId])
+}
+
+// ---------------------------------------------------------------------------
+// Appointments
+// ---------------------------------------------------------------------------
+
+enum AppointmentStatus {
+  REQUESTED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum CancelledBy {
+  CUSTOMER
+  STAFF
+  SYSTEM
+}
+
+model Appointment {
+  id                 String             @id @default(cuid())
+  tenantId           String
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId  String
+  customerProfile    CustomerProfile    @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  serviceId          String
+  service            Service            @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  staffProfileId     String
+  staffProfile       StaffProfile       @relation(fields: [staffProfileId], references: [id], onDelete: Restrict)
+  locationId         String
+  location           Location           @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  customerPackageId  String?
+  customerPackage    CustomerPackage?   @relation(fields: [customerPackageId], references: [id], onDelete: SetNull)
+  orderId            String?
+  order              Order?             @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  startAt            DateTime
+  endAt               DateTime
+  status              AppointmentStatus @default(REQUESTED)
+  notes               String?
+  cancellationReason  String?
+  cancelledAt         DateTime?
+  cancelledBy         CancelledBy?
+  reminderSentAt      DateTime?
+
+  createdAt           DateTime          @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  @@index([tenantId, staffProfileId, startAt])
+  @@index([tenantId, customerProfileId])
+  @@index([tenantId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Messaging
+// ---------------------------------------------------------------------------
+
+enum MessageChannel {
+  IN_APP
+  EMAIL
+  SMS
+  SOCIAL
+  WEB_CHAT
+}
+
+enum ConversationStatus {
+  OPEN
+  PENDING
+  CLOSED
+}
+
+model Conversation {
+  id                    String              @id @default(cuid())
+  tenantId              String
+  tenant                Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId     String
+  customerProfile       CustomerProfile     @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  assignedStaffProfileId String?
+  assignedStaffProfile  StaffProfile?       @relation(fields: [assignedStaffProfileId], references: [id], onDelete: SetNull)
+
+  channel               MessageChannel      @default(IN_APP)
+  status                ConversationStatus  @default(OPEN)
+  lastMessageAt         DateTime            @default(now())
+  unreadForStaff        Boolean             @default(false)
+  unreadForCustomer     Boolean             @default(false)
+
+  createdAt             DateTime            @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  messages               Message[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, customerProfileId])
+}
+
+enum MessageSenderType {
+  CUSTOMER
+  STAFF
+  SYSTEM
+}
+
+model Message {
+  id                    String            @id @default(cuid())
+  tenantId              String
+  tenant                Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversationId        String
+  conversation          Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderType            MessageSenderType
+  senderStaffProfileId  String?
+  senderStaffProfile    StaffProfile?     @relation(fields: [senderStaffProfileId], references: [id], onDelete: SetNull)
+
+  body                  String
+  isInternalNote        Boolean           @default(false)
+  attachmentUrl         String?
+
+  createdAt             DateTime          @default(now())
+
+  @@index([tenantId, conversationId])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+enum NotificationType {
+  PROMOTION
+  APPOINTMENT
+  LOYALTY
+  MEMBERSHIP
+  SYSTEM
+}
+
+model Notification {
+  id                 String            @id @default(cuid())
+  tenantId           String
+  tenant             Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId  String
+  customerProfile    CustomerProfile   @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+
+  title              String
+  body               String
+  type               NotificationType
+  linkUrl            String?
+  campaignId         String?
+  campaign           NotificationCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  readAt             DateTime?
+
+  createdAt          DateTime          @default(now())
+
+  @@index([tenantId, customerProfileId, readAt])
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum NotificationCampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELLED
+}
+
+model NotificationCampaign {
+  id                    String                      @id @default(cuid())
+  tenantId              String
+  tenant                Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name                  String
+  channel               NotificationChannel
+  segment               CustomerSegment             @default(ALL)
+  segmentTagId          String?
+  subject               String?
+  body                  String
+  imageUrl              String?
+  scheduledAt           DateTime?
+  sentAt                DateTime?
+  status                NotificationCampaignStatus  @default(DRAFT)
+  createdByStaffProfileId String?
+  createdByStaffProfile StaffProfile?               @relation(fields: [createdByStaffProfileId], references: [id], onDelete: SetNull)
+
+  createdAt             DateTime                    @default(now())
+  updatedAt              DateTime                   @updatedAt
+
+  notifications          Notification[]
+  deliveries              NotificationDelivery[]
+
+  @@index([tenantId, status])
+}
+
+enum NotificationDeliveryStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+  OPENED
+  CLICKED
+}
+
+model NotificationDelivery {
+  id                 String                      @id @default(cuid())
+  tenantId           String
+  tenant             Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaignId         String?
+  campaign           NotificationCampaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  customerProfileId  String
+  customerProfile    CustomerProfile             @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+
+  channel            NotificationChannel
+  status             NotificationDeliveryStatus  @default(QUEUED)
+  providerMessageId  String?
+  error              String?
+  sentAt             DateTime?
+  deliveredAt        DateTime?
+  openedAt           DateTime?
+
+  createdAt          DateTime                    @default(now())
+
+  @@index([tenantId, campaignId])
+  @@index([tenantId, customerProfileId])
+}
+
+// ---------------------------------------------------------------------------
+// Audit log
+// ---------------------------------------------------------------------------
+
+enum AuditActorType {
+  PLATFORM_ADMIN
+  STAFF
+  SYSTEM
+}
+
+model AuditLog {
+  id          String         @id @default(cuid())
+  tenantId    String?
+  tenant      Tenant?        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actorUserId String?
+  actorUser   User?          @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorType   AuditActorType
+
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    Json?
+  reason      String?
+
+  createdAt   DateTime       @default(now())
+
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, createdAt])
+}

@@ -1,0 +1,79 @@
+{
+  "name": "clinic-engagement-platform",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "dev:clean": "node scripts/rm-next.mjs && next dev",
+    "build": "next build",
+    "start": "next start",
+    "setup": "node scripts/dev-up.mjs",
+    "setup:reset": "node scripts/dev-up.mjs --reset",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f postgres",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:setup": "dotenv -e .env.test -- prisma migrate deploy",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio",
+    "seed": "tsx prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "3.10.0",
+    "@prisma/client": "6.19.3",
+    "bcryptjs": "2.4.3",
+    "clsx": "2.1.1",
+    "date-fns": "4.1.0",
+    "date-fns-tz": "3.2.0",
+    "lucide-react": "0.474.0",
+    "nanoid": "5.0.9",
+    "next": "15.5.23",
+    "next-auth": "5.0.0-beta.32",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "react-hook-form": "7.54.2",
+    "recharts": "2.15.0",
+    "sonner": "1.7.4",
+    "stripe": "17.5.0",
+    "tailwind-merge": "2.6.0",
+    "zod": "3.24.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "2.4.6",
+    "@types/node": "22.10.10",
+    "@types/react": "19.0.8",
+    "@types/react-dom": "19.0.3",
+    "@vitejs/plugin-react": "4.3.4",
+    "autoprefixer": "10.4.20",
+    "dotenv": "16.4.7",
+    "dotenv-cli": "^11.0.0",
+    "eslint": "8.57.1",
+    "eslint-config-next": "15.5.23",
+    "postcss": "8.5.1",
+    "prisma": "6.19.3",
+    "tailwindcss": "3.4.17",
+    "tsx": "4.19.2",
+    "typescript": "5.7.3",
+    "vitest": "2.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "esbuild@0.23.1": true,
+    "esbuild@0.21.5": true,
+    "prisma@6.19.3": true,
+    "sharp@0.34.5": true,
+    "unrs-resolver@1.12.2": true
+  }
+}

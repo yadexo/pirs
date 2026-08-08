@@ -1,0 +1,893 @@
+You are a senior full-stack engineer and product designer. Build a production-ready white-label sales, loyalty, membership, and customer engagement application for clinics and practices.
+
+Do not use the name “Dermis” anywhere in the codebase, interface, metadata, documentation, database, seed data, or placeholder content.
+
+The application must be suitable for clinics and practices in general. Do not position it specifically for medspas or any single medical specialty.
+
+## Working method
+
+1. Inspect the existing repository before making changes.
+2. Identify the current framework, architecture, database, authentication system, styling approach, and coding conventions.
+3. Reuse the existing stack wherever practical.
+4. Do not replace working infrastructure unnecessarily.
+5. Create a clear implementation plan before editing files.
+6. Implement the application in logical phases.
+7. Run the available linting, type-checking, testing, and build commands after implementation.
+8. Fix all errors caused by your changes.
+9. Do not leave core features as static mockups or non-functional buttons.
+10. Where external services require credentials, create a functional local abstraction, environment-variable configuration, and documented integration point.
+
+If the repository is empty, use this default stack:
+
+* Next.js with TypeScript
+* App Router
+* Tailwind CSS
+* PostgreSQL
+* Prisma ORM
+* Secure email-and-password authentication
+* Role-based access control
+* Stripe-compatible payment architecture
+* Responsive web application designed to feel like a mobile app
+* Accessible reusable component system
+
+## Product objective
+
+Create a multi-tenant white-label platform that gives each clinic or practice its own branded customer application and business administration dashboard.
+
+Customers must be able to:
+
+* Browse services, products, packages, and promotions
+* Purchase services and packages
+* Join monthly or annual memberships
+* Earn and redeem loyalty rewards
+* View their account credit and purchase history
+* Receive promotional notifications
+* Manage their profile
+* View upcoming and previous appointments
+* Communicate with the clinic or practice
+
+Clinic and practice staff must be able to:
+
+* Configure their branding
+* Manage services, products, packages, and pricing
+* Create membership plans
+* Configure loyalty rules and rewards
+* Manage customers and leads
+* Create promotions
+* Send notifications
+* View purchases, payments, memberships, and customer activity
+* Manage appointments
+* View business performance metrics
+* Manage staff access and permissions
+
+## User roles
+
+Implement these roles:
+
+### Platform administrator
+
+The platform administrator can:
+
+* View and manage all clinic or practice accounts
+* Create, suspend, and reactivate tenant accounts
+* View platform-wide usage
+* Manage subscription status
+* Access tenant support information
+* Manage system-level settings
+
+### Clinic owner or administrator
+
+The clinic administrator can:
+
+* Manage clinic branding and business details
+* Invite and manage staff
+* Configure services, packages, products, memberships, rewards, and promotions
+* Manage customers and leads
+* View payments and business analytics
+* Configure notification templates
+* Manage clinic-level settings
+
+### Staff member
+
+Staff permissions must be configurable.
+
+Possible permissions include:
+
+* View customers
+* Edit customers
+* Manage appointments
+* Manage sales
+* Adjust loyalty points
+* Send messages
+* Create promotions
+* View analytics
+* Manage memberships
+
+### Customer or patient
+
+Customers can:
+
+* Create an account
+* Browse the clinic’s offerings
+* Purchase services, products, and packages
+* Join memberships
+* Earn and redeem rewards
+* View balances and transaction history
+* Manage appointments
+* Receive notifications
+* Update their profile and communication preferences
+
+## Multi-tenant architecture
+
+The application must support multiple clinics and practices.
+
+Every tenant must have isolated:
+
+* Customers
+* Staff
+* Services
+* Products
+* Packages
+* Memberships
+* Loyalty programmes
+* Transactions
+* Appointments
+* Notifications
+* Branding
+* Analytics
+
+Prevent users from accessing another tenant’s records.
+
+Use a tenant identifier consistently in the database and server-side authorization layer.
+
+Do not rely only on client-side filtering for tenant isolation.
+
+## White-label branding
+
+Each clinic or practice must be able to configure:
+
+* Business name
+* Logo
+* App icon
+* Primary colour
+* Secondary colour
+* Accent colour
+* Cover image
+* Contact information
+* Address
+* Website
+* Social links
+* Terms and conditions
+* Privacy policy
+* Cancellation policy
+* Currency
+* Time zone
+
+Apply tenant branding dynamically throughout the customer-facing experience.
+
+Create a live branding preview in the administration dashboard.
+
+Use generic placeholder branding such as “Your Clinic” in default seed data.
+
+## Customer-facing application
+
+Create a polished, mobile-first customer experience.
+
+### Home screen
+
+Include:
+
+* Clinic branding
+* Welcome message
+* Featured services
+* Active promotions
+* Membership promotion
+* Loyalty balance
+* Upcoming appointment
+* Recommended packages
+* Clear calls to action
+
+### Services catalogue
+
+Customers must be able to:
+
+* Browse services by category
+* Search services
+* Filter services
+* View service descriptions
+* View duration and pricing
+* View preparation and aftercare information
+* Add eligible services to the basket
+* Book or purchase a service
+
+### Products
+
+Support physical or digital products.
+
+Each product can have:
+
+* Name
+* Description
+* Images
+* Category
+* Price
+* Tax status
+* Inventory quantity
+* SKU
+* Active or inactive status
+
+### Packages
+
+A package can contain:
+
+* One or more services
+* A fixed number of uses
+* An expiry period
+* A package price
+* A discount compared with individual purchases
+* Usage restrictions
+* Transferability setting
+
+Customers must be able to see remaining package uses.
+
+### Shopping basket and checkout
+
+Implement:
+
+* Basket management
+* Quantity changes
+* Promotional codes
+* Loyalty reward redemption
+* Account-credit redemption
+* Tax calculation
+* Order summary
+* Payment-status handling
+* Successful-payment confirmation
+* Failed-payment handling
+* Transaction history
+
+Create a payment-provider abstraction.
+
+Use test or mock payments when payment credentials are unavailable, but structure the implementation so Stripe can be enabled through environment variables.
+
+Do not store raw card details.
+
+### Memberships
+
+Support monthly and annual memberships.
+
+Each membership plan can include:
+
+* Name
+* Description
+* Billing frequency
+* Price
+* Included monthly or annual credit
+* Included services
+* Service discounts
+* Product discounts
+* Priority access
+* Exclusive promotions
+* Minimum commitment
+* Cancellation rules
+* Pause rules
+* Expiry rules
+* Active or inactive status
+
+Customers must be able to:
+
+* Join a membership
+* View current benefits
+* View billing history
+* View available membership credit
+* Pause or cancel when permitted
+* Update their payment method through the payment provider
+* See the next billing date
+
+Track membership states such as:
+
+* Trial
+* Active
+* Past due
+* Paused
+* Cancelled
+* Expired
+
+### Loyalty programme
+
+Create a configurable points-based loyalty system.
+
+Administrators must be able to define:
+
+* Points earned per amount spent
+* Points earned per visit
+* Referral rewards
+* Birthday rewards
+* Promotional point multipliers
+* Reward thresholds
+* Points expiry
+* Excluded products or services
+
+Support loyalty transactions for:
+
+* Points earned
+* Points redeemed
+* Manual adjustments
+* Expired points
+* Refunded points
+
+Every loyalty adjustment must create an auditable transaction record.
+
+Customers must be able to view:
+
+* Current points balance
+* Available rewards
+* Points history
+* Points expiry information
+* Progress toward the next reward
+
+### Promotions
+
+Administrators must be able to create promotions with:
+
+* Title
+* Description
+* Image
+* Start date
+* End date
+* Discount type
+* Discount value
+* Eligible services, products, packages, or memberships
+* Customer segment
+* Promotion code
+* Usage limits
+* Per-customer usage limit
+* App-only status
+* Active or inactive status
+
+Validate promotion eligibility on the server.
+
+### Appointments
+
+Implement appointment functionality with:
+
+* Service selection
+* Staff selection
+* Location selection
+* Available date and time
+* Appointment status
+* Booking notes
+* Confirmation
+* Rescheduling
+* Cancellation
+* Cancellation policy
+* Appointment history
+
+Use these statuses:
+
+* Requested
+* Confirmed
+* Completed
+* Cancelled
+* No-show
+
+Create a basic availability model that accounts for:
+
+* Staff working hours
+* Service duration
+* Existing appointments
+* Breaks
+* Blocked times
+* Clinic closures
+
+### Customer profile
+
+Include:
+
+* Name
+* Email
+* Phone number
+* Date of birth
+* Address
+* Communication preferences
+* Marketing consent
+* Preferred clinic location
+* Membership status
+* Loyalty balance
+* Account credit
+* Orders
+* Packages
+* Appointments
+* Notifications
+
+Treat medical and sensitive information carefully. Do not create diagnostic functionality or store unnecessary medical records.
+
+## Business administration dashboard
+
+Create a responsive dashboard with a desktop-first administration interface.
+
+### Dashboard overview
+
+Show:
+
+* Revenue
+* Orders
+* Membership revenue
+* Active memberships
+* New customers
+* Returning customers
+* Loyalty redemptions
+* Upcoming appointments
+* Appointment utilisation
+* Top-selling services
+* Top-selling packages
+* Recent activity
+
+Provide useful date filters.
+
+### Customer management
+
+Administrators and authorised staff must be able to:
+
+* Search customers
+* Filter customers
+* View customer profiles
+* Add internal notes
+* View purchase history
+* View appointment history
+* View membership status
+* View loyalty history
+* Adjust loyalty points
+* Adjust account credit
+* Apply tags
+* View marketing consent
+* Export customer data where permitted
+
+Require a reason for manual loyalty-point or account-credit adjustments.
+
+Maintain an audit log.
+
+### Lead management
+
+Implement a lightweight lead pipeline.
+
+Lead records should include:
+
+* Name
+* Contact details
+* Source
+* Assigned staff member
+* Status
+* Value estimate
+* Notes
+* Next follow-up date
+* Created date
+* Last-contact date
+
+Use these default lead statuses:
+
+* New
+* Contacted
+* Qualified
+* Booked
+* Won
+* Lost
+
+Allow leads to be converted into customer accounts.
+
+### Catalogue management
+
+Create administrative pages for:
+
+* Service categories
+* Services
+* Products
+* Packages
+* Membership plans
+
+Support:
+
+* Creation
+* Editing
+* Archiving
+* Reordering
+* Image upload
+* Availability settings
+* Tax settings
+* Pricing
+* Eligibility rules
+
+### Promotion management
+
+Create:
+
+* Promotion list
+* Promotion editor
+* Customer-segment selector
+* Scheduling controls
+* Performance summary
+* Redemption history
+
+### Notification centre
+
+Support:
+
+* In-app notifications
+* Email notification architecture
+* SMS notification architecture
+* Push-notification architecture
+
+When external providers are unavailable, use an internal notification queue and mock delivery provider.
+
+Administrators must be able to:
+
+* Create a notification
+* Select a customer segment
+* Schedule delivery
+* Preview the message
+* Send a test message
+* View delivery status
+* View basic engagement metrics
+
+Include notification preferences and opt-out handling.
+
+### Messaging
+
+Create a unified customer conversation interface.
+
+Support a provider-based architecture for:
+
+* Email
+* SMS
+* Social messaging
+* Website chat
+* In-app messaging
+
+The initial implementation may use internal app messages and mocked external providers, but the interface and data model must support future integrations.
+
+Include:
+
+* Conversation list
+* Unread status
+* Assigned staff member
+* Customer profile context
+* Message composer
+* Internal notes
+* Conversation status
+* Search and filters
+
+### Staff management
+
+Clinic administrators must be able to:
+
+* Invite staff
+* Assign roles
+* Configure permissions
+* Activate or deactivate accounts
+* Assign working hours
+* Assign services
+* Assign locations
+* Review staff activity
+
+### Business settings
+
+Include settings for:
+
+* Branding
+* Business details
+* Locations
+* Opening hours
+* Staff permissions
+* Payments
+* Taxes
+* Membership rules
+* Loyalty rules
+* Appointment rules
+* Notifications
+* Legal documents
+* Data retention
+* Integrations
+
+## Analytics
+
+Implement meaningful analytics based on actual database data.
+
+Include:
+
+* Total revenue
+* Revenue by category
+* Membership recurring revenue
+* Average order value
+* Customer lifetime value estimate
+* Repeat-purchase rate
+* Membership retention
+* Loyalty participation
+* Promotion redemptions
+* Appointment completion rate
+* Cancellation rate
+* Top-performing services
+* Top-performing packages
+* Customer acquisition source
+
+Avoid presenting fabricated metrics as real data.
+
+For seeded demonstration data, clearly label it as demo data.
+
+## Data model
+
+Create a normalized schema that supports at least:
+
+* Tenant
+* Location
+* TenantBranding
+* User
+* Role
+* Permission
+* StaffProfile
+* CustomerProfile
+* CustomerTag
+* Lead
+* ServiceCategory
+* Service
+* ProductCategory
+* Product
+* InventoryTransaction
+* Package
+* PackageItem
+* CustomerPackage
+* MembershipPlan
+* MembershipBenefit
+* CustomerMembership
+* LoyaltyProgramme
+* LoyaltyRule
+* LoyaltyReward
+* LoyaltyTransaction
+* AccountCreditTransaction
+* Promotion
+* PromotionEligibility
+* PromotionRedemption
+* Basket
+* BasketItem
+* Order
+* OrderItem
+* Payment
+* Refund
+* Appointment
+* StaffAvailability
+* BlockedTime
+* Conversation
+* Message
+* Notification
+* NotificationCampaign
+* NotificationDelivery
+* AuditLog
+
+Use appropriate relationships, indexes, unique constraints, timestamps, status enums, and soft-deletion or archival rules where appropriate.
+
+All money values must be stored safely using integer minor units or an appropriate fixed decimal type. Do not use floating-point values for financial data.
+
+## Security and privacy
+
+Implement:
+
+* Secure authentication
+* Password hashing
+* Server-side authorization
+* Tenant isolation
+* Role-based permissions
+* Secure session handling
+* Input validation
+* CSRF protection where relevant
+* Rate limiting for sensitive endpoints
+* Safe file-upload validation
+* Audit logging
+* Secure environment-variable handling
+* Protection against insecure direct-object references
+* Protection against cross-site scripting
+* Protection against SQL injection
+* Secure payment-provider handling
+
+Do not expose internal database identifiers unnecessarily.
+
+Do not store card information.
+
+Do not claim that the system is compliant with a specific healthcare or privacy regulation unless the implementation has actually been reviewed and configured for that standard.
+
+Include a clear privacy and consent architecture.
+
+## Design requirements
+
+The interface must feel premium, trustworthy, modern, and simple.
+
+Use:
+
+* Clear information hierarchy
+* Generous spacing
+* Accessible contrast
+* Consistent typography
+* Reusable components
+* Responsive layouts
+* Loading states
+* Empty states
+* Error states
+* Confirmation dialogs
+* Form validation
+* Toast or inline feedback
+* Skeleton states where useful
+
+Avoid:
+
+* Excessive gradients
+* Generic dashboard clutter
+* Oversized hero sections inside operational screens
+* Decorative elements that reduce usability
+* Tiny text
+* Low-contrast controls
+* Non-functional interface elements
+
+The customer application should feel mobile-first.
+
+The administration dashboard should work well on desktop, tablet, and mobile.
+
+Meet WCAG 2.1 AA accessibility principles where practical.
+
+## Required pages
+
+Create at least these customer-facing pages:
+
+* Sign in
+* Registration
+* Home
+* Services
+* Service details
+* Products
+* Product details
+* Packages
+* Package details
+* Memberships
+* Membership details
+* Loyalty wallet
+* Promotions
+* Basket
+* Checkout
+* Orders
+* Appointments
+* Notifications
+* Messages
+* Profile
+* Settings
+
+Create at least these administration pages:
+
+* Dashboard
+* Customers
+* Customer details
+* Leads
+* Lead details
+* Appointments
+* Calendar
+* Services
+* Products
+* Packages
+* Memberships
+* Loyalty programme
+* Promotions
+* Orders
+* Payments
+* Conversations
+* Notification campaigns
+* Staff
+* Locations
+* Analytics
+* Branding
+* Business settings
+* Integrations
+* Audit log
+
+## Seed data
+
+Create realistic demonstration data for a generic clinic or practice.
+
+Include:
+
+* One platform administrator
+* One sample clinic
+* One clinic administrator
+* Several staff members
+* At least 20 customers
+* Several leads
+* Multiple service categories
+* At least 12 services
+* At least 6 products
+* At least 4 packages
+* At least 3 membership plans
+* One loyalty programme
+* Several loyalty rewards
+* Several active and expired promotions
+* Orders in different states
+* Memberships in different states
+* Appointments in different states
+* Notification campaigns
+* Customer conversations
+
+Do not use “Dermis” or “medspa” in the seed data.
+
+## Testing
+
+Add tests for critical functionality, including:
+
+* Authentication
+* Tenant isolation
+* Role permissions
+* Checkout calculations
+* Loyalty earning
+* Loyalty redemption
+* Membership status changes
+* Promotion eligibility
+* Appointment availability
+* Manual balance adjustments
+* Payment and refund state transitions
+
+Prioritise integration tests for business-critical workflows.
+
+## Documentation
+
+Create or update the README with:
+
+* Product overview
+* Architecture overview
+* Technology stack
+* Local setup instructions
+* Environment variables
+* Database setup
+* Migration commands
+* Seed commands
+* Development commands
+* Test commands
+* Production build instructions
+* Payment-provider setup
+* Notification-provider architecture
+* Known limitations
+* Recommended next steps
+
+Create an `.env.example` file without real secrets.
+
+## Acceptance criteria
+
+The implementation is complete only when:
+
+1. The application runs locally.
+2. Authentication works.
+3. Tenant data is isolated.
+4. Role-based permissions work.
+5. Administrators can manage the main catalogue.
+6. Customers can browse and purchase offerings.
+7. Memberships can be created and joined.
+8. Loyalty points can be earned and redeemed.
+9. Promotions are validated correctly.
+10. Customers can book, reschedule, and cancel appointments.
+11. Administrators can manage customers and leads.
+12. Notifications can be created and processed through the provider abstraction.
+13. Dashboard metrics use real stored data.
+14. The main workflows work on mobile and desktop.
+15. Loading, empty, success, and error states exist.
+16. No core navigation item leads to an unfinished placeholder.
+17. The application passes linting, type checking, tests, and production build.
+18. The README explains exactly how to run the project.
+
+## Final response requirements
+
+After completing the work, provide:
+
+* A summary of what was implemented
+* The architecture used
+* The main files created or changed
+* Database changes
+* Environment variables required
+* Commands for setup and execution
+* Test and build results
+* Any integrations that remain in mock mode
+* Known limitations
+* Recommended production-hardening steps
+
+Begin by inspecting the repository and presenting a concise implementation plan. Then proceed with the implementation without waiting for confirmation unless a truly blocking technical requirement is missing.
