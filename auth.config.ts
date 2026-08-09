@@ -7,6 +7,10 @@ import type { NextAuthConfig } from "next-auth";
  * https://authjs.dev/guides/edge-compatibility
  */
 export const authConfig = {
+  // Required in production: Auth.js only auto-trusts the request host in dev,
+  // and rejects it otherwise with UntrustedHost. Safe here because the app is
+  // served from a known origin behind its own domain/proxy.
+  trustHost: true,
   session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
   pages: { signIn: "/admin/login" },
   providers: [],

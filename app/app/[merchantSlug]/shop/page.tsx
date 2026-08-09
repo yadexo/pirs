@@ -12,10 +12,13 @@ export default async function ShopPage({
   const { merchantSlug } = await params;
   const sp = await searchParams;
   const ctx = await getClientAppContext(merchantSlug);
+  // The layout renders onboarding when logged out, but Next renders page
+  // and layout in parallel — so this page must guard independently.
+  if (!ctx.customerProfileId) return null;
   const tab = sp.tab === "memberships" || sp.tab === "treatments" ? sp.tab : "browse";
 
   const [summary, categories, products, services, plans] = await Promise.all([
-    getClientSummary(ctx.db, ctx.customerProfileId!),
+    getClientSummary(ctx.db, ctx.customerProfileId),
     ctx.db.productCategory.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
     ctx.db.product.findMany({
       where: { active: true, ...(sp.category ? { categoryId: sp.category } : {}) },

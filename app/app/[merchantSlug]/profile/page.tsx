@@ -12,24 +12,27 @@ export default async function ProfilePage({
   const { merchantSlug } = await params;
   const sp = await searchParams;
   const ctx = await getClientAppContext(merchantSlug);
+  // The layout renders onboarding when logged out, but Next renders page
+  // and layout in parallel — so this page must guard independently.
+  if (!ctx.customerProfileId) return null;
   const tab = sp.tab === "membership" || sp.tab === "settings" ? sp.tab : "treatments";
 
   const [summary, orders, appointments, billing] = await Promise.all([
-    getClientSummary(ctx.db, ctx.customerProfileId!),
+    getClientSummary(ctx.db, ctx.customerProfileId),
     ctx.db.order.findMany({
-      where: { customerProfileId: ctx.customerProfileId!, status: "PAID" },
+      where: { customerProfileId: ctx.customerProfileId, status: "PAID" },
       orderBy: { placedAt: "desc" },
       take: 20,
       include: { items: { select: { name: true } } },
     }),
     ctx.db.appointment.findMany({
-      where: { customerProfileId: ctx.customerProfileId! },
+      where: { customerProfileId: ctx.customerProfileId },
       orderBy: { startAt: "desc" },
       take: 20,
       include: { service: { select: { name: true } }, location: { select: { name: true } } },
     }),
     ctx.db.membershipBillingEvent.findMany({
-      where: { customerMembership: { customerProfileId: ctx.customerProfileId! } },
+      where: { customerMembership: { customerProfileId: ctx.customerProfileId } },
       orderBy: { occurredAt: "desc" },
       take: 12,
     }),

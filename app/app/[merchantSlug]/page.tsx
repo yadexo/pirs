@@ -9,8 +9,11 @@ import { LocationBlock } from "./location-block";
 export default async function ClientHomePage({ params }: { params: Promise<{ merchantSlug: string }> }) {
   const { merchantSlug } = await params;
   const ctx = await getClientAppContext(merchantSlug);
+  // The layout renders onboarding when logged out, but Next renders page
+  // and layout in parallel — so this page must guard independently.
+  if (!ctx.customerProfileId) return null;
   const [summary, home] = await Promise.all([
-    getClientSummary(ctx.db, ctx.customerProfileId!),
+    getClientSummary(ctx.db, ctx.customerProfileId),
     getHomeData(ctx.db),
   ]);
   if (!summary) return null;

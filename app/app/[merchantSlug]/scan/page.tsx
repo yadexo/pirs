@@ -5,7 +5,10 @@ import { ScanCard } from "./scan-card";
 export default async function ScanPage({ params }: { params: Promise<{ merchantSlug: string }> }) {
   const { merchantSlug } = await params;
   const ctx = await getClientAppContext(merchantSlug);
-  const summary = await getClientSummary(ctx.db, ctx.customerProfileId!);
+  // The layout renders onboarding when logged out, but Next renders page
+  // and layout in parallel — so this page must guard independently.
+  if (!ctx.customerProfileId) return null;
+  const summary = await getClientSummary(ctx.db, ctx.customerProfileId);
   if (!summary) return null;
 
   return (

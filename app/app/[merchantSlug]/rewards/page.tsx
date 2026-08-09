@@ -9,8 +9,11 @@ import { EarnRows } from "./earn-rows";
 export default async function RewardsPage({ params }: { params: Promise<{ merchantSlug: string }> }) {
   const { merchantSlug } = await params;
   const ctx = await getClientAppContext(merchantSlug);
+  // The layout renders onboarding when logged out, but Next renders page
+  // and layout in parallel — so this page must guard independently.
+  if (!ctx.customerProfileId) return null;
   const [summary, data] = await Promise.all([
-    getClientSummary(ctx.db, ctx.customerProfileId!),
+    getClientSummary(ctx.db, ctx.customerProfileId),
     getRewardsData(ctx.db),
   ]);
   if (!summary) return null;
