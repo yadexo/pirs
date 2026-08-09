@@ -49,7 +49,7 @@ export default async function AppBuilderPage({
         </nav>
         {merchant && (
           <a
-            href={`/${merchant.slug}`}
+            href={`/app/${merchant.slug}`}
             target="_blank"
             rel="noreferrer"
             className="mb-2 flex shrink-0 items-center gap-1 text-[12px] text-ink-muted hover:text-ink"

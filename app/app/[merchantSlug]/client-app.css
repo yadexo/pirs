@@ -1,0 +1,72 @@
+/**
+ * Client-app design tokens. Scoped under .client-app so they never leak into
+ * the agency/merchant dashboard, which has its own teal token set in
+ * app/globals.css. No component in app/app/** may use a literal color —
+ * everything routes through these variables.
+ */
+.client-app {
+  --bg-app: #f4f5f7;
+  --bg-surface: #ffffff;
+  --ink: #1b2233;
+  --ink-strong: #0b0d12;
+  --muted: #7a8598;
+  --faint: #b4bcc9;
+  --pill-bg: #e8eaee;
+  --black: #0b0d12;
+  --on-black: #ffffff;
+  --on-black-muted: rgba(255, 255, 255, 0.62);
+  --hairline: #eceef2;
+  --danger: #e5484d;
+  /* Merchant accent — set inline per-merchant from App Builder branding.
+     Falls back to black so an unbranded merchant still renders correctly. */
+  --accent: var(--merchant-accent, var(--black));
+
+  --radius-card: 24px;
+  --radius-tile: 16px;
+  --radius-sheet: 28px;
+  --radius-pill: 999px;
+
+  --shadow-card: 0 8px 24px rgba(16, 20, 32, 0.06);
+  --shadow-float: 0 12px 32px rgba(16, 20, 32, 0.1);
+
+  --space-screen-x: 20px;
+  --space-stack: 16px;
+  --space-card-pad: 24px;
+
+  --font-client: "Poppins", ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+
+  background: var(--bg-app);
+  color: var(--ink);
+  font-family: var(--font-client);
+  min-height: 100dvh;
+}
+
+.client-app * {
+  border-color: var(--hairline);
+}
+
+/* Tab bar / sheets sit above the home-indicator safe area. */
+.client-app .safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.client-app .safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.client-app .tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.client-app .press {
+  transition: transform 150ms ease;
+}
+.client-app .press:active {
+  transform: scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .client-app * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

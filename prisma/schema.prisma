@@ -126,6 +126,8 @@ model TenantSettings {
   dataRetentionDays            Int?
   membershipMaxPauseMonths     Int      @default(2)
   loyaltyEnabled                Boolean  @default(true)
+  /// Drives the Home / Shop pay-later row in the client app.
+  payLaterEnabled               Boolean  @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
