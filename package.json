@@ -21,7 +21,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed.ts",
+    "serve": "node scripts/serve.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
