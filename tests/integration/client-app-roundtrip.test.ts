@@ -141,15 +141,21 @@ describe("patient app -> clinic portal round trip", () => {
     await rawDb.tenant.delete({ where: { id: tenantId } });
   });
 
-  /** Next open slot the availability engine actually offers. */
+  /**
+   * Next open slot the availability engine actually offers, from three days
+   * out. Starting tomorrow would make the cancellation test depend on the
+   * clock: a 9am slot booked after 9am today sits inside the clinic's 24-hour
+   * notice window, so the cancellation would be refused correctly and the test
+   * would fail every afternoon.
+   */
   async function nextSlot(): Promise<string> {
-    for (let dayOffset = 1; dayOffset <= 10; dayOffset++) {
+    for (let dayOffset = 3; dayOffset <= 12; dayOffset++) {
       const date = new Date();
       date.setDate(date.getDate() + dayOffset);
       const slots = await getClientSlotsAction(staffProfileId, locationId, 60, date.toISOString());
       if (slots.length > 0) return slots[0]!;
     }
-    throw new Error("Availability engine offered no slots in the next 10 days");
+    throw new Error("Availability engine offered no slots in the next 12 days");
   }
 
   it("offers booking options drawn from the merchant's own catalogue", async () => {
@@ -207,7 +213,11 @@ describe("patient app -> clinic portal round trip", () => {
     const blocked = await clientCancelAppointmentAction(SLUG, tooLate.id);
     expect(blocked).toHaveProperty("error");
 
+    // Outside the window it goes through. Assert the precondition, so a slot
+    // that drifts inside the window reports that rather than a bare failure.
     const far = await db.appointment.findFirst({ where: { status: "REQUESTED" } });
+    const hoursOut = (far!.startAt.getTime() - Date.now()) / 3_600_000;
+    expect(hoursOut).toBeGreaterThan(24);
     expect(await clientCancelAppointmentAction(SLUG, far!.id)).toEqual({ ok: true });
     const after = await db.appointment.findFirst({ where: { id: far!.id } });
     expect(after!.status).toBe("CANCELLED");
