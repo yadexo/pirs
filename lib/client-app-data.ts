@@ -9,12 +9,19 @@ import type { TenantDb } from "@/lib/tenant-db";
 
 export interface ClientSummary {
   firstName: string;
+  lastName: string;
+  phone: string | null;
   joinedDaysAgo: number;
   loyaltyPoints: number;
   cashBalanceCents: number;
   isMember: boolean;
   membershipPlanName: string | null;
+  membershipPriceCents: number | null;
   membershipNextBillingAt: string | null;
+  emailConsent: boolean;
+  smsConsent: boolean;
+  pushConsent: boolean;
+  marketingConsent: boolean;
 }
 
 export async function getClientSummary(db: TenantDb, customerProfileId: string): Promise<ClientSummary | null> {
@@ -23,7 +30,7 @@ export async function getClientSummary(db: TenantDb, customerProfileId: string):
     include: {
       memberships: {
         where: { status: { in: ["ACTIVE", "TRIAL"] } },
-        include: { membershipPlan: { select: { name: true } } },
+        include: { membershipPlan: { select: { name: true, priceCents: true } } },
         take: 1,
       },
     },
@@ -35,20 +42,27 @@ export async function getClientSummary(db: TenantDb, customerProfileId: string):
 
   return {
     firstName: profile.firstName,
+    lastName: profile.lastName,
+    phone: profile.phone,
     joinedDaysAgo,
     loyaltyPoints: profile.loyaltyPointsBalance,
     cashBalanceCents: profile.accountCreditBalanceCents,
     isMember: !!membership,
     membershipPlanName: membership?.membershipPlan.name ?? null,
+    membershipPriceCents: membership?.membershipPlan.priceCents ?? null,
     membershipNextBillingAt: membership?.nextBillingAt?.toISOString() ?? null,
+    emailConsent: profile.emailConsent,
+    smsConsent: profile.smsConsent,
+    pushConsent: profile.pushConsent,
+    marketingConsent: profile.marketingConsent,
   };
 }
 
 export interface HomeData {
   payLaterEnabled: boolean;
-  offers: { id: string; title: string; description: string | null; endsAt: string; imageUrl: string | null }[];
+  offers: { id: string; title: string; description: string | null; endsAt: string; imageUrl: string | null; code: string | null }[];
   locations: { id: string; name: string; address: string; phone: string | null }[];
-  cheapestPlanName: string | null;
+  hasPlans: boolean;
 }
 
 export async function getHomeData(db: TenantDb): Promise<HomeData> {
@@ -72,6 +86,7 @@ export async function getHomeData(db: TenantDb): Promise<HomeData> {
       description: o.description,
       endsAt: o.endAt.toISOString(),
       imageUrl: o.imageUrl,
+      code: o.code,
     })),
     locations: locations.map((l) => ({
       id: l.id,
@@ -79,7 +94,7 @@ export async function getHomeData(db: TenantDb): Promise<HomeData> {
       address: [l.addressLine1, l.city, l.postalCode].filter(Boolean).join(", "),
       phone: l.phone,
     })),
-    cheapestPlanName: plan?.name ?? null,
+    hasPlans: !!plan,
   };
 }
 

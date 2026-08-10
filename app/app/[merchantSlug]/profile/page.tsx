@@ -12,9 +12,8 @@ export default async function ProfilePage({
   const { merchantSlug } = await params;
   const sp = await searchParams;
   const ctx = await getClientAppContext(merchantSlug);
-  // The layout renders onboarding when logged out, but Next renders page
-  // and layout in parallel — so this page must guard independently.
   if (!ctx.customerProfileId) return null;
+
   const tab = sp.tab === "membership" || sp.tab === "settings" ? sp.tab : "treatments";
 
   const [summary, orders, appointments, billing] = await Promise.all([
@@ -29,7 +28,7 @@ export default async function ProfilePage({
       where: { customerProfileId: ctx.customerProfileId },
       orderBy: { startAt: "desc" },
       take: 20,
-      include: { service: { select: { name: true } }, location: { select: { name: true } } },
+      include: { service: { select: { id: true, name: true, durationMinutes: true } }, location: { select: { name: true } } },
     }),
     ctx.db.membershipBillingEvent.findMany({
       where: { customerMembership: { customerProfileId: ctx.customerProfileId } },
@@ -37,25 +36,35 @@ export default async function ProfilePage({
       take: 12,
     }),
   ]);
+  if (!summary) return null;
+
+  const now = Date.now();
 
   return (
     <ProfileView
       merchantSlug={merchantSlug}
+      merchantName={ctx.merchant.name}
       currency={ctx.merchant.currency}
+      supportUrl={ctx.merchant.supportUrl}
       tab={tab}
       summary={summary}
+      appVersion="1.0.0"
       appointments={appointments.map((a) => ({
         id: a.id,
-        name: a.service.name,
+        serviceId: a.service.id,
+        serviceName: a.service.name,
+        durationMinutes: a.service.durationMinutes,
         location: a.location.name,
         startAt: a.startAt.toISOString(),
         status: a.status,
+        upcoming: a.startAt.getTime() > now && (a.status === "REQUESTED" || a.status === "CONFIRMED"),
       }))}
       orders={orders.map((o) => ({
         id: o.id,
         number: o.orderNumber,
         placedAt: o.placedAt.toISOString(),
         totalCents: o.totalCents,
+        pointsEarned: Math.max(0, o.totalCents / 100),
         itemNames: o.items.map((i) => i.name),
       }))}
       billing={billing.map((b) => ({

@@ -2,29 +2,19 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { GlossSurface } from "@/components/client-app/gloss-surface";
-import {
-  BlackButton,
-  BottomSheet,
-  ClientCard,
-  ClientEmptyState,
-  QuantityStepper,
-  SegmentedTabs,
-  StatusPill,
-} from "@/components/client-app/primitives";
-import { formatMoney } from "@/lib/utils";
-import { addProductToBasketAction, addServiceToBasketAction } from "@/lib/actions/basket";
-import { joinMembershipAction } from "@/lib/actions/memberships";
+import { Gloss, Sheet, Icon, Stepper, Carousel, EmptyState, money, useToast } from "@/components/client-app/ui";
+import { clientAddToCartAction, clientJoinPlanAction } from "@/lib/actions/client-app";
 import { useCart } from "../cart-context";
-import { CartSheet } from "./cart-sheet";
+import { BookingSheet } from "./booking-sheet";
 
 export interface ShopProduct {
   id: string;
   name: string;
   description: string | null;
   priceCents: number;
-  imageUrl: string | null;
+  images: string[];
   soldOut: boolean;
+  categoryId: string | null;
 }
 export interface ShopService {
   id: string;
@@ -32,11 +22,14 @@ export interface ShopService {
   description: string | null;
   priceCents: number;
   durationMinutes: number;
-  imageUrl: string | null;
+  images: string[];
+  bookable: boolean;
+  categoryName: string;
 }
 export interface ShopPlan {
   id: string;
   name: string;
+  description: string | null;
   priceCents: number;
   interval: string;
   benefits: string[];
@@ -52,302 +45,444 @@ export function ShopView({
   merchantSlug,
   currency,
   tab,
-  activeCategoryId,
-  activeCategoryName,
-  currentPlanName,
+  categoryId,
   categories,
   products,
   services,
   plans,
+  currentPlanId,
+  pointsPerEuro,
 }: {
   merchantSlug: string;
   currency: string;
   tab: string;
-  activeCategoryId: string | null;
-  activeCategoryName: string | null;
-  currentPlanName: string | null;
+  categoryId: string | null;
   categories: { id: string; name: string }[];
   products: ShopProduct[];
   services: ShopService[];
   plans: ShopPlan[];
+  currentPlanId: string | null;
+  pointsPerEuro: number;
 }) {
   const router = useRouter();
   const { refresh } = useCart();
-  const [selected, setSelected] = React.useState<ShopProduct | null>(null);
-  const [howOpen, setHowOpen] = React.useState(false);
-  const money = (c: number) => formatMoney(c, currency);
+  const { toast } = useToast();
+  const segRef = React.useRef<HTMLDivElement>(null);
 
-  function setTab(next: string) {
-    router.push(`/app/${merchantSlug}/shop${next === "browse" ? "" : `?tab=${next}`}`);
-  }
-  function setCategory(id: string | null) {
+  const [detail, setDetail] = React.useState<{ kind: "product"; item: ShopProduct } | { kind: "service"; item: ShopService } | null>(null);
+  const [qty, setQty] = React.useState(1);
+  const [howOpen, setHowOpen] = React.useState(false);
+  const [booking, setBooking] = React.useState<ShopService | null>(null);
+  const [planDetail, setPlanDetail] = React.useState<ShopPlan | null>(null);
+  const [pending, setPending] = React.useState(false);
+
+  // Treatment filters/sort — client-side over an already-scoped list.
+  const [filterOpen, setFilterOpen] = React.useState(false);
+  const [sortOpen, setSortOpen] = React.useState(false);
+  const [priceBand, setPriceBand] = React.useState<string | null>(null);
+  const [duration, setDuration] = React.useState<number | null>(null);
+  const [sort, setSort] = React.useState("pop");
+
+  const [indicator, setIndicator] = React.useState<{ left: number; width: number }>({ left: 0, width: 0 });
+  React.useLayoutEffect(() => {
+    const active = segRef.current?.querySelector<HTMLButtonElement>("button.on");
+    if (active) setIndicator({ left: active.offsetLeft, width: active.offsetWidth });
+  }, [tab]);
+
+  function go(next: string, cat?: string | null) {
     const sp = new URLSearchParams();
-    if (id) sp.set("category", id);
+    if (next !== "browse") sp.set("tab", next);
+    if (cat) sp.set("category", cat);
     router.push(`/app/${merchantSlug}/shop${sp.toString() ? `?${sp}` : ""}`);
+  }
+
+  const visibleTreatments = React.useMemo(() => {
+    let list = [...services];
+    if (priceBand === "u50") list = list.filter((s) => s.priceCents < 5000);
+    if (priceBand === "50-100") list = list.filter((s) => s.priceCents >= 5000 && s.priceCents <= 10000);
+    if (priceBand === "o100") list = list.filter((s) => s.priceCents > 10000);
+    if (duration) list = list.filter((s) => s.durationMinutes === duration);
+    if (sort === "pasc") list.sort((a, b) => a.priceCents - b.priceCents);
+    if (sort === "pdesc") list.sort((a, b) => b.priceCents - a.priceCents);
+    return list;
+  }, [services, priceBand, duration, sort]);
+
+  const activeCategory = categories.find((c) => c.id === categoryId) ?? null;
+
+  async function addToCart() {
+    if (!detail) return;
+    setPending(true);
+    const res = await clientAddToCartAction(merchantSlug, detail.kind, detail.item.id, detail.kind === "product" ? qty : 1);
+    setPending(false);
+    if ("error" in res) {
+      toast(res.error);
+      return;
+    }
+    await refresh();
+    setDetail(null);
+    toast("Added to cart");
+  }
+
+  async function joinPlan(id: string) {
+    setPending(true);
+    const res = await clientJoinPlanAction(merchantSlug, id);
+    setPending(false);
+    if ("error" in res) {
+      toast(res.error);
+      return;
+    }
+    setPlanDetail(null);
+    toast(`Welcome to ${res.name}`);
+    router.refresh();
   }
 
   return (
     <div>
-      <SegmentedTabs segments={SEGMENTS} active={tab} onSelect={setTab} />
+      <div className="seg" ref={segRef}>
+        {SEGMENTS.map((s) => (
+          <button key={s.key} className={tab === s.key ? "on" : undefined} onClick={() => go(s.key, categoryId)}>
+            {s.label}
+          </button>
+        ))}
+        <i className="ind" style={{ left: indicator.left, width: indicator.width }} />
+      </div>
 
-      {tab === "browse" && (
-        <div className="space-y-6 px-[var(--space-screen-x)] pt-5">
-          {/* Hero banner */}
-          <GlossSurface particles className="flex min-h-[200px] flex-col items-center justify-center px-6 py-8 text-center">
-            <p className="text-[27px] font-bold leading-tight text-[var(--on-black)]">
-              Treat today. Pay later.
-              <br />
-              Earn rewards.
-            </p>
-            <p className="mt-2 text-[16px] text-[var(--on-black-muted)]">Free treatments exclusive perks.</p>
-            <BlackButton variant="white" className="mt-5 px-6" onClick={() => setHowOpen(true)}>
-              How does it work?
-            </BlackButton>
-          </GlossSurface>
+      <div style={{ padding: "var(--gap) var(--pad-x) 0", display: "flex", flexDirection: "column", gap: "var(--gap)" }}>
+        {tab === "browse" && (
+          <>
+            <Gloss className="banner" particles seed={merchantSlug}>
+              <h2 style={{ fontSize: 24, fontWeight: 700, color: "var(--on-black)" }}>
+                Treat today. Pay later.
+                <br />
+                Earn rewards.
+              </h2>
+              <p style={{ fontSize: 15, color: "var(--on-black-muted)" }}>Free treatments &amp; exclusive perks.</p>
+              <button className="btn-white" style={{ marginTop: 8 }} onClick={() => setHowOpen(true)}>
+                How does it work?
+              </button>
+            </Gloss>
 
-          {/* Categories */}
-          {categories.length > 0 && (
-            <div className={`no-scrollbar -mx-[var(--space-screen-x)] flex gap-3 overflow-x-auto px-[var(--space-screen-x)] ${categories.length === 1 ? "justify-center" : ""}`}>
-              {categories.map((c) => {
-                const active = c.id === activeCategoryId;
-                return (
+            {categories.length > 0 && (
+              <div className={`catrow no-scrollbar ${categories.length === 1 ? "single" : ""}`}>
+                {categories.map((c) => (
                   <button
                     key={c.id}
-                    type="button"
-                    onClick={() => setCategory(active ? null : c.id)}
-                    className={`press flex h-[140px] w-[140px] shrink-0 flex-col items-center justify-center gap-2 rounded-[var(--radius-tile)] border-2 border-[var(--black)] ${
-                      active ? "bg-[var(--black)] text-[var(--on-black)]" : "bg-[var(--bg-surface)] text-[var(--ink)]"
-                    }`}
+                    className={`cattile ${categoryId === c.id ? "on" : ""}`}
+                    onClick={() => go("browse", categoryId === c.id ? null : c.id)}
                   >
-                    <TagGlyph />
-                    <span className="px-2 text-center text-[15px] font-medium">{c.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          <section>
-            <h2 className="text-[27px] font-bold leading-tight text-[var(--ink-strong)]">
-              {activeCategoryName ? `All "${activeCategoryName}" Treatments` : "All Treatments"}
-            </h2>
-
-            {products.length === 0 ? (
-              <ClientCard className="mt-4">
-                <ClientEmptyState text="No products available yet" />
-              </ClientCard>
-            ) : (
-              <div className={`mt-4 grid gap-4 ${products.length === 1 ? "grid-cols-1 px-[15%]" : "grid-cols-2"}`}>
-                {products.map((p) => (
-                  <button key={p.id} type="button" onClick={() => setSelected(p)} className="press text-left">
-                    <ClientCard className="overflow-hidden">
-                      <div className={`relative aspect-[4/5] bg-[var(--pill-bg)] ${p.soldOut ? "opacity-55" : ""}`}>
-                        {p.imageUrl && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={p.imageUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
-                        )}
-                        {p.soldOut && (
-                          <span className="absolute left-2 top-2">
-                            <StatusPill>Sold out</StatusPill>
-                          </span>
-                        )}
-                      </div>
-                      <div className="p-3">
-                        <p className="text-[16px] text-[var(--ink)]">{p.name}</p>
-                        <p className="tabular mt-1 text-[18px] font-bold text-[var(--ink-strong)]">{money(p.priceCents)}</p>
-                      </div>
-                    </ClientCard>
+                    <Icon name="tag" size={28} />
+                    {c.name}
                   </button>
                 ))}
               </div>
             )}
-          </section>
-        </div>
-      )}
 
-      {tab === "memberships" && (
-        <div className="space-y-4 px-[var(--space-screen-x)] pt-5">
-          {plans.length === 0 ? (
-            <ClientCard>
-              <ClientEmptyState text="No memberships available yet" />
-            </ClientCard>
+            <div>
+              <h2 className="h-sec">{activeCategory ? `All “${activeCategory.name}”` : "All products"}</h2>
+            </div>
+
+            {products.length === 0 ? (
+              <div className="ca-card">
+                <EmptyState text="The shop is being stocked" sub="Check back soon — new products are on their way." />
+              </div>
+            ) : (
+              <div className={`pgrid ${products.length === 1 ? "single" : ""}`}>
+                {products.map((p) => (
+                  <button
+                    key={p.id}
+                    className={`pcard ${p.soldOut ? "sold" : ""}`}
+                    onClick={() => {
+                      setQty(1);
+                      setDetail({ kind: "product", item: p });
+                    }}
+                  >
+                    <span style={{ position: "relative", display: "block" }}>
+                      {p.images[0] ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.images[0]} alt={p.name} loading="lazy" />
+                      ) : (
+                        <span style={{ display: "block", aspectRatio: "4/5", background: "var(--pill-bg)" }} />
+                      )}
+                      {p.soldOut && <span className="soldpill">SOLD OUT</span>}
+                    </span>
+                    <span style={{ display: "block", fontSize: 15, color: "var(--ink)", padding: "8px 12px 2px" }}>{p.name}</span>
+                    <span className="tabular" style={{ display: "block", fontSize: 17, fontWeight: 700, color: "var(--ink-strong)", padding: "0 12px 12px" }}>
+                      {money(p.priceCents, currency)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {tab === "memberships" &&
+          (plans.length === 0 ? (
+            <div className="ca-card">
+              <EmptyState text="No memberships available" sub="Plans will appear here once the clinic publishes them." />
+            </div>
           ) : (
-            plans.map((m) => {
-              const isCurrent = m.name === currentPlanName;
+            plans.map((pl) => {
+              const current = pl.id === currentPlanId;
               return (
-                <ClientCard key={m.id} className="p-[var(--space-card-pad)]">
-                  <p className="text-[23px] font-bold text-[var(--ink-strong)]">{m.name}</p>
-                  <p className="tabular mt-1 text-[23px] font-bold text-[var(--ink-strong)]">
-                    {money(m.priceCents)}
-                    <span className="text-[16px] font-normal text-[var(--muted)]">/{m.interval}</span>
-                  </p>
-                  {m.benefits.length > 0 && (
-                    <ul className="mt-3 space-y-1.5">
-                      {m.benefits.map((b, i) => (
-                        <li key={i} className="flex items-start gap-2 text-[16px] text-[var(--ink)]">
-                          <CheckGlyph /> {b}
-                        </li>
+                <div key={pl.id} className="ca-card plancard">
+                  <span style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                    <h3 style={{ fontSize: 20, fontWeight: 700 }}>{pl.name}</h3>
+                    <span style={{ flex: 1 }} />
+                    <span className="tabular" style={{ fontSize: 24, fontWeight: 700, color: "var(--ink-strong)" }}>
+                      {money(pl.priceCents, currency)}
+                    </span>
+                    <span style={{ color: "var(--muted)", fontSize: 15 }}>/{pl.interval}</span>
+                  </span>
+                  {pl.benefits.length > 0 && (
+                    <div className="bens">
+                      {pl.benefits.map((b, i) => (
+                        <div key={i}>
+                          <Icon name="check" size={18} /> {b}
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   )}
-                  <div className="mt-4">
-                    {isCurrent ? (
-                      <StatusPill tone="active">Current plan</StatusPill>
-                    ) : (
-                      <BlackButton
-                        className="px-8"
-                        onClick={async () => {
-                          await joinMembershipAction(merchantSlug, m.id);
-                          refresh();
-                        }}
-                      >
-                        Join
-                      </BlackButton>
-                    )}
-                  </div>
-                </ClientCard>
+                  {current ? (
+                    <span className="status-pill dark" style={{ alignSelf: "flex-start" }}>
+                      Current plan
+                    </span>
+                  ) : (
+                    <button className="btn-black" disabled={pending} onClick={() => joinPlan(pl.id)}>
+                      Join
+                    </button>
+                  )}
+                </div>
               );
             })
-          )}
-        </div>
-      )}
+          ))}
 
-      {tab === "treatments" && (
-        <div className="space-y-4 px-[var(--space-screen-x)] pt-5">
-          {services.length === 0 ? (
-            <ClientCard>
-              <ClientEmptyState text="No treatments available yet" />
-            </ClientCard>
-          ) : (
-            services.map((s) => (
-              <ClientCard key={s.id} className="flex items-center gap-4 p-4">
-                <div className="h-16 w-16 shrink-0 overflow-hidden rounded-[var(--radius-tile)] bg-[var(--pill-bg)]">
-                  {s.imageUrl && (
+        {tab === "treatments" && (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+              <button className="chip" onClick={() => setFilterOpen(true)}>
+                <Icon name="sliders" size={18} /> Filter
+              </button>
+              <button className="chip" onClick={() => setSortOpen(true)}>
+                Sort <Icon name="chevD" size={16} />
+              </button>
+            </div>
+
+            {visibleTreatments.length === 0 ? (
+              <div className="ca-card">
+                <EmptyState text="No treatments found" sub="Try clearing filters, or check back soon." />
+              </div>
+            ) : (
+              visibleTreatments.map((s) => (
+                <button key={s.id} className="treatcard" onClick={() => setDetail({ kind: "service", item: s })}>
+                  {s.images[0] ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={s.imageUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+                    <img src={s.images[0]} alt={s.name} loading="lazy" />
+                  ) : (
+                    <Gloss style={{ height: 190 }} />
                   )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[16px] font-semibold text-[var(--ink)]">{s.name}</p>
-                  <p className="text-[16px] text-[var(--muted)]">
-                    {s.durationMinutes} min · {money(s.priceCents)}
-                  </p>
-                </div>
-                <BlackButton
-                  className="h-11 shrink-0 px-5 text-[15px]"
-                  onClick={async () => {
-                    await addServiceToBasketAction(merchantSlug, s.id);
-                    refresh();
-                  }}
-                >
-                  Book
-                </BlackButton>
-              </ClientCard>
-            ))
-          )}
-        </div>
-      )}
+                  <span style={{ display: "flex", flexDirection: "column", gap: 9, alignItems: "flex-start", padding: 20 }}>
+                    <span className="status-pill">Session</span>
+                    <h3 style={{ fontSize: 20, fontWeight: 700, color: "var(--ink-strong)" }}>{s.name}</h3>
+                    {s.description && <p style={{ fontSize: 15, color: "var(--muted)" }}>{s.description}</p>}
+                    <span className="outline-chip">{s.categoryName}</span>
+                    <span className="tabular" style={{ color: "var(--muted)", fontSize: 16 }}>
+                      From {money(s.priceCents, currency)} · {s.durationMinutes} min
+                    </span>
+                  </span>
+                </button>
+              ))
+            )}
+          </>
+        )}
+      </div>
 
-      <ProductSheet
-        product={selected}
-        currency={currency}
-        onClose={() => setSelected(null)}
-        onAdd={async (qty) => {
-          if (!selected) return;
-          await addProductToBasketAction(merchantSlug, selected.id, qty);
-          refresh();
-          setSelected(null);
-        }}
-      />
+      {/* ---------------------------------------------------------- sheets */}
 
-      <BottomSheet open={howOpen} onClose={() => setHowOpen(false)} title="How does it work?">
-        <ol className="space-y-3 text-[16px] text-[var(--ink)]">
+      <Sheet
+        open={!!detail}
+        onClose={() => setDetail(null)}
+        title={detail?.item.name}
+        cta={
+          detail?.kind === "product" ? (
+            <button className="btn-black" disabled={pending || detail.item.soldOut} onClick={addToCart}>
+              {detail.item.soldOut ? "Sold out" : "Add to cart"}
+            </button>
+          ) : detail?.kind === "service" ? (
+            detail.item.bookable ? (
+              <button
+                className="btn-black"
+                onClick={() => {
+                  setBooking(detail.item);
+                  setDetail(null);
+                }}
+              >
+                <Icon name="calendar" size={20} /> Book now
+              </button>
+            ) : (
+              <button className="btn-black" disabled={pending} onClick={addToCart}>
+                Add to cart
+              </button>
+            )
+          ) : undefined
+        }
+      >
+        {detail && (
+          <>
+            {detail.item.images.length > 0 && <Carousel images={detail.item.images} alt={detail.item.name} />}
+            <div className="dsec" style={{ paddingBottom: 4 }}>
+              <span style={{ fontSize: 21, fontWeight: 700, color: "var(--ink-strong)" }}>{detail.item.name}</span>
+              <span className="tabular" style={{ fontSize: 17, fontWeight: 700 }}>
+                {money(detail.item.priceCents, currency)}
+              </span>
+            </div>
+            {detail.item.description && (
+              <p style={{ color: "var(--muted)", fontSize: 15, paddingBottom: 6 }}>{detail.item.description}</p>
+            )}
+            {detail.kind === "product" ? (
+              <div className="dsec">
+                <span style={{ color: "var(--muted)", fontSize: 15 }}>Quantity</span>
+                <Stepper value={qty} onChange={setQty} />
+              </div>
+            ) : (
+              <div className="dsec">
+                <span className="outline-chip">{detail.item.categoryName}</span>
+                <span style={{ color: "var(--muted)", fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
+                  <Icon name="clock" size={15} /> {detail.item.durationMinutes} min
+                </span>
+              </div>
+            )}
+            <p style={{ color: "var(--muted)", fontSize: 14 }}>
+              Earn {Math.floor(((detail.item.priceCents * (detail.kind === "product" ? qty : 1)) / 100) * pointsPerEuro)} points with this purchase
+            </p>
+          </>
+        )}
+      </Sheet>
+
+      <Sheet
+        open={howOpen}
+        onClose={() => setHowOpen(false)}
+        title="How does it work?"
+        cta={
+          <button
+            className="btn-black"
+            onClick={() => {
+              setHowOpen(false);
+              go("browse", categoryId);
+            }}
+          >
+            Browse the shop
+          </button>
+        }
+      >
+        <ol style={{ fontSize: 16, display: "flex", flexDirection: "column", gap: 12, paddingLeft: 0, listStyle: "none" }}>
           <li>1. Browse treatments and products from this clinic.</li>
           <li>2. Pay now, or spread the cost over monthly payments.</li>
           <li>3. Earn points on everything you spend and redeem them for rewards.</li>
         </ol>
-      </BottomSheet>
+      </Sheet>
 
-      <CartSheet merchantSlug={merchantSlug} currency={currency} />
+      <Sheet
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        title="Filter treatments"
+        cta={
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              className="btn-ghost"
+              style={{ flex: 1 }}
+              onClick={() => {
+                setPriceBand(null);
+                setDuration(null);
+              }}
+            >
+              Reset
+            </button>
+            <button className="btn-black" style={{ flex: 2 }} onClick={() => setFilterOpen(false)}>
+              Apply
+            </button>
+          </div>
+        }
+      >
+        <div className="grouplab">Price</div>
+        <div className="chipsel">
+          {(
+            [
+              ["u50", "Under €50"],
+              ["50-100", "€50–€100"],
+              ["o100", "Over €100"],
+            ] as const
+          ).map(([k, label]) => (
+            <button key={k} className={`schip ${priceBand === k ? "on" : ""}`} onClick={() => setPriceBand(priceBand === k ? null : k)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="grouplab">Duration</div>
+        <div className="chipsel">
+          {[30, 45, 60].map((d) => (
+            <button key={d} className={`schip ${duration === d ? "on" : ""}`} onClick={() => setDuration(duration === d ? null : d)}>
+              {d} min
+            </button>
+          ))}
+        </div>
+      </Sheet>
+
+      <Sheet open={sortOpen} onClose={() => setSortOpen(false)} title="Sort treatments">
+        {(
+          [
+            ["pop", "Popularity"],
+            ["pasc", "Price: low → high"],
+            ["pdesc", "Price: high → low"],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            className={`optrow ${sort === k ? "on" : ""}`}
+            onClick={() => {
+              setSort(k);
+              setSortOpen(false);
+            }}
+          >
+            <span className="rad" />
+            {label}
+          </button>
+        ))}
+      </Sheet>
+
+      <BookingSheet
+        merchantSlug={merchantSlug}
+        service={booking}
+        onClose={() => setBooking(null)}
+        onBooked={() => {
+          setBooking(null);
+          toast("Booking requested");
+          router.refresh();
+        }}
+      />
+
+      <Sheet
+        open={!!planDetail}
+        onClose={() => setPlanDetail(null)}
+        title={planDetail?.name}
+        cta={
+          planDetail && (
+            <button className="btn-black" disabled={pending} onClick={() => joinPlan(planDetail.id)}>
+              Join {planDetail.name}
+            </button>
+          )
+        }
+      >
+        {planDetail && (
+          <div className="bens">
+            {planDetail.benefits.map((b, i) => (
+              <div key={i}>
+                <Icon name="check" size={18} /> {b}
+              </div>
+            ))}
+          </div>
+        )}
+      </Sheet>
     </div>
-  );
-}
-
-function ProductSheet({
-  product,
-  currency,
-  onClose,
-  onAdd,
-}: {
-  product: ShopProduct | null;
-  currency: string;
-  onClose: () => void;
-  onAdd: (qty: number) => Promise<void>;
-}) {
-  const [qty, setQty] = React.useState(1);
-  const [pending, setPending] = React.useState(false);
-
-  React.useEffect(() => {
-    if (product) setQty(1);
-  }, [product]);
-
-  return (
-    <BottomSheet
-      open={!!product}
-      onClose={onClose}
-      title={product?.name}
-      footer={
-        <BlackButton
-          className="w-full"
-          loading={pending}
-          disabled={product?.soldOut}
-          onClick={async () => {
-            setPending(true);
-            try {
-              await onAdd(qty);
-            } finally {
-              setPending(false);
-            }
-          }}
-        >
-          {product?.soldOut ? "Sold out" : "Add to cart"}
-        </BlackButton>
-      }
-    >
-      {product && (
-        <>
-          <div className="aspect-[4/3] overflow-hidden rounded-[var(--radius-tile)] bg-[var(--pill-bg)]">
-            {product.imageUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={product.imageUrl} alt="" className="h-full w-full object-cover" />
-            )}
-          </div>
-          <p className="tabular mt-4 text-[23px] font-bold text-[var(--ink-strong)]">{formatMoney(product.priceCents, currency)}</p>
-          {product.description && <p className="mt-2 text-[16px] text-[var(--muted)]">{product.description}</p>}
-          <div className="mt-4 flex items-center justify-between">
-            <QuantityStepper value={qty} onChange={setQty} />
-            <span className="text-[16px] text-[var(--muted)]">
-              Earn {Math.floor((product.priceCents * qty) / 100)} points
-            </span>
-          </div>
-        </>
-      )}
-    </BottomSheet>
-  );
-}
-
-function TagGlyph() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 12V5a2 2 0 0 1 2-2h7l9 9-9 9-9-9Z" />
-      <circle cx="7.5" cy="7.5" r="1.2" />
-    </svg>
-  );
-}
-function CheckGlyph() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="mt-1 shrink-0">
-      <path d="m4 9.5 3.2 3L14 6" />
-    </svg>
   );
 }

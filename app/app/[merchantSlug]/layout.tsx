@@ -1,7 +1,7 @@
 import { getClientAppContext } from "@/lib/client-app-context";
+import { getClientSummary, getRewardsData } from "@/lib/client-app-data";
 import { Onboarding } from "./onboarding";
 import { ClientAppShell } from "./shell";
-import { CartProvider } from "./cart-context";
 import "./client-app.css";
 
 export default async function ClientAppLayout({
@@ -14,7 +14,11 @@ export default async function ClientAppLayout({
   const { merchantSlug } = await params;
   const ctx = await getClientAppContext(merchantSlug);
 
-  const style = ctx.merchant.accentColor ? ({ "--merchant-accent": ctx.merchant.accentColor } as React.CSSProperties) : undefined;
+  // The merchant's own brand colour is the only colour the client app takes
+  // from configuration; everything else is the fixed monochrome palette.
+  const style = ctx.merchant.accentColor
+    ? ({ "--merchant-accent": ctx.merchant.accentColor } as React.CSSProperties)
+    : undefined;
 
   if (!ctx.customerProfileId) {
     return (
@@ -24,13 +28,25 @@ export default async function ClientAppLayout({
     );
   }
 
+  const [summary, rewards] = await Promise.all([
+    getClientSummary(ctx.db, ctx.customerProfileId),
+    getRewardsData(ctx.db),
+  ]);
+
+  // Dot on the Rewards tab when something just became affordable.
+  const rewardsDot = !!summary && rewards.rewards.some((r) => r.pointsCost <= summary.loyaltyPoints);
+
   return (
     <div className="client-app" style={style}>
-      <CartProvider merchantSlug={merchantSlug}>
-        <ClientAppShell merchantSlug={merchantSlug} logoUrl={ctx.merchant.logoUrl}>
-          {children}
-        </ClientAppShell>
-      </CartProvider>
+      <ClientAppShell
+        merchantSlug={merchantSlug}
+        merchantName={ctx.merchant.name}
+        logoUrl={ctx.merchant.logoUrl}
+        currency={ctx.merchant.currency}
+        rewardsDot={rewardsDot}
+      >
+        {children}
+      </ClientAppShell>
     </div>
   );
 }

@@ -58,6 +58,11 @@ export async function getClientAppContext(merchantSlug: string): Promise<ClientA
     supportUrl: null,
   };
 
+  // Support link falls back to the agency's white-label setting, so a merchant
+  // that hasn't set one still gives clients somewhere to go.
+  const agency = await rawDb.agencySettings.findFirst({ select: { supportUrl: true } });
+  merchant.supportUrl = agency?.supportUrl ?? null;
+
   const session = await auth();
   const user = session?.user;
   const isThisMerchantsCustomer = user?.role === "CUSTOMER" && user.tenantSlug === merchantSlug && !!user.customerProfileId;

@@ -2,76 +2,148 @@
 
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  ClientHeader,
-  ClientTabBar,
-  HomeIcon,
-  ShopIcon,
-  ScanIcon,
-  RewardsIcon,
-  ProfileIcon,
-  type ClientTab,
-} from "@/components/client-app/primitives";
+import { cn } from "@/lib/utils";
+import { Icon, ToastProvider } from "@/components/client-app/ui";
+import { CartProvider, useCart } from "./cart-context";
 import { SearchSheet } from "./search-sheet";
-import { useCart } from "./cart-context";
+import { CartSheet } from "./cart-sheet";
 
-const TABS: ClientTab[] = [
-  { key: "home", label: "Home", icon: (a) => <HomeIcon active={a} /> },
-  { key: "shop", label: "Shop", icon: () => <ShopIcon /> },
-  { key: "scan", label: "Scan", icon: () => <ScanIcon /> },
-  { key: "rewards", label: "Rewards", icon: () => <RewardsIcon /> },
-  { key: "profile", label: "Profile", icon: () => <ProfileIcon /> },
-];
+const TABS = [
+  { key: "home", label: "Home", icon: "home" },
+  { key: "shop", label: "Shop", icon: "bag" },
+  { key: "scan", label: "Scan", icon: "scan" },
+  { key: "rewards", label: "Rewards", icon: "gift" },
+  { key: "profile", label: "Profile", icon: "user" },
+] as const;
 
 const TITLES: Record<string, string> = { home: "Home", shop: "Shop", scan: "", rewards: "Rewards", profile: "Account" };
 
-function activeTabFromPath(pathname: string, base: string): string {
-  const rest = pathname.slice(base.length).replace(/^\//, "");
-  const seg = rest.split("/")[0];
-  return seg && TABS.some((t) => t.key === seg) ? seg : "home";
-}
-
 export function ClientAppShell({
   merchantSlug,
+  merchantName,
   logoUrl,
+  currency,
+  rewardsDot,
   children,
 }: {
   merchantSlug: string;
+  merchantName: string;
   logoUrl: string | null;
+  currency: string;
+  /** A reward just became affordable — surfaces a dot on the Rewards tab. */
+  rewardsDot: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <ToastProvider>
+      <CartProvider merchantSlug={merchantSlug}>
+        <Frame
+          merchantSlug={merchantSlug}
+          merchantName={merchantName}
+          logoUrl={logoUrl}
+          currency={currency}
+          rewardsDot={rewardsDot}
+        >
+          {children}
+        </Frame>
+      </CartProvider>
+    </ToastProvider>
+  );
+}
+
+function Frame({
+  merchantSlug,
+  merchantName,
+  logoUrl,
+  currency,
+  rewardsDot,
+  children,
+}: {
+  merchantSlug: string;
+  merchantName: string;
+  logoUrl: string | null;
+  currency: string;
+  rewardsDot: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const base = `/app/${merchantSlug}`;
-  const active = activeTabFromPath(pathname, base);
+  const { count, open, openCart, closeCart } = useCart();
   const [searchOpen, setSearchOpen] = React.useState(false);
-  const { count, openCart } = useCart();
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  const seg = pathname.slice(base.length).replace(/^\//, "").split("/")[0] ?? "";
+  const active = TABS.some((t) => t.key === seg) ? seg : "home";
+  const showHeader = active !== "scan";
 
   function selectTab(key: string) {
     if (key === active) {
-      // Re-tapping the active tab scrolls it to top rather than navigating.
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
     router.push(key === "home" ? base : `${base}/${key}`);
   }
 
-  const showHeader = active !== "scan";
-
   return (
-    <div className="mx-auto flex min-h-dvh max-w-[480px] flex-col">
+    <div className="ca-device">
       {showHeader && (
-        <ClientHeader
-          title={TITLES[active] ?? "Home"}
-          logoUrl={active === "home" ? logoUrl : undefined}
-          onSearch={() => setSearchOpen(true)}
-          onCart={openCart}
-          cartCount={count}
-        />
+        <header className="ca-hdr">
+          <div className="row">
+            <div style={{ display: "flex", alignItems: "center", minHeight: 40 }}>
+              {active === "home" && logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={logoUrl} alt={merchantName} className="ca-hlogo" />
+              ) : active === "home" ? (
+                <span className="ca-hlogo" style={{ background: "var(--black)", color: "var(--on-black)", display: "grid", placeItems: "center", fontWeight: 700 }}>
+                  {merchantName.charAt(0)}
+                </span>
+              ) : (
+                <h1 className="ca-htitle">{TITLES[active]}</h1>
+              )}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button type="button" className="ca-iconbtn" aria-label="Search" onClick={() => setSearchOpen(true)}>
+                <Icon name="search" size={26} />
+              </button>
+              <button type="button" className="ca-iconbtn" aria-label="Cart" onClick={openCart}>
+                <Icon name="bag" size={26} />
+                {count > 0 && <span className="ca-cartbadge tabular">{count}</span>}
+              </button>
+            </div>
+          </div>
+        </header>
       )}
-      <main className="min-h-0 flex-1 pb-28">{children}</main>
-      <ClientTabBar tabs={TABS} active={active} onSelect={selectTab} />
-      <SearchSheet merchantSlug={merchantSlug} open={searchOpen} onClose={() => setSearchOpen(false)} />
+
+      <div ref={scrollRef} style={{ paddingBottom: "calc(var(--tabh) + 40px)" }}>
+        {children}
+      </div>
+
+      <nav className="ca-tabbar" role="tablist" aria-label="Main">
+        {TABS.map((t) => {
+          const on = t.key === active;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              aria-label={t.label}
+              className={cn("ca-tabbtn", on && "on")}
+              onClick={() => selectTab(t.key)}
+            >
+              <span className="tic">
+                <Icon name={t.icon} size={26} />
+                {t.key === "rewards" && rewardsDot && <span className="ca-rdot" />}
+              </span>
+              <span className="tlab">{t.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      <SearchSheet merchantSlug={merchantSlug} currency={currency} open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <CartSheet merchantSlug={merchantSlug} currency={currency} open={open} onClose={closeCart} />
     </div>
   );
 }
