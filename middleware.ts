@@ -55,7 +55,7 @@ export default auth((req) => {
   const isMerchantUser = user?.role === "TENANT_ADMIN" || user?.role === "STAFF";
 
   // --- legacy auth entry points ------------------------------------------
-  if (pathname === "/admin/login" || pathname === "/platform/login" || pathname === "/") {
+  if (pathname === "/admin/login" || pathname === "/platform/login") {
     return NextResponse.redirect(new URL("/login", req.url), 301);
   }
 
@@ -99,5 +99,6 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/", "/admin/:path*", "/platform/:path*", "/agency/:path*", "/m/:path*", "/login"],
+  // "/" is the portal index and needs no auth, so middleware skips it.
+  matcher: ["/admin/:path*", "/platform/:path*", "/agency/:path*", "/m/:path*", "/login"],
 };
