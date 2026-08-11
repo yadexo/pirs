@@ -125,7 +125,8 @@ export default async function PortalIndexPage() {
                 <span className="text-ink-faint"> — {ROLE_LABEL[session.user.role] ?? session.user.role}</span>
               </span>
               <span className="text-[13px] text-ink-faint">
-                Only <span className="font-medium text-ink">{mySurface}</span> is open to this account.
+                <span className="font-medium text-ink">{mySurface}</span> opens directly. Pick another and you can switch
+                account from there.
               </span>
               <div className="flex-1" />
               <form action={signOutAction}>
@@ -203,7 +204,7 @@ export default async function PortalIndexPage() {
                 <p className="mt-3 text-[12px] leading-relaxed text-ink-muted">
                   {mySurface && mySurface !== s.name ? (
                     <>
-                      Sign out first, then use <span className="font-medium text-ink">{s.account.email}</span>
+                      Needs <span className="font-medium text-ink">{s.account.email}</span>
                       <span className="text-ink-faint"> — {s.account.label}</span>
                     </>
                   ) : (

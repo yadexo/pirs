@@ -82,6 +82,24 @@ export function landingFor({ role, tenantId, tenantSlug }: Actor): string {
   return "/login";
 }
 
+/** Roles that can open each section, for the "wrong account" explanation. */
+export const SECTION_REQUIREMENT: Record<string, string> = {
+  Admin: "a platform admin account",
+  Clinic: "a clinic owner or staff account",
+  Client: "a client account at that clinic",
+};
+
+/**
+ * Can this role actually open that path? Used to tell a signed-in user their
+ * account is wrong for the portal they picked, rather than silently routing
+ * them back to their own — which makes all three cards look identical.
+ */
+export function canReach(actor: Actor, next: string | null): boolean {
+  const target = safeNext(next ?? undefined);
+  if (!target) return true;
+  return resolveDestination(actor, target) === target;
+}
+
 /**
  * Honour `next` only where the role belongs; otherwise fall back to the role's
  * own landing page. Sending a clinic admin who clicked "Admin" to /agency

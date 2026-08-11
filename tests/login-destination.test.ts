@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { safeNext, resolveDestination, landingFor } from "@/lib/login-destination";
+import { safeNext, resolveDestination, landingFor, canReach } from "@/lib/login-destination";
 
 const platformAdmin = { role: "PLATFORM_ADMIN", tenantId: null, tenantSlug: null };
 const clinicAdmin = { role: "TENANT_ADMIN", tenantId: "t1", tenantSlug: "riverside" };
@@ -97,6 +97,25 @@ describe("resolveDestination", () => {
     for (const [actor, picked, expected] of cases) {
       expect(resolveDestination(actor, picked)).toBe(expected);
     }
+  });
+
+  /**
+   * A silent reroute made all three homescreen cards land a client in the
+   * client app, which read as "the same UI was built three times". canReach
+   * lets the login screen say "wrong account" instead of guessing.
+   */
+  it("reports a portal the account cannot open, rather than rerouting silently", () => {
+    expect(canReach(client, "/agency")).toBe(false);
+    expect(canReach(client, "/m/t1")).toBe(false);
+    expect(canReach(clinicAdmin, "/agency")).toBe(false);
+    expect(canReach(clinicAdmin, "/m/t2")).toBe(false);
+    expect(canReach(staff, "/app/riverside")).toBe(false);
+
+    expect(canReach(client, "/app/riverside")).toBe(true);
+    expect(canReach(clinicAdmin, "/m/t1")).toBe(true);
+    expect(canReach(platformAdmin, "/agency")).toBe(true);
+    // No destination picked is never a mismatch.
+    expect(canReach(client, null)).toBe(true);
   });
 
   it("falls back to the role's own landing for hostile or unknown targets", () => {
