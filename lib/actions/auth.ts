@@ -6,7 +6,7 @@ import { signIn } from "@/auth";
 import { rawDb } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
-import { resolveDestination } from "@/lib/login-destination";
+import { resolveDestination, canReach } from "@/lib/login-destination";
 
 export type ActionResult = { error: string } | never;
 
@@ -52,14 +52,21 @@ export async function unifiedSignInAction(_prevState: unknown, formData: FormDat
     select: { role: true, tenantId: true, tenant: { select: { slug: true } } },
   });
 
+  const next = String(formData.get("next") ?? "") || null;
+
   // Unknown address: still attempt the sign-in so the failure message is the
   // same either way, rather than leaking which emails exist.
-  const destination = user
-    ? resolveDestination(
-        { role: user.role, tenantId: user.tenantId, tenantSlug: user.tenant?.slug ?? null },
-        String(formData.get("next") ?? "") || null,
-      )
-    : "/login";
+  let destination = "/login";
+  if (user) {
+    const actor = { role: user.role, tenantId: user.tenantId, tenantSlug: user.tenant?.slug ?? null };
+    // Signing in at a door this account cannot open — say so, rather than
+    // dropping them into a different portal. `admin@example.com` is a clinic
+    // admin, so typing it at the Admin door used to land silently in the
+    // clinic UI. Bounce back to the same door, where the page explains it.
+    // Checked only after the password succeeds, so it cannot be used to
+    // discover which addresses exist or what role they hold.
+    destination = canReach(actor, next) ? resolveDestination(actor, next) : `/login?next=${encodeURIComponent(next!)}`;
+  }
 
   return signInOrError({ portal: "unified", email, password }, destination);
 }

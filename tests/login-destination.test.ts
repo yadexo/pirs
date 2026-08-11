@@ -118,6 +118,18 @@ describe("resolveDestination", () => {
     expect(canReach(client, null)).toBe(true);
   });
 
+  /**
+   * The seed has `admin@example.com` as a CLINIC admin and
+   * `platform-admin@example.com` as the agency one. Typing the former at the
+   * Admin door is the obvious mistake, and it used to sign you straight into
+   * the clinic UI — which looked like the Admin section had been built as the
+   * clinic. The door must refuse rather than reroute.
+   */
+  it("a clinic admin at the Admin door is not silently signed into the clinic", () => {
+    expect(canReach(clinicAdmin, "/agency")).toBe(false);
+    expect(canReach(platformAdmin, "/agency")).toBe(true);
+  });
+
   it("falls back to the role's own landing for hostile or unknown targets", () => {
     expect(resolveDestination(platformAdmin, "https://evil.example.com")).toBe("/agency");
     expect(resolveDestination(clinicAdmin, "//evil.example.com")).toBe("/m/t1");
