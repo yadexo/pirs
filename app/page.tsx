@@ -54,9 +54,9 @@ export default async function PortalIndexPage() {
       tagline: "The agency console",
       audience: "Whoever runs the platform",
       accent: "var(--accent-purple)",
-      href: "/agency",
+      href: `/login?next=${encodeURIComponent("/agency")}`,
       account: platformAdmin ? { email: platformAdmin.email, label: "Platform admin" } : null,
-      routes: ["/agency", "/agency/white-label", "/agency/settings"],
+      routes: ["Overview", "White label", "Settings"],
     },
     {
       key: "clinic",
@@ -64,10 +64,10 @@ export default async function PortalIndexPage() {
       tagline: "The merchant portal",
       audience: "Clinic owners and their staff",
       accent: "var(--primary)",
-      href: first ? `/m/${first.id}` : "/login",
+      href: first ? `/login?next=${encodeURIComponent(`/m/${first.id}`)}` : "/login",
       account: tenantAdmin ? { email: tenantAdmin.email, label: "Clinic admin" } : null,
       routes: ["Home", "Appointments", "Client Profiles", "Shop Summary", "Memberships", "App Builder"],
-      merchants: merchants.map((m) => ({ ...m, href: `/m/${m.id}` })),
+      merchants: merchants.map((m) => ({ ...m, href: `/login?next=${encodeURIComponent(`/m/${m.id}`)}` })),
     },
     {
       key: "client",
@@ -75,10 +75,10 @@ export default async function PortalIndexPage() {
       tagline: "The patient app",
       audience: "The clinic's own clients",
       accent: "var(--accent-pink)",
-      href: first ? `/app/${first.slug}` : "/login",
+      href: first ? `/login?next=${encodeURIComponent(`/app/${first.slug}`)}` : "/login",
       account: customer ? { email: customer.email, label: "Client" } : null,
       routes: ["Home", "Shop", "Scan", "Rewards", "Profile"],
-      merchants: merchants.map((m) => ({ ...m, href: `/app/${m.slug}` })),
+      merchants: merchants.map((m) => ({ ...m, href: `/login?next=${encodeURIComponent(`/app/${m.slug}`)}` })),
     },
   ];
 
@@ -164,12 +164,13 @@ export default async function PortalIndexPage() {
 
         <footer className="mt-8 rounded-card border border-border bg-surface p-4 text-[12.5px] leading-relaxed text-ink-muted shadow-card">
           <p>
-            The Admin and Clinic portals ask you to{" "}
+            Each card opens the same{" "}
             <Link href="/login" className="font-medium text-ink underline underline-offset-2">
-              sign in
-            </Link>{" "}
-            first, then send you to the right place for your role. The patient app opens to its own onboarding until a client
-            signs in. Every account in this environment is demo data seeded locally, and shares the seed password.
+              sign-in screen
+            </Link>
+            , carrying the portal you picked, and lands you inside it. Sign in with an account that has no business there — a
+            clinic admin choosing Admin, say — and you go to your own portal instead, which is the tenant isolation doing its
+            job. Every account here is locally seeded demo data sharing one password.
           </p>
         </footer>
       </div>

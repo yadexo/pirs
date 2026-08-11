@@ -42,21 +42,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const include = {
           staffProfile: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
           customerProfile: true,
+          tenant: { select: { slug: true, status: true } },
         } as const;
 
         let user;
 
         if (portal === "unified") {
-          // One login screen for every role. Email identifies the account;
-          // the role on it decides where they land afterwards.
+          // One login screen for every role, clients included. Email
+          // identifies the account; the role on it decides where they land.
           const matches = await rawDb.user.findMany({
-            where: { email, role: { in: ["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF"] } },
+            where: { email, role: { in: ["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF", "CUSTOMER"] } },
             include,
           });
           // Same address registered under two merchants is ambiguous — we
           // cannot guess which, and picking one would be a security bug.
-          if (matches.length !== 1) return null;
-          user = matches[0];
+          const match = matches[0];
+          if (matches.length !== 1 || !match) return null;
+          // A suspended merchant must not be reachable through this door.
+          if (match.tenant && match.tenant.status !== "ACTIVE") return null;
+          user = match;
         } else {
           let tenantId: string | null | undefined = null;
           if (portal !== "platform") {
@@ -103,7 +107,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name,
           role: user.role,
           tenantId: user.tenantId,
-          tenantSlug: tenantSlug ?? null,
+          // The unified door is not given a slug, so take it from the account
+          // itself — the client app keys off this to recognise its patient.
+          tenantSlug: (portal === "unified" ? user.tenant?.slug : tenantSlug) ?? null,
           staffProfileId: user.staffProfile?.id ?? null,
           customerProfileId: user.customerProfile?.id ?? null,
           permissions,

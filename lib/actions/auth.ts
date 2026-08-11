@@ -6,6 +6,7 @@ import { signIn } from "@/auth";
 import { rawDb } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
+import { resolveDestination } from "@/lib/login-destination";
 
 export type ActionResult = { error: string } | never;
 
@@ -47,11 +48,18 @@ export async function unifiedSignInAction(_prevState: unknown, formData: FormDat
   if (!email || !password) return { error: "Email and password are required." };
 
   const user = await rawDb.user.findFirst({
-    where: { email: email.toLowerCase(), role: { in: ["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF"] } },
-    select: { role: true, tenantId: true },
+    where: { email: email.toLowerCase(), role: { in: ["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF", "CUSTOMER"] } },
+    select: { role: true, tenantId: true, tenant: { select: { slug: true } } },
   });
 
-  const destination = user?.role === "PLATFORM_ADMIN" ? "/agency" : user?.tenantId ? `/m/${user.tenantId}` : "/login";
+  // Unknown address: still attempt the sign-in so the failure message is the
+  // same either way, rather than leaking which emails exist.
+  const destination = user
+    ? resolveDestination(
+        { role: user.role, tenantId: user.tenantId, tenantSlug: user.tenant?.slug ?? null },
+        String(formData.get("next") ?? "") || null,
+      )
+    : "/login";
 
   return signInOrError({ portal: "unified", email, password }, destination);
 }

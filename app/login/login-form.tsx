@@ -4,11 +4,12 @@ import { useActionState } from "react";
 import { unifiedSignInAction } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
 
-export function LoginForm() {
+export function LoginForm({ next }: { next?: string | null }) {
   const [state, formAction, pending] = useActionState(unifiedSignInAction, undefined);
 
   return (
     <form action={formAction} className="space-y-3.5">
+      {next && <input type="hidden" name="next" value={next} />}
       <div>
         <label htmlFor="email" className="mb-1.5 block text-[12px] font-medium">
           Email
