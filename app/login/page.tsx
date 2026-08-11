@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { rawDb } from "@/lib/db";
 import { LoginForm } from "./login-form";
-import { safeNext, describeDestination } from "@/lib/login-destination";
+import { safeNext, describeDestination, resolveDestination } from "@/lib/login-destination";
 
 /**
  * The one login screen, for all three surfaces. Where a user lands afterwards
@@ -11,21 +11,17 @@ import { safeNext, describeDestination } from "@/lib/login-destination";
  * the index page, by the destination carried in `next`.
  */
 
-/** Where a signed-in user belongs, decided by role rather than by URL. */
-function landingFor(role: string, tenantId: string | null, tenantSlug: string | null): string {
-  if (role === "PLATFORM_ADMIN") return "/agency";
-  if (role === "CUSTOMER") return tenantSlug ? `/app/${tenantSlug}` : "/";
-  if (tenantId) return `/m/${tenantId}`;
-  return "/login";
-}
-
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const { next } = await searchParams;
   const target = safeNext(next);
 
   const session = await auth();
   if (session?.user) {
-    redirect(target ?? landingFor(session.user.role, session.user.tenantId, session.user.tenantSlug));
+    // Already signed in: send them somewhere their role can actually go.
+    // Passing `target` through unchecked would drop a client who picked the
+    // Admin card straight onto /agency, which the middleware turns into a 404.
+    const { role, tenantId, tenantSlug } = session.user;
+    redirect(resolveDestination({ role, tenantId, tenantSlug }, target));
   }
 
   const agency = await rawDb.agencySettings.findFirst();

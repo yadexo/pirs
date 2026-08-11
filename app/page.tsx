@@ -1,5 +1,22 @@
 import Link from "next/link";
+import { auth } from "@/auth";
 import { rawDb } from "@/lib/db";
+import { signOutAction } from "@/lib/actions/session";
+
+const ROLE_LABEL: Record<string, string> = {
+  PLATFORM_ADMIN: "Platform admin",
+  TENANT_ADMIN: "Clinic admin",
+  STAFF: "Clinic staff",
+  CUSTOMER: "Client",
+};
+
+/** Which of the three cards this role can actually open. */
+function surfaceForRole(role: string): "Admin" | "Clinic" | "Client" | null {
+  if (role === "PLATFORM_ADMIN") return "Admin";
+  if (role === "TENANT_ADMIN" || role === "STAFF") return "Clinic";
+  if (role === "CUSTOMER") return "Client";
+  return null;
+}
 
 /**
  * Entry point to the three surfaces this platform ships: the agency console,
@@ -23,6 +40,9 @@ interface Surface {
 }
 
 export default async function PortalIndexPage() {
+  const session = await auth();
+  const mySurface = session?.user ? surfaceForRole(session.user.role) : null;
+
   const [agency, tenants] = await Promise.all([
     rawDb.agencySettings.findFirst(),
     rawDb.tenant.findMany({
@@ -97,6 +117,24 @@ export default async function PortalIndexPage() {
             Every surface below reads and writes the same database. A booking made in the patient app appears on the clinic&apos;s
             Appointments screen; a purchase lands in its Shop Summary. Pick a portal to open it.
           </p>
+
+          {session?.user && (
+            <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card border border-border bg-surface px-4 py-3 shadow-card">
+              <span className="text-[13px] text-ink-muted">
+                Signed in as <span className="font-medium text-ink">{session.user.email}</span>
+                <span className="text-ink-faint"> — {ROLE_LABEL[session.user.role] ?? session.user.role}</span>
+              </span>
+              <span className="text-[13px] text-ink-faint">
+                Only <span className="font-medium text-ink">{mySurface}</span> is open to this account.
+              </span>
+              <div className="flex-1" />
+              <form action={signOutAction}>
+                <button type="submit" className="text-[13px] font-medium underline underline-offset-2">
+                  Sign out to switch
+                </button>
+              </form>
+            </div>
+          )}
         </header>
 
         <div className="grid gap-4 md:grid-cols-3">
@@ -108,7 +146,16 @@ export default async function PortalIndexPage() {
             >
               <div className="flex items-baseline justify-between">
                 <h2 className="text-[17px] font-semibold">{s.name}</h2>
-                <span className="text-[11px] uppercase tracking-wide text-ink-faint">{s.key}</span>
+                {mySurface === s.name ? (
+                  <span
+                    className="rounded-pill px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-white"
+                    style={{ background: s.accent }}
+                  >
+                    Your session
+                  </span>
+                ) : (
+                  <span className="text-[11px] uppercase tracking-wide text-ink-faint">{s.key}</span>
+                )}
               </div>
               <p className="mt-0.5 text-[13px] font-medium" style={{ color: s.accent }}>
                 {s.tagline}
@@ -154,8 +201,17 @@ export default async function PortalIndexPage() {
 
               {s.account && (
                 <p className="mt-3 text-[12px] leading-relaxed text-ink-muted">
-                  Sign in as <span className="font-medium text-ink">{s.account.email}</span>
-                  <span className="text-ink-faint"> — {s.account.label}</span>
+                  {mySurface && mySurface !== s.name ? (
+                    <>
+                      Sign out first, then use <span className="font-medium text-ink">{s.account.email}</span>
+                      <span className="text-ink-faint"> — {s.account.label}</span>
+                    </>
+                  ) : (
+                    <>
+                      Sign in as <span className="font-medium text-ink">{s.account.email}</span>
+                      <span className="text-ink-faint"> — {s.account.label}</span>
+                    </>
+                  )}
                 </p>
               )}
             </section>

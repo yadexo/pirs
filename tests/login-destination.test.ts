@@ -80,6 +80,25 @@ describe("resolveDestination", () => {
     expect(resolveDestination(platformAdmin, "/m/t2")).toBe("/m/t2");
   });
 
+  /**
+   * The /login page has two paths that consume `next`: the sign-in action and
+   * the already-signed-in redirect. The second one shipped without this gate
+   * and dropped signed-in users onto a 404 — a client who clicked the Admin
+   * card went to /agency, which the middleware rewrites to not-found.
+   */
+  it("gates an already-signed-in user the same way, never onto a 404", () => {
+    const cases = [
+      [client, "/agency", "/app/riverside"],
+      [client, `/m/t1`, "/app/riverside"],
+      [clinicAdmin, "/agency", "/m/t1"],
+      [clinicAdmin, "/m/t2", "/m/t1"],
+      [staff, "/agency/white-label", "/m/t1"],
+    ] as const;
+    for (const [actor, picked, expected] of cases) {
+      expect(resolveDestination(actor, picked)).toBe(expected);
+    }
+  });
+
   it("falls back to the role's own landing for hostile or unknown targets", () => {
     expect(resolveDestination(platformAdmin, "https://evil.example.com")).toBe("/agency");
     expect(resolveDestination(clinicAdmin, "//evil.example.com")).toBe("/m/t1");
