@@ -491,7 +491,7 @@ model Service {
   tenantId            String
   tenant              Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   categoryId          String
-  category            ServiceCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  category            ServiceCategory  @relation(fields: [categoryId], references: [id], onDelete: NoAction)
 
   name                String
   description         String?
@@ -541,7 +541,7 @@ model Product {
   tenantId          String
   tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   categoryId        String
-  category          ProductCategory   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  category          ProductCategory   @relation(fields: [categoryId], references: [id], onDelete: NoAction)
 
   name              String
   description       String?
@@ -628,7 +628,7 @@ model PackageItem {
   packageId String
   package   Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
   serviceId String
-  service   Service @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: NoAction)
   quantity  Int     @default(1)
 
   @@index([packageId])
@@ -641,7 +641,7 @@ model CustomerPackage {
   customerProfileId  String
   customerProfile    CustomerProfile        @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
   packageId          String
-  package            Package                @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  package            Package                @relation(fields: [packageId], references: [id], onDelete: NoAction)
   orderItemId        String?
 
   remainingUses      Int
@@ -738,7 +738,7 @@ model CustomerMembership {
   customerProfileId   String
   customerProfile     CustomerProfile   @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
   membershipPlanId    String
-  membershipPlan      MembershipPlan    @relation(fields: [membershipPlanId], references: [id], onDelete: Restrict)
+  membershipPlan      MembershipPlan    @relation(fields: [membershipPlanId], references: [id], onDelete: NoAction)
 
   status              MembershipStatus  @default(ACTIVE)
   startedAt           DateTime          @default(now())
@@ -1227,11 +1227,11 @@ model Appointment {
   customerProfileId  String
   customerProfile    CustomerProfile    @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
   serviceId          String
-  service            Service            @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  service            Service            @relation(fields: [serviceId], references: [id], onDelete: NoAction)
   staffProfileId     String
-  staffProfile       StaffProfile       @relation(fields: [staffProfileId], references: [id], onDelete: Restrict)
+  staffProfile       StaffProfile       @relation(fields: [staffProfileId], references: [id], onDelete: NoAction)
   locationId         String
-  location           Location           @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  location           Location           @relation(fields: [locationId], references: [id], onDelete: NoAction)
   customerPackageId  String?
   customerPackage    CustomerPackage?   @relation(fields: [customerPackageId], references: [id], onDelete: SetNull)
   orderId            String?

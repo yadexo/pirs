@@ -8,6 +8,7 @@ import { requireRole } from "@/lib/rbac";
 import { hashPassword } from "@/lib/password";
 import { slugify } from "@/lib/utils";
 import { writeAuditLog } from "@/lib/audit";
+import { deleteTenantCompletely } from "@/lib/tenant-deletion";
 
 const createSchema = z.object({
   name: z.string().min(2, "Business name is required").max(120),
@@ -154,6 +155,6 @@ export async function deleteMerchantAction(merchantId: string) {
     metadata: { name: merchant.name },
   });
 
-  await rawDb.tenant.delete({ where: { id: merchantId } });
+  await deleteTenantCompletely(merchantId);
   revalidatePath("/agency");
 }
