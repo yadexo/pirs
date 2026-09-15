@@ -23,16 +23,18 @@ describe("App Builder actions", () => {
   let rival: string;
   let ownerId: string;
   let agencyId: string;
-  let staffId: string;
+  let catalogStaffId: string;
+  let noRoleStaffId: string;
+  let rivalOwnerId: string;
   let slug: string;
 
   const signIn = (who: "owner" | "agency" | "staff-catalog" | "staff-none" | "rival-owner") => {
     const map = {
       owner: { id: ownerId, role: "TENANT_ADMIN", tenantId: clinic, permissions: "ALL" },
       agency: { id: agencyId, role: "PLATFORM_ADMIN", tenantId: null, permissions: "ALL" },
-      "staff-catalog": { id: staffId, role: "STAFF", tenantId: clinic, permissions: ["catalog.manage"] },
-      "staff-none": { id: staffId, role: "STAFF", tenantId: clinic, permissions: [] },
-      "rival-owner": { id: ownerId, role: "TENANT_ADMIN", tenantId: rival, permissions: "ALL" },
+      "staff-catalog": { id: catalogStaffId, role: "STAFF", tenantId: clinic, permissions: ["catalog.manage"] },
+      "staff-none": { id: noRoleStaffId, role: "STAFF", tenantId: clinic, permissions: [] },
+      "rival-owner": { id: rivalOwnerId, role: "TENANT_ADMIN", tenantId: rival, permissions: "ALL" },
     } as const;
     authMock.auth.mockResolvedValue({ user: { email: "x@example.com", name: "x", tenantSlug: null, staffProfileId: null, customerProfileId: null, ...map[who] } });
   };
@@ -43,7 +45,15 @@ describe("App Builder actions", () => {
     clinic = (await rawDb.tenant.create({ data: { slug, name: "Builder Clinic" } })).id;
     rival = (await rawDb.tenant.create({ data: { slug: `ab-rival-${stamp}`, name: "Rival" } })).id;
     ownerId = (await rawDb.user.create({ data: { tenantId: clinic, email: `o-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } })).id;
-    staffId = (await rawDb.user.create({ data: { tenantId: clinic, email: `s-${stamp}@x.com`, passwordHash: "x", role: "STAFF" } })).id;
+    rivalOwnerId = (await rawDb.user.create({ data: { tenantId: rival, email: `ro-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } })).id;
+    // Staff permissions are read from the database, so these need real profiles and roles.
+    const catalogRole = await rawDb.role.create({ data: { tenantId: clinic, name: "Catalogue" } });
+    const catalogPermission = await rawDb.permission.findUniqueOrThrow({ where: { key: "catalog.manage" } });
+    await rawDb.rolePermission.create({ data: { roleId: catalogRole.id, permissionId: catalogPermission.id } });
+    catalogStaffId = (await rawDb.user.create({ data: { tenantId: clinic, email: `s-${stamp}@x.com`, passwordHash: "x", role: "STAFF" } })).id;
+    await rawDb.staffProfile.create({ data: { tenantId: clinic, userId: catalogStaffId, firstName: "Cat", lastName: "Staff", roleId: catalogRole.id } });
+    noRoleStaffId = (await rawDb.user.create({ data: { tenantId: clinic, email: `n-${stamp}@x.com`, passwordHash: "x", role: "STAFF" } })).id;
+    await rawDb.staffProfile.create({ data: { tenantId: clinic, userId: noRoleStaffId, firstName: "No", lastName: "Role" } });
     agencyId = (await rawDb.user.create({ data: { email: `a-${stamp}@x.com`, passwordHash: "x", role: "PLATFORM_ADMIN" } })).id;
   });
 

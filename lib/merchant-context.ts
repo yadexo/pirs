@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { rawDb } from "@/lib/db";
 import { getTenantDb, type TenantDb } from "@/lib/tenant-db";
+import { loadLiveAccount } from "@/lib/live-account";
 import { getImpersonatedMerchantId } from "@/lib/actions/impersonation";
 import type { SidebarEntry } from "@/components/shell/sidebar";
 import type { SupportLink } from "@/components/shell/sidebar";
@@ -28,8 +29,13 @@ export interface MerchantContext {
  */
 export async function requireMerchantContext(merchantId: string): Promise<MerchantContext> {
   const session = await auth();
-  const user = session?.user;
-  if (!user) redirect("/login");
+  const sessionUser = session?.user;
+  if (!sessionUser) redirect("/login");
+  const live = await loadLiveAccount(sessionUser.id);
+  // A session for an account that has since been deactivated. /login treats
+  // it as signed out, so this cannot bounce back and forth.
+  if (!live) redirect("/login?reason=access-changed");
+  const user = { ...sessionUser, ...live };
 
   const isAgencyAdmin = user.role === "PLATFORM_ADMIN";
 
@@ -76,8 +82,11 @@ export async function requireMerchantContext(merchantId: string): Promise<Mercha
 /** Agency-level guard for /agency/*. Merchant users get a 404, never a redirect loop. */
 export async function requireAgencyContext() {
   const session = await auth();
-  const user = session?.user;
-  if (!user) redirect("/login");
+  const sessionUser = session?.user;
+  if (!sessionUser) redirect("/login");
+  const live = await loadLiveAccount(sessionUser.id);
+  if (!live) redirect("/login?reason=access-changed");
+  const user = { ...sessionUser, ...live };
   if (user.role !== "PLATFORM_ADMIN") notFound();
 
   return { user, support: await getSupportLink() };

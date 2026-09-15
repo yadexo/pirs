@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { rawDb } from "@/lib/db";
 import { LoginForm } from "./login-form";
+import { loadLiveAccount } from "@/lib/live-account";
 import { Button } from "@/components/ui/button";
 import { switchAccountAction } from "@/lib/actions/session";
 import { safeNext, describeDestination, resolveDestination, canReach, SECTION_REQUIREMENT } from "@/lib/login-destination";
@@ -20,16 +21,20 @@ const ROLE_LABEL: Record<string, string> = {
  * the index page, by the destination carried in `next`.
  */
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
-  const { next } = await searchParams;
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; reason?: string }> }) {
+  const { next, reason } = await searchParams;
   const target = safeNext(next);
 
   const session = await auth();
   const agency = await rawDb.agencySettings.findFirst();
   const portal = target ? await describeDestination(target) : null;
 
-  if (session?.user) {
-    const { role, tenantId, tenantSlug } = session.user;
+  // A session whose account was deactivated since is treated as signed out;
+  // otherwise the portals send it here and this page would send it back.
+  const live = session?.user ? await loadLiveAccount(session.user.id) : null;
+  if (session?.user && live) {
+    const { tenantSlug } = session.user;
+    const { role, tenantId } = live;
     const actor = { role, tenantId, tenantSlug };
 
     // Their account can open what they picked (or they picked nothing): go.
@@ -111,6 +116,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               <h1 className="text-[18px] font-semibold">Sign in</h1>
               <p className="mt-1 text-[13px] text-ink-muted">Enter your credentials to continue.</p>
             </>
+          )}
+          {(reason === "access-changed" || (session?.user && !live)) && (
+            <p role="status" className="mt-3 rounded-[10px] bg-[var(--accent-amber)]/10 px-3 py-2 text-[12px] text-ink">
+              Your access has changed. Please sign in again.
+            </p>
           )}
           <div className="mt-5">
             <LoginForm next={target} />

@@ -4,6 +4,7 @@ import { rawDb } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
 import { authConfig } from "@/auth.config";
+import { permissionsFor } from "@/lib/live-account";
 import type { SessionPermissions, SessionUserShape } from "@/types/next-auth";
 
 /**
@@ -77,18 +78,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         if (!user || user.status !== "ACTIVE") return null;
+        // Deactivated staff, or a staff login with no profile, cannot sign in.
+        if (user.role === "STAFF" && (!user.staffProfile || !user.staffProfile.active)) return null;
 
         const valid = await verifyPassword(password, user.passwordHash);
         if (!valid) return null;
 
         await rawDb.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
-        let permissions: SessionPermissions = "ALL";
+        const permissions: SessionPermissions = permissionsFor(user);
         let name = email;
         if (user.role === "STAFF" && user.staffProfile) {
-          permissions = user.staffProfile.role
-            ? user.staffProfile.role.permissions.map((rp) => rp.permission.key as never)
-            : [];
           name = `${user.staffProfile.firstName} ${user.staffProfile.lastName}`;
         } else if (user.role === "TENANT_ADMIN" && user.staffProfile) {
           name = `${user.staffProfile.firstName} ${user.staffProfile.lastName}`;

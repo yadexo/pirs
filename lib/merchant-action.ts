@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { rawDb } from "@/lib/db";
 import { getTenantDb, type TenantDb } from "@/lib/tenant-db";
 import { writeAuditLog } from "@/lib/audit";
+import { loadLiveAccount } from "@/lib/live-account";
 import type { PermissionKey } from "@/lib/permissions";
 import type { SessionUserShape } from "@/types/next-auth";
 
@@ -42,8 +43,13 @@ const NOT_ALLOWED = "You don't have access to do that.";
  * missing permission, so the response never reveals that another clinic exists.
  */
 export async function requireMerchantAction(merchantId: string, need: MerchantRequirement): Promise<MerchantActionContext> {
-  const user = (await auth())?.user;
-  if (!user) throw new ActionError("Please sign in again.");
+  const sessionUser = (await auth())?.user;
+  if (!sessionUser) throw new ActionError("Please sign in again.");
+  // Role, clinic and permissions come from the database, not the 30-day token:
+  // a deactivated account or a removed permission stops working immediately.
+  const live = await loadLiveAccount(sessionUser.id);
+  if (!live) throw new ActionError("Please sign in again.");
+  const user: SessionUserShape = { ...sessionUser, ...live };
 
   const tenant = await rawDb.tenant.findUnique({ where: { id: merchantId }, select: { id: true, status: true } });
   if (!tenant) throw new ActionError(NOT_ALLOWED);
@@ -65,13 +71,13 @@ export async function requireMerchantAction(merchantId: string, need: MerchantRe
 
   function context(): MerchantActionContext {
     return {
-    user: user!,
+    user,
     merchantId,
     db: getTenantDb(merchantId),
     audit: (action, entityType, entityId, metadata) =>
       writeAuditLog({
         tenantId: merchantId,
-        actorUserId: user!.id,
+        actorUserId: user.id,
         actorType: isAgency ? "PLATFORM_ADMIN" : "STAFF",
         action,
         entityType,
