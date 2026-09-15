@@ -74,15 +74,30 @@ function Frame({
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   const seg = pathname.slice(base.length).replace(/^\//, "").split("/")[0] ?? "";
-  const active = TABS.some((t) => t.key === seg) ? seg : "home";
+  const routeTab = TABS.some((t) => t.key === seg) ? seg : "home";
+
+  // The tapped tab lights up immediately; the page follows. Without this the
+  // tab bar looked dead until the next page's data had arrived.
+  const [tappedTab, setTappedTab] = React.useState<string | null>(null);
+  const [, startTransition] = React.useTransition();
+  React.useEffect(() => setTappedTab(null), [pathname]);
+  const active = tappedTab ?? routeTab;
   const showHeader = active !== "scan";
 
+  const hrefFor = React.useCallback((key: string) => (key === "home" ? base : `${base}/${key}`), [base]);
+
+  // Load every tab ahead of time so switching is instant in production.
+  React.useEffect(() => {
+    for (const t of TABS) router.prefetch(hrefFor(t.key));
+  }, [router, hrefFor]);
+
   function selectTab(key: string) {
-    if (key === active) {
+    if (key === routeTab && !tappedTab) {
       scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-    router.push(key === "home" ? base : `${base}/${key}`);
+    setTappedTab(key);
+    startTransition(() => router.push(hrefFor(key)));
   }
 
   return (
