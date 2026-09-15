@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { SessionUserShape } from "@/types/next-auth";
 
-const { authMock } = vi.hoisted(() => ({ authMock: vi.fn() }));
+const { authMock, clientAuthMock } = vi.hoisted(() => ({ authMock: vi.fn(), clientAuthMock: vi.fn() }));
 vi.mock("@/auth", () => ({ auth: authMock }));
+vi.mock("@/client-auth", () => ({ clientAuth: clientAuthMock }));
 
 // lib/tenant-db pulls in the real Prisma client at import time; the RBAC
 // tests never reach the DB (they fail on the permission check first for the
@@ -16,7 +17,7 @@ vi.mock("@/lib/tenant-db", () => ({ getTenantDb: vi.fn(() => ({})) }));
 const { liveMock } = vi.hoisted(() => ({ liveMock: vi.fn() }));
 vi.mock("@/lib/live-account", () => ({ loadLiveAccount: liveMock }));
 
-const { requireSession, requireRole, requirePermission, requireStaffContext, UnauthorizedError, ForbiddenError } = await import("@/lib/rbac");
+const { requireSession, requireRole, requirePermission, requireStaffContext, requireCustomerContext, UnauthorizedError, ForbiddenError } = await import("@/lib/rbac");
 
 function makeUser(overrides: Partial<SessionUserShape> = {}): SessionUserShape {
   return {
@@ -110,5 +111,25 @@ describe("requireStaffContext", () => {
     authMock.mockResolvedValue({ user: makeUser({ role: "STAFF", tenantId: "tenant_1" }) });
     const { db } = await requireStaffContext();
     expect(db).toBeDefined();
+  });
+});
+
+describe("separate staff and client sessions", () => {
+  beforeEach(() => liveMock.mockImplementation(async () => ({ role: "CUSTOMER", tenantId: "tenant_1", permissions: [] })));
+
+  it("client actions read only the client session", async () => {
+    authMock.mockResolvedValue({ user: makeUser({ role: "TENANT_ADMIN" }) });
+    clientAuthMock.mockResolvedValue(null);
+    await expect(requireCustomerContext()).rejects.toBeInstanceOf(UnauthorizedError);
+
+    clientAuthMock.mockResolvedValue({ user: makeUser({ role: "CUSTOMER", customerProfileId: "cp_1", staffProfileId: null }) });
+    await expect(requireCustomerContext()).resolves.toMatchObject({ user: { role: "CUSTOMER", customerProfileId: "cp_1" } });
+  });
+
+  it("a client signed in alongside does not affect staff checks", async () => {
+    liveMock.mockImplementation(async () => ({ role: "TENANT_ADMIN", tenantId: "tenant_1", permissions: "ALL" }));
+    authMock.mockResolvedValue({ user: makeUser({ role: "TENANT_ADMIN" }) });
+    clientAuthMock.mockResolvedValue({ user: makeUser({ role: "CUSTOMER" }) });
+    await expect(requireStaffContext()).resolves.toMatchObject({ user: { role: "TENANT_ADMIN" } });
   });
 });

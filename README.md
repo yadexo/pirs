@@ -156,7 +156,7 @@ All variables are documented in `.env.example`. Summary:
 | Variable | Purpose |
 | --- | --- |
 | `DATABASE_URL` | Postgres connection string |
-| `AUTH_SECRET`, `NEXTAUTH_URL` | Auth.js session signing / base URL |
+| `AUTH_SECRET` | Auth.js session signing (leave `NEXTAUTH_URL` unset; the request host is used) |
 | `PAYMENT_PROVIDER` | `mock` (default) or `stripe` |
 | `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` | Required only when `PAYMENT_PROVIDER=stripe` |
 | `EMAIL_PROVIDER`, `RESEND_API_KEY`, `EMAIL_FROM` | `mock` (default) or `resend` |

@@ -30,8 +30,9 @@ export function ActivityFeed({ merchantId, initial }: { merchantId: string; init
     let cancelled = false;
     async function poll() {
       if (document.visibilityState !== "visible") return;
-      const res = await getActivityFeedAction(merchantId);
-      if (cancelled || "error" in res) return;
+      // Offline, or a tab left open across an app update: skip this round quietly.
+      const res = await getActivityFeedAction(merchantId).catch(() => null);
+      if (cancelled || !res || "error" in res) return;
       const added = res.items.filter((i) => !known.current.has(i.id)).map((i) => i.id);
       res.items.forEach((i) => known.current.add(i.id));
       setItems(res.items);

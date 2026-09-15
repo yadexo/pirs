@@ -1,6 +1,6 @@
 import "server-only";
 import { notFound } from "next/navigation";
-import { auth } from "@/auth";
+import { clientAuth } from "@/client-auth";
 import { rawDb } from "@/lib/db";
 import { getTenantDb, type TenantDb } from "@/lib/tenant-db";
 import { loadLiveAccount } from "@/lib/live-account";
@@ -65,7 +65,7 @@ export async function getClientAppContext(merchantSlug: string): Promise<ClientA
   const agency = await rawDb.agencySettings.findFirst({ select: { supportUrl: true } });
   merchant.supportUrl = agency?.supportUrl ?? null;
 
-  const session = await auth();
+  const session = await clientAuth();
   const user = session?.user;
   // A closed account's session must not keep showing its data.
   const live = user ? await loadLiveAccount(user.id, user.authTime) : null;

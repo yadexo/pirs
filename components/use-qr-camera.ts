@@ -3,6 +3,23 @@
 import * as React from "react";
 
 type Detector = { detect: (source: CanvasImageSource) => Promise<{ rawValue: string }[]> };
+type DetectorClass = { new (o: { formats: string[] }): Detector; getSupportedFormats?: () => Promise<string[]> };
+
+/**
+ * The browser's own detector, only if it really reads QR codes. Chrome on
+ * Windows defines BarcodeDetector but supports no formats, so trusting its
+ * existence alone meant scanning forever and never reading anything.
+ */
+async function nativeQrDetector(): Promise<Detector | null> {
+  const Native = (window as unknown as { BarcodeDetector?: DetectorClass }).BarcodeDetector;
+  if (!Native) return null;
+  try {
+    const formats = (await Native.getSupportedFormats?.()) ?? [];
+    return formats.includes("qr_code") ? new Native({ formats: ["qr_code"] }) : null;
+  } catch {
+    return null;
+  }
+}
 
 export type CameraProblem = "unsupported" | "denied" | "missing";
 
@@ -40,16 +57,9 @@ export function useQrCamera(videoRef: React.RefObject<HTMLVideoElement | null>, 
       await video.play().catch(() => {});
       setStarting(false);
 
-      const Native = (window as unknown as { BarcodeDetector?: new (o: { formats: string[] }) => Detector }).BarcodeDetector;
-      let detector: Detector | null = null;
-      if (Native) {
-        try {
-          detector = new Native({ formats: ["qr_code"] });
-        } catch {
-          detector = null;
-        }
-      }
-      const jsQR = detector ? null : (await import("jsqr")).default;
+      let detector = await nativeQrDetector();
+      // Loaded either way: it also takes over if the native detector fails.
+      const jsQR = (await import("jsqr")).default;
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
@@ -59,8 +69,12 @@ export function useQrCamera(videoRef: React.RefObject<HTMLVideoElement | null>, 
           if (video.readyState >= 2) {
             let value: string | undefined;
             if (detector) {
-              value = (await detector.detect(video))[0]?.rawValue;
-            } else if (jsQR && ctx) {
+              try {
+                value = (await detector.detect(video))[0]?.rawValue;
+              } catch {
+                detector = null;
+              }
+            } else if (ctx) {
               // Downscale: plenty of pixels for a QR code, far less work.
               const scale = Math.min(1, 640 / (video.videoWidth || 640));
               canvas.width = Math.round(video.videoWidth * scale);

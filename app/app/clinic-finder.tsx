@@ -6,6 +6,7 @@ import { Icon, Sheet } from "@/components/client-app/ui";
 import { findClinicsAction } from "@/lib/actions/clinic-directory";
 import type { ListedClinic } from "@/lib/clinic-directory";
 import { slugFromScannedCode } from "@/lib/clinic-link";
+import { describeActionFailure } from "@/lib/action-failure";
 import { useQrCamera, type CameraProblem } from "@/components/use-qr-camera";
 
 export function ClinicFinder({ appName }: { appName: string }) {
@@ -33,7 +34,7 @@ export function ClinicFinder({ appName }: { appName: string }) {
             setResults(r.results);
           }
         })
-        .catch(() => live && setError("Couldn't search right now. Check your connection."));
+        .catch((err) => live && setError(describeActionFailure(err)));
     }, 250);
     return () => {
       live = false;
@@ -48,6 +49,8 @@ export function ClinicFinder({ appName }: { appName: string }) {
     },
     [router],
   );
+  // Stable: a new function each render would restart the camera.
+  const openScanned = React.useCallback((slug: string) => open(slug, true), [open]);
 
   return (
     <div style={{ minHeight: "100dvh", maxWidth: 480, margin: "0 auto", padding: "calc(var(--sat) + 40px) var(--pad-x) 40px" }}>
@@ -109,7 +112,7 @@ export function ClinicFinder({ appName }: { appName: string }) {
       </div>
 
       <Sheet open={scanning} onClose={() => setScanning(false)} title="Scan clinic QR code">
-        {scanning && <ClinicScanner onSlug={(slug) => open(slug, true)} />}
+        {scanning && <ClinicScanner onSlug={openScanned} />}
       </Sheet>
     </div>
   );

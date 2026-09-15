@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { AuthError } from "next-auth";
 import { signIn } from "@/auth";
+import { clientSignIn } from "@/client-auth";
 import { rawDb } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
@@ -12,9 +13,13 @@ import { getTenantDb } from "@/lib/tenant-db";
 
 export type ActionResult = { error: string } | never;
 
-async function signInOrError(params: Record<string, string>, redirectTo: string): Promise<{ error: string } | void> {
+async function signInOrError(
+  params: Record<string, string>,
+  redirectTo: string,
+  audience: "staff" | "client",
+): Promise<{ error: string } | void> {
   try {
-    await signIn("credentials", { ...params, redirectTo });
+    await (audience === "client" ? clientSignIn : signIn)("credentials", { ...params, redirectTo });
   } catch (err) {
     if (err instanceof AuthError) {
       return { error: "Invalid email or password." };
@@ -30,7 +35,7 @@ export async function customerSignInAction(tenantSlug: string, _prevState: unkno
   // is the client app itself (the old /:tenant customer app no longer exists).
   const next = safeNext(String(formData.get("next") ?? "") || undefined) ?? `/app/${tenantSlug}`;
   if (!email || !password) return { error: "Email and password are required." };
-  return signInOrError({ portal: "customer", tenantSlug, email, password }, next);
+  return signInOrError({ portal: "customer", tenantSlug, email, password }, next, "client");
 }
 
 /**
@@ -62,7 +67,8 @@ export async function unifiedSignInAction(_prevState: unknown, formData: FormDat
     destination = canReach(actor, next) ? resolveDestination(actor, next) : `/login?next=${encodeURIComponent(next!)}`;
   }
 
-  return signInOrError({ portal: "unified", email, password }, destination);
+  // Clients get the client app's session; everyone else the staff session.
+  return signInOrError({ portal: "unified", email, password }, destination, user?.role === "CUSTOMER" ? "client" : "staff");
 }
 
 const registerSchema = z.object({
@@ -127,5 +133,5 @@ export async function customerRegisterAction(tenantSlug: string, _prevState: unk
     summary: "Joined the app",
   });
 
-  return signInOrError({ portal: "customer", tenantSlug, email, password }, `/app/${tenantSlug}`);
+  return signInOrError({ portal: "customer", tenantSlug, email, password }, `/app/${tenantSlug}`, "client");
 }

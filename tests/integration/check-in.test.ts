@@ -5,9 +5,12 @@ import { mintCheckinToken } from "@/lib/checkin-token";
 
 const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
 vi.mock("@/auth", () => authMock);
+vi.mock("@/client-auth", () => ({ clientAuth: vi.fn(), clientSignIn: vi.fn(), clientSignOut: vi.fn() }));
 
 const C = await import("@/lib/actions/check-in");
 const clientApp = await import("@/lib/actions/client-app");
+const searchRoute = await import("@/app/m/[merchantId]/check-in-search/route");
+const { NextRequest } = await import("next/server");
 
 describe("clinic check-in", () => {
   const stamp = Date.now();
@@ -112,6 +115,20 @@ describe("clinic check-in", () => {
     expect((await C.searchClientsForCheckInAction(clinic, "Mira Visitor")) as { results: unknown[] }).toMatchObject({ results: [{ name: "Mira Visitor" }] });
     expect((await C.searchClientsForCheckInAction(clinic, "visitor mira")) as { results: unknown[] }).toMatchObject({ results: [{ name: "Mira Visitor" }] });
     expect((await C.searchClientsForCheckInAction(clinic, "Mira Nobody")) as { results: unknown[] }).toMatchObject({ results: [] });
+  });
+
+  it("the drawer's search endpoint returns the same matches, and only to permitted staff", async () => {
+    const search = (merchantId: string, q: string) =>
+      searchRoute.GET(new NextRequest(`http://x/m/${merchantId}/check-in-search?q=${encodeURIComponent(q)}`), { params: Promise.resolve({ merchantId }) });
+    as(ownerId, "TENANT_ADMIN", clinic);
+    const ok = await search(clinic, "mira vis");
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ results: [{ name: "Mira Visitor" }] });
+
+    as(noRoleStaffId, "STAFF", clinic);
+    expect((await search(clinic, "mira")).status).toBe(403);
+    as(ownerId, "TENANT_ADMIN", clinic);
+    expect((await search(rival, "mira")).status).toBe(403);
   });
 
   it("needs the customers.view permission; agency admins can always", async () => {

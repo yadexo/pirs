@@ -9,11 +9,11 @@ import { Drawer, Pill } from "@/components/ui/primitives";
 import {
   checkInClientAction,
   lookupClientForCheckInAction,
-  searchClientsForCheckInAction,
   type CheckInTarget,
   type ClientCard,
 } from "@/lib/actions/check-in";
 import { useQrCamera, type CameraProblem } from "@/components/use-qr-camera";
+import { describeActionFailure } from "@/lib/action-failure";
 
 type Stage =
   | { kind: "scanning" }
@@ -55,7 +55,7 @@ function CheckInFlow({ merchantId, onClose }: { merchantId: string; onClose: () 
   const lookup = React.useCallback(
     async (target: CheckInTarget) => {
       setStage({ kind: "loading" });
-      const res = await lookupClientForCheckInAction(merchantId, target);
+      const res = await lookupClientForCheckInAction(merchantId, target).catch((err) => ({ error: describeActionFailure(err) }));
       if ("error" in res) {
         toast.error(res.error);
         setStage("token" in target ? { kind: "scanning" } : { kind: "searching" });
@@ -73,7 +73,7 @@ function CheckInFlow({ merchantId, onClose }: { merchantId: string; onClose: () 
   async function confirm() {
     if (stage.kind !== "client") return;
     setPending(true);
-    const res = await checkInClientAction(merchantId, stage.target);
+    const res = await checkInClientAction(merchantId, stage.target).catch((err) => ({ error: describeActionFailure(err) }) as const);
     setPending(false);
     if ("error" in res) return toast.error(res.error);
     if (res.alreadyToday) {
@@ -221,23 +221,40 @@ function ClientSearch({ merchantId, onPick }: { merchantId: string; onPick: (cus
   const [q, setQ] = React.useState("");
   const [results, setResults] = React.useState<{ customerProfileId: string; name: string; email: string | null }[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (q.trim().length < 2) {
       setResults([]);
+      setError(null);
+      setLoading(false);
       return;
     }
-    let current = true;
+    // Searching from the first keystroke, so "No clients match" never flashes
+    // up before the search has even run.
+    setLoading(true);
+    const controller = new AbortController();
     const t = setTimeout(async () => {
-      setLoading(true);
-      const res = await searchClientsForCheckInAction(merchantId, q);
-      if (!current) return;
-      setLoading(false);
-      if ("error" in res) return toast.error(res.error);
-      setResults(res.results);
-    }, 250);
+      try {
+        const res = await fetch(`/m/${encodeURIComponent(merchantId)}/check-in-search?q=${encodeURIComponent(q)}`, { signal: controller.signal, cache: "no-store" });
+        const body = (await res.json().catch(() => ({}))) as { results?: typeof results; error?: string };
+        if (!res.ok || !body.results) {
+          setResults([]);
+          setError(body.error ?? (res.status === 401 || res.redirected ? "Please sign in again." : "Search failed. Try again."));
+        } else {
+          setError(null);
+          setResults(body.results);
+        }
+        setLoading(false);
+      } catch (err) {
+        if (controller.signal.aborted) return; // a newer keystroke took over
+        setResults([]);
+        setError(describeActionFailure(err));
+        setLoading(false);
+      }
+    }, 200);
     return () => {
-      current = false;
+      controller.abort();
       clearTimeout(t);
     };
   }, [q, merchantId]);
@@ -255,8 +272,9 @@ function ClientSearch({ merchantId, onPick }: { merchantId: string; onPick: (cus
           className="h-10 w-full rounded-[10px] border border-border bg-surface pl-8 pr-3 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-primary"
         />
       </div>
-      {loading && <p className="text-[12px] text-ink-muted">Searching…</p>}
-      {!loading && q.trim().length >= 2 && results.length === 0 && <p className="text-[12px] text-ink-muted">No clients match.</p>}
+      {loading && results.length === 0 && <p className="text-[12px] text-ink-muted">Searching…</p>}
+      {error && <p className="rounded-[10px] bg-[var(--accent-red)]/10 px-3 py-2 text-[12px] text-ink">{error}</p>}
+      {!loading && !error && q.trim().length >= 2 && results.length === 0 && <p className="text-[12px] text-ink-muted">No clients match.</p>}
       <ul className="divide-y divide-border rounded-card border border-border empty:hidden">
         {results.map((r) => (
           <li key={r.customerProfileId}>

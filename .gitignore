@@ -31,3 +31,6 @@ next-env.d.ts
 
 # logs
 *.log
+
+# self-signed certificate for phone testing (scripts/https-proxy.mjs)
+/.certs

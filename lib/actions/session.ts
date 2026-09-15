@@ -1,6 +1,7 @@
 "use server";
 
 import { signOut } from "@/auth";
+import { clientSignOut } from "@/client-auth";
 import { safeNext } from "@/lib/login-destination";
 import { isClinicSlug } from "@/lib/clinic-link";
 
@@ -10,7 +11,7 @@ export async function signOutAction() {
 
 /** A client logging out stays in their clinic's app, on its sign-in screen. */
 export async function signOutOfClinicAction(merchantSlug: string) {
-  await signOut({ redirectTo: isClinicSlug(merchantSlug) ? `/app/${merchantSlug}` : "/app" });
+  await clientSignOut({ redirectTo: isClinicSlug(merchantSlug) ? `/app/${merchantSlug}` : "/app" });
 }
 
 /**

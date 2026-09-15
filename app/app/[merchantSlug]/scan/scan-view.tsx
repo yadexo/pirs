@@ -16,6 +16,7 @@ export function ScanView({
   isMember: boolean;
 }) {
   const [token, setToken] = React.useState<string | null>(null);
+  const [failed, setFailed] = React.useState(false);
 
   // The code carries a signed, short-lived token; refreshing it every 60s
   // means a screenshot stops working.
@@ -23,10 +24,14 @@ export function ScanView({
     let cancelled = false;
     const refresh = () =>
       mintScanTokenAction()
-        .then((t) => !cancelled && setToken(t))
-        .catch(() => {
-          /* keep the last code rather than blanking the card offline */
-        });
+        .then((t) => {
+          if (cancelled) return;
+          setToken(t);
+          setFailed(false);
+        })
+        // Keep the last code rather than blanking the card offline; only say
+        // something when there is no code to show at all.
+        .catch(() => !cancelled && setFailed(true));
     void refresh();
     const id = setInterval(() => {
       if (document.visibilityState === "visible") void refresh();
@@ -58,7 +63,13 @@ export function ScanView({
     <div className="scanwrap">
       <div className="membercard">
         <Gloss className="qzone">
-          <div className="qwhite">{token ? <QrCode value={token} /> : <span style={{ fontSize: 12, color: "var(--faint)" }}>Loading…</span>}</div>
+          <div className="qwhite">{token ? (
+            <QrCode value={token} label="Your check-in code" />
+          ) : failed ? (
+            <span style={{ fontSize: 12, color: "var(--muted)", textAlign: "center" }}>Couldn&apos;t load your code. Check your connection, or sign in again.</span>
+          ) : (
+            <span style={{ fontSize: 12, color: "var(--faint)" }}>Loading…</span>
+          )}</div>
         </Gloss>
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px" }}>
           <span className="avatar">{initials}</span>

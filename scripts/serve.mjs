@@ -1,5 +1,6 @@
 /**
- * Starts the app on http://localhost:3000, reliably.
+ * Starts the app on http://localhost:3000, reliably — plus https on port 3443
+ * so phones on the same Wi-Fi can use the camera (see https-proxy.mjs).
  *
  * `next dev` is unusable in this checkout — the project lives under OneDrive,
  * which breaks the dev server's symlink handling and makes compiles glacial.
@@ -12,23 +13,14 @@
  */
 import { execSync, spawn } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
-import { createConnection } from "node:net";
+import { lanAddresses, startHttpsProxy } from "./https-proxy.mjs";
 
 const PORT = 3000;
+const HTTPS_PORT = 3443;
 const forceBuild = process.argv.includes("--build");
 
 function run(cmd, opts = {}) {
   return execSync(cmd, { stdio: "inherit", ...opts });
-}
-
-function portIsOpen(port) {
-  return new Promise((resolve) => {
-    const socket = createConnection({ port, host: "127.0.0.1" });
-    socket.setTimeout(700);
-    socket.once("connect", () => (socket.destroy(), resolve(true)));
-    socket.once("timeout", () => (socket.destroy(), resolve(false)));
-    socket.once("error", () => resolve(false));
-  });
 }
 
 /** Kill whatever is listening on the port, so a stale server can't block us. */
@@ -69,7 +61,10 @@ try {
 }
 
 // 2. Port.
-if (await portIsOpen(PORT)) freePort(PORT);
+// Always check netstat: a busy server can miss the quick connect probe and
+// then keep serving the old build.
+freePort(PORT);
+freePort(HTTPS_PORT);
 
 // 3. Build.
 if (forceBuild || !existsSync(".next/BUILD_ID")) {
@@ -79,7 +74,19 @@ if (forceBuild || !existsSync(".next/BUILD_ID")) {
 }
 
 // 4. Serve.
-console.log(`\n  Clinic portal   http://localhost:${PORT}/login`);
-console.log(`  Patient app     http://localhost:${PORT}/app/riverside-wellness\n`);
+console.log(`\n  On this computer`);
+console.log(`    Sign in        http://localhost:${PORT}/login`);
+console.log(`    Client app     http://localhost:${PORT}/app/riverside-wellness`);
+try {
+  await startHttpsProxy({ port: HTTPS_PORT, target: PORT });
+  const ips = lanAddresses();
+  if (ips.length) {
+    console.log(`\n  On a phone on the same Wi-Fi (needed for the camera; accept the certificate warning once)`);
+    for (const ip of ips) console.log(`    https://${ip}:${HTTPS_PORT}/app`);
+  }
+} catch (err) {
+  console.warn(`  (HTTPS for phones not started: ${err instanceof Error ? err.message : err})`);
+}
+console.log("");
 const nextBin = "node_modules/next/dist/bin/next";
 spawn(process.execPath, [nextBin, "start"], { stdio: "inherit" }).on("exit", (code) => process.exit(code ?? 0));

@@ -37,3 +37,24 @@ export const authConfig = {
     },
   },
 } satisfies NextAuthConfig;
+
+const secureCookies = (process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? "").startsWith("https://");
+const cookie = (name: string, httpOnly = true) => ({
+  name: `${secureCookies ? "__Secure-" : ""}client-app.${name}`,
+  options: { httpOnly, sameSite: "lax" as const, path: "/", secure: secureCookies },
+});
+
+/** The client app's session: same rules, its own cookies and endpoint. */
+export const clientAuthConfig = {
+  ...authConfig,
+  basePath: "/api/client-auth",
+  pages: { signIn: "/app" },
+  cookies: {
+    sessionToken: cookie("session-token"),
+    callbackUrl: cookie("callback-url"),
+    csrfToken: {
+      ...cookie("csrf-token"),
+      name: `${secureCookies ? "__Host-" : ""}client-app.csrf-token`,
+    },
+  },
+} satisfies NextAuthConfig;

@@ -1,5 +1,6 @@
 import "server-only";
 import { auth } from "@/auth";
+import { clientAuth } from "@/client-auth";
 import { getTenantDb } from "@/lib/tenant-db";
 import { loadLiveAccount } from "@/lib/live-account";
 import type { PermissionKey } from "@/lib/permissions";
@@ -25,8 +26,8 @@ export class ForbiddenError extends Error {
  * lib/live-account.ts), so every guard below — client and staff — stops a
  * closed or deactivated account on its next request.
  */
-export async function requireSession(): Promise<SessionUserShape> {
-  const session = await auth();
+export async function requireSession(audience: "staff" | "client" = "staff"): Promise<SessionUserShape> {
+  const session = await (audience === "client" ? clientAuth() : auth());
   if (!session?.user) throw new UnauthorizedError();
   const live = await loadLiveAccount(session.user.id, session.user.authTime);
   if (!live) throw new UnauthorizedError("Your access has changed. Please sign in again.");
@@ -62,7 +63,8 @@ export async function requireStaffContext() {
 
 /** Customer session bound to their own tenant's scoped Prisma client. */
 export async function requireCustomerContext() {
-  const user = await requireRole("CUSTOMER");
+  const user = await requireSession("client");
+  if (user.role !== "CUSTOMER") throw new ForbiddenError("Requires role: CUSTOMER");
   if (!user.tenantId || !user.customerProfileId) throw new ForbiddenError("Customer account incomplete");
   return { user, db: getTenantDb(user.tenantId) };
 }

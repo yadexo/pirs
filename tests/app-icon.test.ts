@@ -13,7 +13,7 @@ describe("clinic app icons", () => {
 
   it("never fetches an icon from outside our own storage", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
-    const env = { S3_PUBLIC_URL: "https://cdn.example.com" } as NodeJS.ProcessEnv;
+    const env = { S3_PUBLIC_URL: "https://cdn.example.com" } as unknown as NodeJS.ProcessEnv;
     for (const url of ["http://169.254.169.254/latest/meta-data", "https://evil.example.com/uploads/a.png", "/uploads/../../.env", "https://cdn.example.com/other/a.png", "https://cdn.example.com.evil.com/uploads/a.png"]) {
       expect(await loadIconSource(url, env)).toBeNull();
     }

@@ -50,3 +50,37 @@ export async function recordVisit(db: TenantDb, customerProfileId: string): Prom
   });
   return { recorded: true, points, visitCount: Number(rows[0]!.visitCount) };
 }
+
+export interface ClientMatch {
+  customerProfileId: string;
+  name: string;
+  email: string | null;
+}
+
+/**
+ * Finds this clinic's clients by name, email or phone for the front desk.
+ * Every word has to match somewhere, so "Emma Johnson" finds Emma Johnson —
+ * matching the whole phrase against one field at a time never would.
+ */
+export async function searchClientsForCheckIn(db: TenantDb, query: string): Promise<ClientMatch[]> {
+  const q = query.trim().slice(0, 100);
+  if (q.length < 2) return [];
+  const words = q.split(/\s+/).slice(0, 5);
+  const rows = await db.customerProfile.findMany({
+    where: {
+      user: { status: { not: "DISABLED" } },
+      AND: words.map((w) => ({
+        OR: [
+          { firstName: { contains: w, mode: "insensitive" as const } },
+          { lastName: { contains: w, mode: "insensitive" as const } },
+          { phone: { contains: w } },
+          { user: { email: { contains: w, mode: "insensitive" as const } } },
+        ],
+      })),
+    },
+    take: 8,
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    select: { id: true, firstName: true, lastName: true, user: { select: { email: true } } },
+  });
+  return rows.map((r) => ({ customerProfileId: r.id, name: `${r.firstName} ${r.lastName}`.trim(), email: r.user.email }));
+}
