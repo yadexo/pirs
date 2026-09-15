@@ -100,19 +100,22 @@ export async function getHomeData(db: TenantDb): Promise<HomeData> {
 
 export interface RewardsData {
   rewards: { id: string; name: string; description: string | null; pointsCost: number }[];
-  earnRules: { key: string; title: string; subtitle: string | null; badge: string }[];
+  /** `url` is where a row sends the client (e.g. the clinic's Google review page). */
+  earnRules: { key: string; title: string; subtitle: string | null; badge: string; url?: string }[];
 }
 
-export async function getRewardsData(db: TenantDb): Promise<RewardsData> {
-  const [rewards, programme] = await Promise.all([
+export async function getRewardsData(db: TenantDb, currency: string): Promise<RewardsData> {
+  const [rewards, programme, settings] = await Promise.all([
     db.loyaltyReward.findMany({ where: { active: true }, orderBy: { pointsCost: "asc" } }),
     db.loyaltyProgramme.findFirst({ where: {} }),
+    db.tenantSettings.findFirst({ where: {}, select: { googleReviewUrl: true } }),
   ]);
+  const unit = new Intl.NumberFormat("en", { style: "currency", currency, minimumFractionDigits: 0 }).format(1);
 
   // "Need more points?" rows are driven by the loyalty rules the merchant
   // configured — a rule worth zero points is not shown.
   const earnRules: RewardsData["earnRules"] = [];
-  if (programme) {
+  if (programme?.active) {
     if (programme.referralPoints > 0) {
       earnRules.push({ key: "referral", title: "Refer a friend", subtitle: null, badge: `+${programme.referralPoints} Points` });
     }
@@ -121,12 +124,15 @@ export async function getRewardsData(db: TenantDb): Promise<RewardsData> {
       earnRules.push({
         key: "purchase",
         title: "Purchase in-app",
-        subtitle: `${perUnit} point${perUnit === 1 ? "" : "s"} per €1 spent`,
+        subtitle: `${perUnit} point${perUnit === 1 ? "" : "s"} per ${unit} spent`,
         badge: `+${perUnit} Point${perUnit === 1 ? "" : "s"}`,
       });
     }
     if (programme.pointsPerVisit > 0) {
       earnRules.push({ key: "visit", title: "Visit our clinic", subtitle: null, badge: `+${programme.pointsPerVisit} Points` });
+    }
+    if (programme.reviewPoints > 0 && settings?.googleReviewUrl) {
+      earnRules.push({ key: "review", title: "Review us on Google", subtitle: null, badge: `+${programme.reviewPoints} Points`, url: settings.googleReviewUrl });
     }
     if (programme.birthdayPoints > 0) {
       earnRules.push({ key: "birthday", title: "Birthday bonus", subtitle: null, badge: `+${programme.birthdayPoints} Points` });

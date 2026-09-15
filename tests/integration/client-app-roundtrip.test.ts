@@ -30,8 +30,10 @@ const {
   clientSaveProfileAction,
   clientSaveConsentAction,
   getBookingOptionsForServiceAction,
+  clientReviewAction,
   getClientSlotsAction,
 } = await import("@/lib/actions/client-app");
+const { getRewardsData } = await import("@/lib/client-app-data");
 
 describe("patient app -> clinic portal round trip", () => {
   let tenantId: string;
@@ -337,5 +339,25 @@ describe("patient app -> clinic portal round trip", () => {
       expect(rows.length).toBeGreaterThan(0);
       expect(rows.every((r: { tenantId: string }) => r.tenantId === tenantId)).toBe(true);
     }
+  });
+
+  it("labels points in the clinic's own currency", async () => {
+    const data = await getRewardsData(db, "GBP");
+    expect(data.earnRules.find((r) => r.key === "purchase")!.subtitle).toBe("1 point per £1 spent");
+  });
+
+  it("shows the Google review row only once the clinic sets a link, and pays the bonus once", async () => {
+    await rawDb.loyaltyProgramme.update({ where: { tenantId }, data: { reviewPoints: 80 } });
+    expect((await getRewardsData(db, "GBP")).earnRules.some((r) => r.key === "review")).toBe(false);
+    expect(await clientReviewAction(SLUG)).toMatchObject({ error: expect.any(String) });
+
+    await rawDb.tenantSettings.update({ where: { tenantId }, data: { googleReviewUrl: "https://g.page/r/test/review" } });
+    const row = (await getRewardsData(db, "GBP")).earnRules.find((r) => r.key === "review");
+    expect(row).toMatchObject({ badge: "+80 Points", url: "https://g.page/r/test/review" });
+
+    const before = (await db.customerProfile.findFirst({ where: { id: customerProfileId } }))!.loyaltyPointsBalance;
+    expect(await clientReviewAction(SLUG)).toEqual({ ok: true, points: 80 });
+    expect(await clientReviewAction(SLUG)).toMatchObject({ error: expect.stringMatching(/already claimed/) });
+    expect((await db.customerProfile.findFirst({ where: { id: customerProfileId } }))!.loyaltyPointsBalance).toBe(before + 80);
   });
 });

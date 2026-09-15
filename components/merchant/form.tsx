@@ -190,6 +190,7 @@ export function ImageField({
   multiple = false,
   max = 6,
   hint,
+  purpose,
 }: {
   label: string;
   name: string;
@@ -199,6 +200,8 @@ export function ImageField({
   multiple?: boolean;
   max?: number;
   hint?: React.ReactNode;
+  /** Tells the upload endpoint which extra checks apply, e.g. "app-icon". */
+  purpose?: string;
 }) {
   const initial = Array.isArray(defaultValue) ? defaultValue : defaultValue ? [defaultValue] : [];
   const [urls, setUrls] = React.useState<string[]>(initial);
@@ -217,6 +220,7 @@ export function ImageField({
       for (const file of Array.from(files).slice(0, limit - (multiple ? urls.length : 0))) {
         const body = new FormData();
         body.set("merchantId", merchantId);
+        if (purpose) body.set("purpose", purpose);
         body.set("file", file);
         const res = await fetch("/api/uploads", { method: "POST", body });
         const json = (await res.json().catch(() => ({}))) as { url?: string; error?: string };

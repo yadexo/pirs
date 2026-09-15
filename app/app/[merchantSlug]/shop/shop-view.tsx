@@ -51,7 +51,9 @@ export function ShopView({
   services,
   plans,
   currentPlanId,
-  pointsPerEuro,
+  pointsPerCents,
+  banner,
+  externalBookingUrl,
 }: {
   merchantSlug: string;
   currency: string;
@@ -62,7 +64,12 @@ export function ShopView({
   services: ShopService[];
   plans: ShopPlan[];
   currentPlanId: string | null;
-  pointsPerEuro: number;
+  /** Same rate checkout uses: points = floor(amount in cents × rate). */
+  pointsPerCents: number;
+  /** Clinic's own banner copy from App Builder → Settings; null fields use the defaults. */
+  banner: { headline: string | null; subtitle: string | null; buttonLabel: string | null };
+  /** Set when the clinic books on its own website instead of in the app. */
+  externalBookingUrl: string | null;
 }) {
   const router = useRouter();
   const { refresh } = useCart();
@@ -152,13 +159,17 @@ export function ShopView({
           <>
             <Gloss className="banner" particles seed={merchantSlug}>
               <h2 style={{ fontSize: 24, fontWeight: 700, color: "var(--on-black)" }}>
-                Treat today. Pay later.
-                <br />
-                Earn rewards.
+                {banner.headline ?? (
+                  <>
+                    Treat today. Pay later.
+                    <br />
+                    Earn rewards.
+                  </>
+                )}
               </h2>
-              <p style={{ fontSize: 15, color: "var(--on-black-muted)" }}>Free treatments &amp; exclusive perks.</p>
+              <p style={{ fontSize: 15, color: "var(--on-black-muted)" }}>{banner.subtitle ?? "Free treatments & exclusive perks."}</p>
               <button className="btn-white" style={{ marginTop: 8 }} onClick={() => setHowOpen(true)}>
-                How does it work?
+                {banner.buttonLabel ?? "How does it work?"}
               </button>
             </Gloss>
 
@@ -313,7 +324,12 @@ export function ShopView({
               <button
                 className="btn-black"
                 onClick={() => {
-                  setBooking(detail.item);
+                  if (externalBookingUrl) {
+                    // The clinic takes bookings on its own site.
+                    window.open(externalBookingUrl, "_blank", "noopener,noreferrer");
+                  } else {
+                    setBooking(detail.item);
+                  }
                   setDetail(null);
                 }}
               >
@@ -353,7 +369,7 @@ export function ShopView({
               </div>
             )}
             <p style={{ color: "var(--muted)", fontSize: 14 }}>
-              Earn {Math.floor(((detail.item.priceCents * (detail.kind === "product" ? qty : 1)) / 100) * pointsPerEuro)} points with this purchase
+              Earn {Math.floor(detail.item.priceCents * (detail.kind === "product" ? qty : 1) * pointsPerCents)} points with this purchase
             </p>
           </>
         )}

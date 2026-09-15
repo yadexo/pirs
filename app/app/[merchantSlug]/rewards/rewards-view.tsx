@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Gloss, Sheet, Icon, EmptyState, QrCode, CountUp, money, useToast } from "@/components/client-app/ui";
-import { clientRedeemRewardAction, clientReferralAction } from "@/lib/actions/client-app";
+import { clientRedeemRewardAction, clientReferralAction, clientReviewAction } from "@/lib/actions/client-app";
 import type { ClientSummary, RewardsData } from "@/lib/client-app-data";
 
 export function RewardsView({
@@ -38,7 +38,18 @@ export function RewardsView({
     router.refresh();
   }
 
-  async function onEarnRow(key: string) {
+  async function onEarnRow(key: string, url?: string) {
+    if (key === "review" && url) {
+      // Open synchronously from the tap, or mobile browsers block the new tab.
+      window.open(url, "_blank", "noopener,noreferrer");
+      const res = await clientReviewAction(merchantSlug);
+      if ("error" in res) toast(res.error);
+      else {
+        toast(`+${res.points} points`);
+        router.refresh();
+      }
+      return;
+    }
     if (key === "referral") {
       const url = typeof window !== "undefined" ? window.location.origin + `/app/${merchantSlug}` : "";
       if (typeof navigator !== "undefined" && navigator.share) {
@@ -141,9 +152,9 @@ export function RewardsView({
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "10px var(--pad-x) 0" }}>
             {data.earnRules.map((r) => (
-              <button key={r.key} className="needrow" onClick={() => onEarnRow(r.key)}>
+              <button key={r.key} className="needrow" onClick={() => onEarnRow(r.key, r.url)}>
                 <span style={{ color: "var(--ink-strong)", flex: "none", display: "grid", placeItems: "center" }}>
-                  <Icon name={r.key === "referral" ? "users" : r.key === "purchase" ? "bag" : r.key === "visit" ? "qr" : "sparkle"} size={22} />
+                  <Icon name={r.key === "referral" ? "users" : r.key === "purchase" ? "bag" : r.key === "visit" ? "qr" : r.key === "review" ? "star" : "sparkle"} size={22} />
                 </span>
                 <span style={{ flex: 1 }}>
                   <b style={{ fontSize: 16, fontWeight: 500, color: "var(--ink)", display: "block" }}>{r.title}</b>

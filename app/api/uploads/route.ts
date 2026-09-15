@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import sharp from "sharp";
 import { getStorageProvider } from "@/lib/providers/storage";
 import { rateLimit } from "@/lib/rate-limit";
 import { ActionError, requireMerchantAction } from "@/lib/merchant-action";
@@ -32,9 +33,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No file provided." }, { status: 400 });
   }
 
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  // An app icon becomes the home-screen icon of the clinic's app, which iOS
+  // renders up to 180pt at 3x. It has to be square and sharp at that size.
+  if (formData.get("purpose") === "app-icon") {
+    const problem = await appIconProblem(buffer);
+    if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+  }
+
   try {
     const stored = await getStorageProvider().upload({
-      buffer: Buffer.from(await file.arrayBuffer()),
+      buffer,
       filename: file.name,
       mimeType: file.type,
     });
@@ -42,5 +52,19 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Upload failed.";
     return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+const MIN_APP_ICON_PX = 512;
+
+async function appIconProblem(buffer: Buffer): Promise<string | null> {
+  try {
+    const { width, height } = await sharp(buffer).metadata();
+    if (!width || !height) return "That file isn't an image we can read.";
+    if (width !== height) return `App icons must be square. This one is ${width}×${height}.`;
+    if (width < MIN_APP_ICON_PX) return `App icons must be at least ${MIN_APP_ICON_PX}×${MIN_APP_ICON_PX} pixels (1024×1024 is best). This one is ${width}×${height}.`;
+    return null;
+  } catch {
+    return "That file isn't an image we can read.";
   }
 }

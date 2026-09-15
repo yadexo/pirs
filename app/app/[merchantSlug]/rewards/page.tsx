@@ -9,7 +9,7 @@ export default async function RewardsPage({ params }: { params: Promise<{ mercha
 
   const [summary, data] = await Promise.all([
     getClientSummary(ctx.db, ctx.customerProfileId),
-    getRewardsData(ctx.db),
+    getRewardsData(ctx.db, ctx.merchant.currency),
   ]);
   if (!summary) return null;
 

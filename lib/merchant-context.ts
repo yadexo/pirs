@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { rawDb } from "@/lib/db";
 import { getTenantDb, type TenantDb } from "@/lib/tenant-db";
-import { loadLiveAccount } from "@/lib/live-account";
+import { loadLiveAccount, type LiveAccount } from "@/lib/live-account";
 import { getImpersonatedMerchantId } from "@/lib/actions/impersonation";
 import type { SidebarEntry } from "@/components/shell/sidebar";
 import type { SupportLink } from "@/components/shell/sidebar";
@@ -18,6 +18,8 @@ export interface MerchantContext {
   /** Non-null only for agency admins, for the sidebar switcher. */
   switchableMerchants: SwitchableMerchant[] | null;
   support: SupportLink | null;
+  /** Who is looking, from the live account — for showing or hiding edit controls. */
+  viewer: { role: LiveAccount["role"]; permissions: LiveAccount["permissions"] };
 }
 
 /**
@@ -76,6 +78,7 @@ export async function requireMerchantContext(merchantId: string): Promise<Mercha
     impersonating,
     switchableMerchants,
     support,
+    viewer: { role: user.role, permissions: user.permissions },
   };
 }
 

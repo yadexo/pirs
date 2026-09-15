@@ -30,7 +30,7 @@ export default async function ClientAppLayout({
 
   const [summary, rewards] = await Promise.all([
     getClientSummary(ctx.db, ctx.customerProfileId),
-    getRewardsData(ctx.db),
+    getRewardsData(ctx.db, ctx.merchant.currency),
   ]);
 
   // Dot on the Rewards tab when something just became affordable.

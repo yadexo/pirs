@@ -15,7 +15,7 @@ export default async function ShopPage({
 
   const tab = sp.tab === "memberships" || sp.tab === "treatments" ? sp.tab : "browse";
 
-  const [categories, products, services, plans, membership, programme] = await Promise.all([
+  const [categories, products, services, plans, membership, programme, settings] = await Promise.all([
     ctx.db.productCategory.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
     ctx.db.product.findMany({
       where: { active: true, ...(sp.category ? { categoryId: sp.category } : {}) },
@@ -36,6 +36,7 @@ export default async function ShopPage({
       select: { membershipPlanId: true },
     }),
     ctx.db.loyaltyProgramme.findFirst({ where: {} }),
+    ctx.db.tenantSettings.findFirst({ where: {} }),
   ]);
 
   return (
@@ -46,7 +47,13 @@ export default async function ShopPage({
       categoryId={sp.category ?? null}
       categories={categories.map((c) => ({ id: c.id, name: c.name }))}
       currentPlanId={membership?.membershipPlanId ?? null}
-      pointsPerEuro={programme ? Math.round(programme.pointsPerCents * 100) : 0}
+      pointsPerCents={programme?.active ? programme.pointsPerCents : 0}
+      banner={{
+        headline: settings?.shopBannerHeadline ?? null,
+        subtitle: settings?.shopBannerSubtitle ?? null,
+        buttonLabel: settings?.shopBannerButtonLabel ?? null,
+      }}
+      externalBookingUrl={settings?.bookingMode === "EXTERNAL" ? settings.externalBookingUrl : null}
       products={products.map((p) => ({
         id: p.id,
         name: p.name,

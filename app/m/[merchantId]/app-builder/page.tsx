@@ -8,6 +8,23 @@ import { CatalogTab, type CatalogItem } from "./catalog-tab";
 import { SettingsTab } from "./settings-tab";
 import { cn } from "@/lib/utils";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
+import { loadSettingsSection } from "./settings/load";
+import { viewerCan } from "@/lib/viewer";
+import type { MerchantRequirement } from "@/lib/merchant-action";
+import type { SettingsSection } from "@/lib/nav";
+
+/** What saving each Settings section requires — mirrors lib/actions/clinic-settings.ts. */
+const SECTION_NEEDS: Record<SettingsSection, MerchantRequirement> = {
+  general: "owner",
+  branding: "owner",
+  team: "owner",
+  locations: "owner",
+  "loyalty-rules": "loyalty.adjust",
+  booking: "appointments.manage",
+  notifications: "owner",
+  integrations: "owner",
+  "audit-log": "owner",
+};
 
 export default async function AppBuilderPage({
   params,
@@ -62,7 +79,13 @@ export default async function AppBuilderPage({
 
       <div className="mt-4">
         {tab === "settings" ? (
-          <SettingsTab merchantId={merchantId} section={section} />
+          <SettingsTab
+            merchantId={merchantId}
+            section={section}
+            currency={currency}
+            data={await loadSettingsSection(ctx.db, merchantId, section)}
+            canEdit={viewerCan(ctx.viewer, SECTION_NEEDS[section])}
+          />
         ) : (
           <CatalogTab
             merchantId={merchantId}

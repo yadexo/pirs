@@ -459,6 +459,32 @@ export async function clientCheckInAction(slug: string): Promise<{ error: string
   return { ok: true, points: award };
 }
 
+/**
+ * Google review — awarded once per client when they open the clinic's review
+ * page from the app. A review can't be verified from here, so this rewards
+ * the visit, once, like the referral bonus below.
+ */
+export async function clientReviewAction(slug: string): Promise<{ error: string } | { ok: true; points: number }> {
+  const { db, user } = await requireCustomerContext();
+
+  const [programme, settings] = await Promise.all([
+    db.loyaltyProgramme.findFirst({ where: {} }),
+    db.tenantSettings.findFirst({ where: {}, select: { googleReviewUrl: true } }),
+  ]);
+  const award = programme?.active && settings?.googleReviewUrl ? programme.reviewPoints : 0;
+  if (award <= 0) return { error: "Reviews aren't rewarded at this clinic." };
+
+  const already = await db.loyaltyTransaction.findFirst({
+    where: { customerProfileId: user.customerProfileId!, reason: "Google review" },
+  });
+  if (already) return { error: "You've already claimed your review bonus. Thank you!" };
+
+  await adjustLoyaltyPoints(db, { customerProfileId: user.customerProfileId!, points: award, type: "EARNED", reason: "Google review" });
+
+  revalidateClient(slug);
+  return { ok: true, points: award };
+}
+
 /** Referral share — awarded once, tracked through the loyalty ledger. */
 export async function clientReferralAction(slug: string): Promise<{ error: string } | { ok: true; points: number }> {
   const { db, user } = await requireCustomerContext();
