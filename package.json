@@ -40,6 +40,7 @@
     "nanoid": "5.0.9",
     "next": "15.5.23",
     "next-auth": "5.0.0-beta.32",
+    "qrcode": "^1.5.4",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-hook-form": "7.54.2",
@@ -52,6 +53,7 @@
   "devDependencies": {
     "@types/bcryptjs": "2.4.6",
     "@types/node": "22.10.10",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "19.0.8",
     "@types/react-dom": "19.0.3",
     "@vitejs/plugin-react": "4.3.4",

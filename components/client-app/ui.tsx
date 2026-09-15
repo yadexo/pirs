@@ -3,6 +3,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
+import { qrSvgPath } from "@/lib/qr";
 
 /* ------------------------------------------------------------------ icons */
 
@@ -135,40 +136,23 @@ export function Gloss({
 
 /* ------------------------------------------------------------------- QR */
 
-export function QrCode({ value }: { value: string }) {
-  const rects = React.useMemo(() => {
-    const n = 25;
-    const rng = mulberry(hashStr(value));
-    const out: { x: number; y: number }[] = [];
-    const put = (r: number, c: number) => out.push({ x: c, y: r });
-    const reserved = (r: number, c: number) =>
-      (r < 8 && c < 8) || (r < 8 && c >= n - 8) || (r >= n - 8 && c < 8) || r === 6 || c === 6 || (r >= 16 && r <= 20 && c >= 16 && c <= 20);
-    const finder = (r0: number, c0: number) => {
-      for (let r = 0; r < 7; r++)
-        for (let c = 0; c < 7; c++) {
-          const edge = r === 0 || r === 6 || c === 0 || c === 6;
-          const core = r >= 2 && r <= 4 && c >= 2 && c <= 4;
-          if (edge || core) put(r0 + r, c0 + c);
-        }
-    };
-    finder(0, 0);
-    finder(0, n - 7);
-    finder(n - 7, 0);
-    for (let i = 8; i < n - 8; i++) if (i % 2 === 0) { put(6, i); put(i, 6); }
-    for (let r = 16; r <= 20; r++)
-      for (let c = 16; c <= 20; c++) {
-        const a = r - 16, b = c - 16;
-        if (a === 0 || a === 4 || b === 0 || b === 4 || (a === 2 && b === 2)) put(r, c);
-      }
-    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (!reserved(r, c) && rng() > 0.52) put(r, c);
-    return out;
-  }, [value]);
-
+/**
+ * A real QR code (see lib/qr.ts). The quiet zone is part of the drawing, so it
+ * scans even when the white card around it is tight.
+ */
+export function QrCode({ value, label = "QR code" }: { value: string; label?: string }) {
+  const { path, size } = React.useMemo(() => qrSvgPath(value), [value]);
+  const margin = 2;
   return (
-    <svg viewBox="0 0 25 25" fill="var(--ink-strong)" shapeRendering="crispEdges" role="img" aria-label="Member QR code">
-      {rects.map((r, i) => (
-        <rect key={i} x={r.x} y={r.y} width="1" height="1" />
-      ))}
+    <svg
+      viewBox={`${-margin} ${-margin} ${size + margin * 2} ${size + margin * 2}`}
+      shapeRendering="crispEdges"
+      role="img"
+      aria-label={label}
+      style={{ display: "block", width: "100%", height: "auto" }}
+    >
+      <rect x={-margin} y={-margin} width={size + margin * 2} height={size + margin * 2} fill="#fff" />
+      <path d={path} fill="var(--ink-strong)" />
     </svg>
   );
 }
