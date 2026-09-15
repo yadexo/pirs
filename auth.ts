@@ -5,12 +5,16 @@ import { verifyPassword } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
 import { authConfig } from "@/auth.config";
 import type { SessionPermissions, SessionUserShape } from "@/types/next-auth";
-import type { UserRole } from "@prisma/client";
 
-type Portal = "customer" | "staff" | "platform" | "unified";
+/**
+ * Two ways in. "unified" is the /login screen used by agency and clinic users
+ * (and clients who find it). "customer" is a clinic's own client app, where
+ * the clinic is known from the URL — the same email may be a client at more
+ * than one clinic, so the slug is what disambiguates.
+ */
+type Portal = "customer" | "unified";
 
-async function resolveTenantId(portal: Portal, slug: string | undefined) {
-  if (portal === "platform") return null;
+async function resolveTenantId(slug: string | undefined) {
   if (!slug) return undefined;
   const tenant = await rawDb.tenant.findUnique({ where: { slug } });
   if (!tenant || tenant.status !== "ACTIVE") return undefined;
@@ -62,21 +66,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           if (match.tenant && match.tenant.status !== "ACTIVE") return null;
           user = match;
         } else {
-          let tenantId: string | null | undefined = null;
-          if (portal !== "platform") {
-            tenantId = await resolveTenantId(portal, tenantSlug);
-            if (tenantId === undefined) return null; // unknown/suspended workspace
-          }
-
-          const roleFilter: UserRole[] =
-            portal === "platform" ? ["PLATFORM_ADMIN"] : portal === "staff" ? ["TENANT_ADMIN", "STAFF"] : ["CUSTOMER"];
+          if (portal !== "customer") return null;
+          const tenantId = await resolveTenantId(tenantSlug);
+          if (tenantId === undefined) return null; // unknown or suspended clinic
 
           user = await rawDb.user.findFirst({
-            where: {
-              email,
-              tenantId: portal === "platform" ? null : tenantId,
-              role: { in: roleFilter },
-            },
+            where: { email, tenantId, role: "CUSTOMER" },
             include,
           });
         }

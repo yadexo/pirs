@@ -6,7 +6,7 @@ import { signIn } from "@/auth";
 import { rawDb } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
-import { resolveDestination, canReach } from "@/lib/login-destination";
+import { resolveDestination, canReach, safeNext } from "@/lib/login-destination";
 
 export type ActionResult = { error: string } | never;
 
@@ -24,18 +24,11 @@ async function signInOrError(params: Record<string, string>, redirectTo: string)
 export async function customerSignInAction(tenantSlug: string, _prevState: unknown, formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
-  const next = String(formData.get("next") ?? `/${tenantSlug}`);
+  // `next` is form input, so only a same-origin path is honoured; the default
+  // is the client app itself (the old /:tenant customer app no longer exists).
+  const next = safeNext(String(formData.get("next") ?? "") || undefined) ?? `/app/${tenantSlug}`;
   if (!email || !password) return { error: "Email and password are required." };
   return signInOrError({ portal: "customer", tenantSlug, email, password }, next);
-}
-
-export async function staffSignInAction(_prevState: unknown, formData: FormData) {
-  const workspace = String(formData.get("workspace") ?? "").trim();
-  const email = String(formData.get("email") ?? "");
-  const password = String(formData.get("password") ?? "");
-  const next = String(formData.get("next") ?? "/admin");
-  if (!workspace || !email || !password) return { error: "Workspace, email, and password are required." };
-  return signInOrError({ portal: "staff", tenantSlug: workspace, email, password }, next);
 }
 
 /**
@@ -69,13 +62,6 @@ export async function unifiedSignInAction(_prevState: unknown, formData: FormDat
   }
 
   return signInOrError({ portal: "unified", email, password }, destination);
-}
-
-export async function platformSignInAction(_prevState: unknown, formData: FormData) {
-  const email = String(formData.get("email") ?? "");
-  const password = String(formData.get("password") ?? "");
-  if (!email || !password) return { error: "Email and password are required." };
-  return signInOrError({ portal: "platform", email, password }, "/platform");
 }
 
 const registerSchema = z.object({
@@ -133,5 +119,5 @@ export async function customerRegisterAction(tenantSlug: string, _prevState: unk
     },
   });
 
-  return signInOrError({ portal: "customer", tenantSlug, email, password }, `/${tenantSlug}`);
+  return signInOrError({ portal: "customer", tenantSlug, email, password }, `/app/${tenantSlug}`);
 }
