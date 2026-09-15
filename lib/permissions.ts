@@ -8,6 +8,7 @@ export const PERMISSIONS = [
   { key: "promotions.create", label: "Create promotions", category: "Promotions" },
   { key: "analytics.view", label: "View analytics", category: "Analytics" },
   { key: "memberships.manage", label: "Manage memberships", category: "Memberships" },
+  { key: "catalog.manage", label: "Manage products, services and plans", category: "Catalog" },
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number]["key"];

@@ -4,7 +4,7 @@ import { requireMerchantContext } from "@/lib/merchant-context";
 import { rawDb } from "@/lib/db";
 import { MerchantPageHeader } from "@/components/merchant/page-header";
 import { APP_BUILDER_TABS, DEFAULT_APP_BUILDER_TAB, isAppBuilderTab, isSettingsSection, DEFAULT_SETTINGS_SECTION } from "@/lib/nav";
-import { CatalogTab } from "./catalog-tab";
+import { CatalogTab, type CatalogItem } from "./catalog-tab";
 import { SettingsTab } from "./settings-tab";
 import { cn } from "@/lib/utils";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
@@ -78,35 +78,42 @@ export default async function AppBuilderPage({
   );
 }
 
-/** Each tab reads from the model that concept was relocated onto. */
+/**
+ * Each tab reads from the model that concept was relocated onto. Hidden items
+ * are listed (so they can be shown again); archived items are not.
+ */
 async function loadItems(
   db: Awaited<ReturnType<typeof requireMerchantContext>>["db"],
   tab: string,
   q: string,
   typeFilter: string,
-) {
+): Promise<CatalogItem[]> {
   const nameFilter = q ? { name: { contains: q, mode: "insensitive" as const } } : {};
 
   if (tab === "custom-plans") {
     // Packages became Custom plans.
-    const rows = await db.package.findMany({ where: { active: true, ...nameFilter }, orderBy: { name: "asc" } });
-    return rows.map((r) => ({ id: r.id, name: r.name, meta: `${r.totalUses} uses`, priceCents: r.priceCents, active: r.active }));
+    const rows = await db.package.findMany({ where: { archivedAt: null, ...nameFilter }, orderBy: { name: "asc" } });
+    return rows.map((r) => ({ kind: "package", id: r.id, name: r.name, meta: `${r.totalUses} sessions`, priceCents: r.priceCents, active: r.active }));
   }
 
   if (tab === "offers") {
     // Promotions and notification campaigns share this tab, split by filter.
     if (typeFilter === "campaigns") {
       const rows = await db.notificationCampaign.findMany({ where: nameFilter, orderBy: { createdAt: "desc" } });
-      return rows.map((r) => ({ id: r.id, name: r.name, meta: `${r.channel} · ${r.status}`, priceCents: null, active: r.status === "SENT" }));
+      return rows.map((r) => ({ kind: "campaign", id: r.id, name: r.name, meta: `${r.channel} · ${r.status}`, priceCents: null, active: r.status !== "CANCELLED" }));
     }
     const rows = await db.promotion.findMany({
       where: q ? { title: { contains: q, mode: "insensitive" } } : {},
-      orderBy: { createdAt: "desc" },
+      orderBy: { startAt: "desc" },
     });
+    const now = Date.now();
     return rows.map((r) => ({
+      kind: "promotion",
       id: r.id,
       name: r.title,
-      meta: r.code ? `Code ${r.code}` : "Automatic",
+      meta: [r.code ? `Code ${r.code}` : "Automatic", r.endAt.getTime() < now ? "ended" : r.startAt.getTime() > now ? "scheduled" : null]
+        .filter(Boolean)
+        .join(" · "),
       priceCents: null,
       active: r.active,
     }));
@@ -115,32 +122,32 @@ async function loadItems(
   if (tab === "products") {
     // Services and Products are one catalogue, separated by a type filter.
     const [services, products] = await Promise.all([
-      typeFilter === "product"
-        ? []
-        : db.service.findMany({ where: { active: true, ...nameFilter }, orderBy: { name: "asc" } }),
-      typeFilter === "service"
-        ? []
-        : db.product.findMany({ where: { active: true, ...nameFilter }, orderBy: { name: "asc" } }),
+      typeFilter === "product" ? [] : db.service.findMany({ where: { archivedAt: null, ...nameFilter }, orderBy: { name: "asc" } }),
+      typeFilter === "service" ? [] : db.product.findMany({ where: { archivedAt: null, ...nameFilter }, orderBy: { name: "asc" } }),
     ]);
     return [
-      ...services.map((s) => ({ id: s.id, name: s.name, meta: `Service · ${s.durationMinutes} min`, priceCents: s.priceCents, active: s.active })),
-      ...products.map((p) => ({ id: p.id, name: p.name, meta: `Product · ${p.inventoryQuantity} in stock`, priceCents: p.priceCents, active: p.active })),
+      ...services.map((s) => ({ kind: "service" as const, id: s.id, name: s.name, meta: `Treatment · ${s.durationMinutes} min`, priceCents: s.priceCents, active: s.active })),
+      ...products.map((p) => ({ kind: "product" as const, id: p.id, name: p.name, meta: `Product · ${p.inventoryQuantity} in stock`, priceCents: p.priceCents, active: p.active })),
     ];
   }
 
   if (tab === "membership") {
-    const rows = await db.membershipPlan.findMany({ where: { active: true, ...nameFilter }, orderBy: { priceCents: "asc" } });
+    const rows = await db.membershipPlan.findMany({
+      where: { archivedAt: null, ...nameFilter },
+      orderBy: { priceCents: "asc" },
+      include: { _count: { select: { customerMemberships: { where: { status: { in: ["ACTIVE", "TRIAL", "PAST_DUE", "PAUSED"] } } } } } },
+    });
     return rows.map((r) => ({
+      kind: "membershipPlan",
       id: r.id,
       name: r.name,
-      meta: r.billingFrequency === "MONTHLY" ? "Monthly" : "Annual",
+      meta: `${r.billingFrequency === "MONTHLY" ? "Monthly" : "Yearly"} · ${r._count.customerMemberships} member${r._count.customerMemberships === 1 ? "" : "s"}`,
       priceCents: r.priceCents,
       active: r.active,
     }));
   }
 
   // rewards
-  const rows = await db.loyaltyReward.findMany({ where: { active: true, ...nameFilter }, orderBy: { pointsCost: "asc" } });
-  return rows.map((r) => ({ id: r.id, name: r.name, meta: `${r.pointsCost} pts`, priceCents: null, active: r.active }));
+  const rows = await db.loyaltyReward.findMany({ where: nameFilter, orderBy: { pointsCost: "asc" } });
+  return rows.map((r) => ({ kind: "reward", id: r.id, name: r.name, meta: `${r.pointsCost} points`, priceCents: null, active: r.active }));
 }
-

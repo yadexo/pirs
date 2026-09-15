@@ -2,13 +2,30 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CirclePlus, Search } from "lucide-react";
+import { CirclePlus, Loader2, Search } from "lucide-react";
+import { toast } from "sonner";
 import { Panel, Pill, Drawer } from "@/components/ui/primitives";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/utils";
+import type { FieldErrors } from "@/components/merchant/form";
+import {
+  archiveItemAction,
+  getAppBuilderItemAction,
+  getAppBuilderOptionsAction,
+  savePackageAction,
+  saveMembershipPlanAction,
+  saveProductAction,
+  savePromotionAction,
+  saveRewardAction,
+  saveServiceAction,
+  setItemActiveAction,
+  type ItemKind,
+} from "@/lib/actions/app-builder";
+import { FORMS, type FormOptions } from "./item-forms";
 
 export interface CatalogItem {
+  kind: ItemKind;
   id: string;
   name: string;
   meta: string;
@@ -17,22 +34,17 @@ export interface CatalogItem {
 }
 
 /** Per-tab copy. Empty-state strings are verbatim from the spec. */
-const TAB_CONFIG: Record<string, { heading: string; create: string; empty: string; filters: [string, string][] }> = {
-  "custom-plans": {
-    heading: "Custom Plans",
-    create: "Create custom plan",
-    empty: "No custom plans available",
-    filters: [["all", "All"]],
-  },
+const TAB_CONFIG: Record<string, { heading: string; create: string; empty: string; filters: [string, string][]; kinds: ItemKind[] }> = {
+  "custom-plans": { heading: "Custom Plans", create: "Create custom plan", empty: "No custom plans available", filters: [["all", "All"]], kinds: ["package"] },
   offers: {
     heading: "Offers",
     create: "Create offer",
     empty: "No offers available",
     filters: [
       ["all", "All"],
-      ["offers", "Offers"],
       ["campaigns", "Campaigns"],
     ],
+    kinds: ["promotion"],
   },
   products: {
     heading: "Products",
@@ -40,23 +52,39 @@ const TAB_CONFIG: Record<string, { heading: string; create: string; empty: strin
     empty: "No products available",
     filters: [
       ["all", "All"],
-      ["service", "Services"],
+      ["service", "Treatments"],
       ["product", "Products"],
     ],
+    kinds: ["service", "product"],
   },
-  membership: {
-    heading: "Membership",
-    create: "Create membership",
-    empty: "No memberships available",
-    filters: [["all", "All"]],
-  },
-  rewards: {
-    heading: "Rewards",
-    create: "Create reward",
-    empty: "No rewards available",
-    filters: [["all", "All"]],
-  },
+  membership: { heading: "Membership", create: "Create membership", empty: "No memberships available", filters: [["all", "All"]], kinds: ["membershipPlan"] },
+  rewards: { heading: "Rewards", create: "Create reward", empty: "No rewards available", filters: [["all", "All"]], kinds: ["reward"] },
 };
+
+const KIND_LABEL: Record<ItemKind, string> = {
+  service: "treatment",
+  product: "product",
+  package: "custom plan",
+  promotion: "offer",
+  membershipPlan: "membership plan",
+  reward: "reward",
+  campaign: "campaign",
+};
+
+const SAVE: Partial<Record<ItemKind, (merchantId: string, id: string | null, fd: FormData) => ReturnType<typeof saveServiceAction>>> = {
+  service: saveServiceAction,
+  product: saveProductAction,
+  package: savePackageAction,
+  promotion: savePromotionAction,
+  membershipPlan: saveMembershipPlanAction,
+  reward: saveRewardAction,
+};
+
+type Editor =
+  | { mode: "closed" }
+  | { mode: "choose" }
+  | { mode: "loading"; kind: ItemKind; id: string | null }
+  | { mode: "open"; kind: ItemKind; id: string | null; item: Record<string, unknown> };
 
 export function CatalogTab({
   merchantId,
@@ -74,9 +102,14 @@ export function CatalogTab({
   items: CatalogItem[];
 }) {
   const router = useRouter();
-  const [creating, setCreating] = React.useState(false);
-  const [editing, setEditing] = React.useState<CatalogItem | null>(null);
   const config = TAB_CONFIG[tab] ?? TAB_CONFIG["custom-plans"]!;
+  const [editor, setEditor] = React.useState<Editor>({ mode: "closed" });
+  const [options, setOptions] = React.useState<FormOptions | null>(null);
+  const [errors, setErrors] = React.useState<FieldErrors>();
+  const [formError, setFormError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState<null | "save" | "toggle" | "archive">(null);
+  const [confirmArchive, setConfirmArchive] = React.useState(false);
+  const formRef = React.useRef<HTMLFormElement>(null);
 
   function navigate(next: Partial<{ q: string; type: string }>) {
     const merged = { q, type: typeFilter, ...next };
@@ -86,11 +119,102 @@ export function CatalogTab({
     router.push(`/m/${merchantId}/app-builder?${sp}`);
   }
 
+  const close = React.useCallback(() => {
+    setEditor({ mode: "closed" });
+    setErrors(undefined);
+    setFormError(null);
+    setConfirmArchive(false);
+  }, []);
+
+  async function open(kind: ItemKind, id: string | null) {
+    setErrors(undefined);
+    setFormError(null);
+    setConfirmArchive(false);
+    setEditor({ mode: "loading", kind, id });
+
+    const [opts, loaded] = await Promise.all([
+      options ? Promise.resolve(null) : getAppBuilderOptionsAction(merchantId, kind),
+      id ? getAppBuilderItemAction(merchantId, kind, id) : Promise.resolve(null),
+    ]);
+    if (opts && "error" in opts) {
+      toast.error(opts.error);
+      return close();
+    }
+    if (loaded && "error" in loaded) {
+      toast.error(loaded.error);
+      return close();
+    }
+    if (opts) setOptions(opts);
+    setEditor({ mode: "open", kind, id, item: loaded ? loaded.item : {} });
+  }
+
+  function startCreate() {
+    if (config.kinds.length > 1) setEditor({ mode: "choose" });
+    else void open(config.kinds[0]!, null);
+  }
+
+  async function save(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (editor.mode !== "open") return;
+    const action = SAVE[editor.kind];
+    if (!action) return;
+    setBusy("save");
+    setFormError(null);
+    const res = await action(merchantId, editor.id, new FormData(e.currentTarget));
+    setBusy(null);
+    if ("error" in res) {
+      setErrors(res.fieldErrors);
+      setFormError(res.error);
+      // Bring the first highlighted field into view.
+      requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>("[aria-invalid='true']")?.focus());
+      return;
+    }
+    toast.success(editor.id ? "Saved" : `${capitalise(KIND_LABEL[editor.kind])} created`);
+    setOptions(null); // categories and pickers may have changed
+    close();
+    router.refresh();
+  }
+
+  async function toggleActive() {
+    if (editor.mode !== "open" || !editor.id) return;
+    const next = !editor.item.active;
+    setBusy("toggle");
+    const res = await setItemActiveAction(merchantId, editor.kind, editor.id, next);
+    setBusy(null);
+    if ("error" in res) return toast.error(res.error);
+    toast.success(next ? "Now visible in the app" : "Hidden from the app");
+    close();
+    router.refresh();
+  }
+
+  async function archive() {
+    if (editor.mode !== "open" || !editor.id) return;
+    setBusy("archive");
+    const res = await archiveItemAction(merchantId, editor.kind, editor.id);
+    setBusy(null);
+    if ("error" in res) {
+      setConfirmArchive(false);
+      return toast.error(res.error);
+    }
+    toast.success("Removed");
+    close();
+    router.refresh();
+  }
+
+  const Form = editor.mode === "open" ? FORMS[editor.kind] : undefined;
+  const kindLabel = editor.mode === "open" || editor.mode === "loading" ? KIND_LABEL[editor.kind] : "item";
+  const title =
+    editor.mode === "choose"
+      ? config.create
+      : editor.mode === "open" && editor.id
+        ? String(editor.item.name ?? editor.item.title ?? `Edit ${kindLabel}`)
+        : `New ${kindLabel}`;
+
   return (
     <>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-[15px] font-semibold">{config.heading}</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -103,23 +227,29 @@ export function CatalogTab({
               name="q"
               defaultValue={q}
               placeholder="Search..."
+              aria-label={`Search ${config.heading}`}
               className="h-8 w-44 rounded-[10px] border border-border bg-surface pl-8 pr-3 text-[12px] outline-none focus-visible:ring-2 focus-visible:ring-primary"
             />
           </form>
-          <select
-            value={typeFilter}
-            onChange={(e) => navigate({ type: e.target.value })}
-            className="h-8 rounded-[10px] border border-border bg-surface px-2 text-[12px] outline-none"
-          >
-            {config.filters.map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <Button size="sm" onClick={() => setCreating(true)}>
-            <CirclePlus className="h-3.5 w-3.5" /> {config.create}
-          </Button>
+          {config.filters.length > 1 && (
+            <select
+              value={typeFilter}
+              onChange={(e) => navigate({ type: e.target.value })}
+              aria-label="Filter"
+              className="h-8 rounded-[10px] border border-border bg-surface px-2 text-[12px] outline-none"
+            >
+              {config.filters.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          )}
+          {!(tab === "offers" && typeFilter === "campaigns") && (
+            <Button size="sm" onClick={startCreate}>
+              <CirclePlus className="h-3.5 w-3.5" /> {config.create}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -129,21 +259,20 @@ export function CatalogTab({
         ) : (
           <ul className="divide-y divide-border">
             {items.map((item) => (
-              <li key={item.id}>
+              <li key={`${item.kind}-${item.id}`}>
                 <button
                   type="button"
-                  onClick={() => setEditing(item)}
-                  className="flex w-full items-center justify-between px-5 py-3.5 text-left hover:bg-app"
+                  onClick={() => (item.kind === "campaign" ? undefined : void open(item.kind, item.id))}
+                  disabled={item.kind === "campaign"}
+                  className="flex w-full items-center justify-between px-5 py-3.5 text-left hover:bg-app disabled:cursor-default disabled:hover:bg-transparent"
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-[13px] font-semibold">{item.name}</span>
                     <span className="block text-[11px] text-ink-muted">{item.meta}</span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
-                    {item.priceCents !== null && (
-                      <span className="tabular text-[13px] font-medium">{formatMoney(item.priceCents, currency)}</span>
-                    )}
-                    <Pill tone={item.active ? "green" : "neutral"}>{item.active ? "Active" : "Inactive"}</Pill>
+                    {item.priceCents !== null && <span className="tabular text-[13px] font-medium">{formatMoney(item.priceCents, currency)}</span>}
+                    <Pill tone={item.active ? "green" : "neutral"}>{item.active ? "Visible" : "Hidden"}</Pill>
                   </span>
                 </button>
               </li>
@@ -153,19 +282,91 @@ export function CatalogTab({
       </Panel>
 
       <Drawer
-        open={creating || !!editing}
-        onClose={() => {
-          setCreating(false);
-          setEditing(null);
-        }}
-        title={editing ? editing.name : config.create}
+        open={editor.mode !== "closed"}
+        onClose={close}
+        title={title}
+        width="max-w-xl"
+        footer={
+          editor.mode === "open" ? (
+            <div className="flex w-full flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {editor.id && !confirmArchive && (
+                  <>
+                    <Button type="button" variant="outline" size="sm" onClick={toggleActive} disabled={busy !== null}>
+                      {busy === "toggle" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      {editor.item.active ? "Hide from app" : "Show in app"}
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmArchive(true)} disabled={busy !== null}>
+                      Remove
+                    </Button>
+                  </>
+                )}
+                {confirmArchive && (
+                  <>
+                    <span className="text-[12px] text-ink-muted">Remove this {kindLabel}?</span>
+                    <Button type="button" variant="danger" size="sm" onClick={archive} disabled={busy !== null}>
+                      {busy === "archive" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      Remove
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmArchive(false)}>
+                      Keep
+                    </Button>
+                  </>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={close}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" form="app-builder-form" disabled={busy !== null}>
+                  {busy === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {editor.id ? "Save changes" : `Create ${kindLabel}`}
+                </Button>
+              </div>
+            </div>
+          ) : undefined
+        }
       >
-        <p className="text-[13px] text-ink-muted">
-          {editing
-            ? "Editing is wired to the existing catalogue actions; the form fields for this tab are not built out yet."
-            : "The create form for this tab is not built out yet."}
-        </p>
+        {editor.mode === "choose" && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {config.kinds.map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => void open(k, null)}
+                className="rounded-card border border-border p-4 text-left hover:border-primary hover:bg-primary-soft"
+              >
+                <span className="block text-[14px] font-semibold">{capitalise(KIND_LABEL[k])}</span>
+                <span className="mt-1 block text-[12px] text-ink-muted">
+                  {k === "service" ? "Something clients book an appointment for." : "Something clients buy and take home."}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {editor.mode === "loading" && (
+          <div className="flex h-40 items-center justify-center text-ink-muted">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        )}
+
+        {editor.mode === "open" && Form && options && (
+          <form id="app-builder-form" ref={formRef} onSubmit={save} noValidate>
+            {formError && (
+              <p role="alert" className="mb-4 rounded-[10px] bg-[var(--accent-red)]/10 px-3 py-2 text-[12px] text-[var(--accent-red)]">
+                {formError}
+              </p>
+            )}
+            {/* Remount per item so defaultValues reset between records. */}
+            <Form key={`${editor.kind}-${editor.id ?? "new"}`} merchantId={merchantId} currency={currency} item={editor.item} options={options} errors={errors} />
+          </form>
+        )}
       </Drawer>
     </>
   );
+}
+
+function capitalise(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
