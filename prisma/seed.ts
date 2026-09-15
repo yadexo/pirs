@@ -138,7 +138,7 @@ async function main() {
   // Clinic admin + staff
   // -------------------------------------------------------------------
   const adminUser = await db.user.create({
-    data: { tenantId, email: "admin@example.com", passwordHash: await hash(DEMO_PASSWORD), role: "TENANT_ADMIN" },
+    data: { tenantId, email: "clinic-admin@example.com", passwordHash: await hash(DEMO_PASSWORD), role: "TENANT_ADMIN" },
   });
   await db.staffProfile.create({
     data: { tenantId, userId: adminUser.id, firstName: "Jordan", lastName: "Reyes", title: "Clinic Director", active: true, activatedAt: new Date() },
@@ -621,7 +621,7 @@ async function main() {
   console.log("Seed complete.");
   console.log(`Tenant workspace: ${slug}`);
   console.log(`Platform admin: ${platformAdminEmail} / ${DEMO_PASSWORD}`);
-  console.log(`Clinic admin: admin@example.com / ${DEMO_PASSWORD}`);
+  console.log(`Clinic admin: clinic-admin@example.com / ${DEMO_PASSWORD}`);
   console.log(`Staff: alex.kim@example.com (and others) / ${DEMO_PASSWORD}`);
   console.log(`Sample customer: ${firstNames[0]!.toLowerCase()}.${lastNames[0]!.toLowerCase()}0@example.com / ${DEMO_PASSWORD}`);
 }

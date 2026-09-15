@@ -96,11 +96,13 @@ npm run seed
 
 Seed output prints the demo login credentials. Everything uses the password `Password123!`:
 
-| Portal | URL | Email |
+Start at `/`, which links to all three portals. Admin and Clinic share one sign-in at `/login`; the account's role decides where it lands.
+
+| Portal | Where | Email |
 | --- | --- | --- |
-| Customer | `/riverside-wellness/login` | `emma.johnson0@example.com` (or any other seeded customer) |
-| Staff/admin | `/admin/login` (workspace: `riverside-wellness`) | `admin@example.com` |
-| Platform admin | `/platform/login` | `platform-admin@example.com` |
+| Admin (agency) | `/login` → `/agency` | `platform-admin@example.com` |
+| Clinic | `/login` → `/m/:merchantId` | `clinic-admin@example.com` (staff: `alex.kim@example.com`) |
+| Client | `/app/riverside-wellness` | `emma.johnson0@example.com` (or any other seeded client) |
 
 ### 5. Run the dev server
 

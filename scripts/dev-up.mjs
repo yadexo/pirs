@@ -195,8 +195,8 @@ console.log(`
 
     npm run dev        → http://localhost:3000
 
-Demo logins (password: Password123!)
-    Customer        /riverside-wellness/login   emma.johnson0@example.com
-    Clinic admin    /admin/login                admin@example.com    (workspace: riverside-wellness)
-    Platform admin  /platform/login             platform-admin@example.com
+Demo logins (password: Password123!) — all three portals are linked from /
+    Admin           /login                      platform-admin@example.com
+    Clinic          /login                      clinic-admin@example.com
+    Client          /app/riverside-wellness     emma.johnson0@example.com
 `);

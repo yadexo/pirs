@@ -119,9 +119,9 @@ describe("resolveDestination", () => {
   });
 
   /**
-   * The seed has `admin@example.com` as a CLINIC admin and
-   * `platform-admin@example.com` as the agency one. Typing the former at the
-   * Admin door is the obvious mistake, and it used to sign you straight into
+   * The seed once named its clinic admin `admin@example.com`, next to
+   * `platform-admin@example.com`. Typing the former at the Admin door was the
+   * obvious mistake, and it used to sign you straight into
    * the clinic UI — which looked like the Admin section had been built as the
    * clinic. The door must refuse rather than reroute.
    */
