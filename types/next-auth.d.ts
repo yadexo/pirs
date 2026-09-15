@@ -13,6 +13,8 @@ export interface SessionUserShape {
   staffProfileId: string | null;
   customerProfileId: string | null;
   permissions: SessionPermissions;
+  /** When this session was created (ms). Compared with User.sessionsValidAfter. */
+  authTime?: number;
 }
 
 declare module "next-auth" {

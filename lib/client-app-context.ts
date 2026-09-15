@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { rawDb } from "@/lib/db";
 import { getTenantDb, type TenantDb } from "@/lib/tenant-db";
+import { loadLiveAccount } from "@/lib/live-account";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
 
 export interface ClientAppMerchant {
@@ -66,7 +67,10 @@ export async function getClientAppContext(merchantSlug: string): Promise<ClientA
 
   const session = await auth();
   const user = session?.user;
-  const isThisMerchantsCustomer = user?.role === "CUSTOMER" && user.tenantSlug === merchantSlug && !!user.customerProfileId;
+  // A closed account's session must not keep showing its data.
+  const live = user ? await loadLiveAccount(user.id, user.authTime) : null;
+  const isThisMerchantsCustomer =
+    live?.role === "CUSTOMER" && live.tenantId === tenant.id && user?.tenantSlug === merchantSlug && !!user.customerProfileId;
 
   return {
     merchant,

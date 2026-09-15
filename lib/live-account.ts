@@ -17,15 +17,17 @@ export interface LiveAccount {
  * write and page load instead. One indexed lookup.
  *
  * Returns null for anything that must not act: missing, suspended or deleted
- * accounts, and staff whose profile is missing or deactivated.
+ * accounts, staff whose profile is missing or deactivated, and sessions that
+ * began before the account's sessionsValidAfter.
  */
-export async function loadLiveAccount(userId: string): Promise<LiveAccount | null> {
+export async function loadLiveAccount(userId: string, authTime?: number): Promise<LiveAccount | null> {
   const user = await rawDb.user.findUnique({
     where: { id: userId },
     select: {
       role: true,
       status: true,
       tenantId: true,
+      sessionsValidAfter: true,
       staffProfile: {
         select: { active: true, role: { select: { permissions: { select: { permission: { select: { key: true } } } } } } },
       },
@@ -33,6 +35,8 @@ export async function loadLiveAccount(userId: string): Promise<LiveAccount | nul
   });
   if (!user || user.status !== "ACTIVE") return null;
   if (isBlockedStaff(user)) return null;
+  // Sessions from before a password reset or account closure are over.
+  if (user.sessionsValidAfter && (!authTime || authTime < user.sessionsValidAfter.getTime())) return null;
   return { role: user.role, tenantId: user.tenantId, permissions: permissionsFor(user) };
 }
 

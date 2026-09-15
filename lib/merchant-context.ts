@@ -31,7 +31,7 @@ export async function requireMerchantContext(merchantId: string): Promise<Mercha
   const session = await auth();
   const sessionUser = session?.user;
   if (!sessionUser) redirect("/login");
-  const live = await loadLiveAccount(sessionUser.id);
+  const live = await loadLiveAccount(sessionUser.id, sessionUser.authTime);
   // A session for an account that has since been deactivated. /login treats
   // it as signed out, so this cannot bounce back and forth.
   if (!live) redirect("/login?reason=access-changed");
@@ -84,7 +84,7 @@ export async function requireAgencyContext() {
   const session = await auth();
   const sessionUser = session?.user;
   if (!sessionUser) redirect("/login");
-  const live = await loadLiveAccount(sessionUser.id);
+  const live = await loadLiveAccount(sessionUser.id, sessionUser.authTime);
   if (!live) redirect("/login?reason=access-changed");
   const user = { ...sessionUser, ...live };
   if (user.role !== "PLATFORM_ADMIN") notFound();

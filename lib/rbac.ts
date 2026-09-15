@@ -1,6 +1,7 @@
 import "server-only";
 import { auth } from "@/auth";
 import { getTenantDb } from "@/lib/tenant-db";
+import { loadLiveAccount } from "@/lib/live-account";
 import type { PermissionKey } from "@/lib/permissions";
 import type { SessionUserShape } from "@/types/next-auth";
 
@@ -18,11 +19,18 @@ export class ForbiddenError extends Error {
   }
 }
 
-/** Throws if there is no signed-in user. */
+/**
+ * Throws unless there is a signed-in user whose account is still allowed to
+ * act. Role, clinic and permissions come from the database (see
+ * lib/live-account.ts), so every guard below — client and staff — stops a
+ * closed or deactivated account on its next request.
+ */
 export async function requireSession(): Promise<SessionUserShape> {
   const session = await auth();
   if (!session?.user) throw new UnauthorizedError();
-  return session.user;
+  const live = await loadLiveAccount(session.user.id, session.user.authTime);
+  if (!live) throw new UnauthorizedError("Your access has changed. Please sign in again.");
+  return { ...session.user, ...live };
 }
 
 /** Throws unless the signed-in user has one of the given roles. */

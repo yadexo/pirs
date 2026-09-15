@@ -12,11 +12,12 @@ export const authConfig = {
   // served from a known origin behind its own domain/proxy.
   trustHost: true,
   session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
-  pages: { signIn: "/admin/login" },
+  pages: { signIn: "/login" },
   providers: [],
   callbacks: {
     async jwt({ token, user }) {
-      if (user) Object.assign(token, user);
+      // `user` is only present at sign-in: stamp when this session began.
+      if (user) Object.assign(token, user, { authTime: Date.now() });
       return token;
     },
     async session({ session, token }) {
@@ -30,6 +31,7 @@ export const authConfig = {
         staffProfileId: token.staffProfileId,
         customerProfileId: token.customerProfileId,
         permissions: token.permissions,
+        authTime: token.authTime,
       } as never;
       return session;
     },

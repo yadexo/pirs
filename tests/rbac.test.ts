@@ -10,6 +10,12 @@ vi.mock("@/auth", () => ({ auth: authMock }));
 // so a lightweight stub keeps this test fast and DB-independent.
 vi.mock("@/lib/tenant-db", () => ({ getTenantDb: vi.fn(() => ({})) }));
 
+// requireSession re-reads the account from the database. These are unit tests
+// of the role and permission rules, so the live account mirrors the session;
+// the database-backed behaviour is covered in tests/integration/merchant-action.test.ts.
+const { liveMock } = vi.hoisted(() => ({ liveMock: vi.fn() }));
+vi.mock("@/lib/live-account", () => ({ loadLiveAccount: liveMock }));
+
 const { requireSession, requireRole, requirePermission, requireStaffContext, UnauthorizedError, ForbiddenError } = await import("@/lib/rbac");
 
 function makeUser(overrides: Partial<SessionUserShape> = {}): SessionUserShape {
@@ -29,9 +35,20 @@ function makeUser(overrides: Partial<SessionUserShape> = {}): SessionUserShape {
 
 beforeEach(() => {
   authMock.mockReset();
+  liveMock.mockReset();
+  liveMock.mockImplementation(async () => {
+    const session = await authMock();
+    return session?.user ? { role: session.user.role, tenantId: session.user.tenantId, permissions: session.user.permissions } : null;
+  });
 });
 
 describe("requireSession", () => {
+  it("throws UnauthorizedError when the account can no longer act, even with a valid session", async () => {
+    authMock.mockResolvedValue({ user: makeUser({ role: "TENANT_ADMIN", permissions: "ALL" }) });
+    liveMock.mockResolvedValue(null); // deactivated, closed, or signed in before a password reset
+    await expect(requireSession()).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+
   it("throws UnauthorizedError when there is no session", async () => {
     authMock.mockResolvedValue(null);
     await expect(requireSession()).rejects.toBeInstanceOf(UnauthorizedError);

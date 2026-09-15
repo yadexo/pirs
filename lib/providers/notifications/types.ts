@@ -5,5 +5,6 @@ export type NotificationSendResult = {
 };
 
 export interface ChannelProvider {
-  send(params: { to: string; subject?: string; body: string }): Promise<NotificationSendResult>;
+  /** `html` is optional; channels that cannot render it send `body`. */
+  send(params: { to: string; subject?: string; body: string; html?: string }): Promise<NotificationSendResult>;
 }

@@ -31,7 +31,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
   // A session whose account was deactivated since is treated as signed out;
   // otherwise the portals send it here and this page would send it back.
-  const live = session?.user ? await loadLiveAccount(session.user.id) : null;
+  const live = session?.user ? await loadLiveAccount(session.user.id, session.user.authTime) : null;
   if (session?.user && live) {
     const { tenantSlug } = session.user;
     const { role, tenantId } = live;
@@ -116,6 +116,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               <h1 className="text-[18px] font-semibold">Sign in</h1>
               <p className="mt-1 text-[13px] text-ink-muted">Enter your credentials to continue.</p>
             </>
+          )}
+          {reason === "password-updated" && (
+            <p role="status" className="mt-3 rounded-[10px] bg-primary-soft px-3 py-2 text-[12px] text-ink">
+              Password saved. Sign in with your new password.
+            </p>
           )}
           {(reason === "access-changed" || (session?.user && !live)) && (
             <p role="status" className="mt-3 rounded-[10px] bg-[var(--accent-amber)]/10 px-3 py-2 text-[12px] text-ink">

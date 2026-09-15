@@ -129,6 +129,28 @@ model TenantSettings {
   /// Drives the Home / Shop pay-later row in the client app.
   payLaterEnabled               Boolean  @default(false)
 
+  /// Shop banner in the client app. Empty = the app's default copy.
+  shopBannerHeadline            String?
+  shopBannerSubtitle            String?
+  shopBannerButtonLabel         String?
+
+  /// IN_APP books through the availability engine; EXTERNAL sends clients to
+  /// the clinic's own booking site.
+  bookingMode                   BookingMode @default(IN_APP)
+  externalBookingUrl            String?
+
+  /// "Review us on Google" row on the client's Rewards tab.
+  googleReviewUrl               String?
+
+  /// Listed in the general client app's clinic search. Off until the clinic opts in.
+  publiclyListed                Boolean  @default(false)
+
+  /// Automatic messages to clients. Each still respects the client's own consent.
+  notifyBookingConfirmations    Boolean  @default(true)
+  notifyAppointmentReminders    Boolean  @default(true)
+  notifyPointsEarned            Boolean  @default(true)
+  notifyMembershipBilling       Boolean  @default(true)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -189,6 +211,9 @@ model User {
   status       UserStatus @default(ACTIVE)
   emailVerifiedAt DateTime?
   lastLoginAt  DateTime?
+  /// Sessions created before this moment are refused. Set on password reset
+  /// and account closure, so an old or stolen session cannot outlive them.
+  sessionsValidAfter DateTime?
 
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -662,6 +687,11 @@ model CustomerPackage {
 // Memberships
 // ---------------------------------------------------------------------------
 
+enum BookingMode {
+  IN_APP
+  EXTERNAL
+}
+
 enum BillingFrequency {
   MONTHLY
   ANNUAL
@@ -802,6 +832,8 @@ model LoyaltyProgramme {
   pointsPerVisit         Int      @default(0)
   referralPoints         Int      @default(0)
   birthdayPoints         Int      @default(0)
+  /// Points for leaving a Google review; shown only if the clinic set a review link.
+  reviewPoints           Int      @default(0)
   pointsExpiryDays       Int?
   active                 Boolean  @default(true)
 

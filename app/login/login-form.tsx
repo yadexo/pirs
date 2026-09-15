@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { unifiedSignInAction } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,9 @@ export function LoginForm({ next }: { next?: string | null }) {
       <Button type="submit" loading={pending} className="w-full">
         Sign in
       </Button>
+      <Link href="/forgot-password" className="block text-center text-[12px] text-ink-muted underline underline-offset-2 hover:text-ink">
+        Forgot password?
+      </Link>
     </form>
   );
 }

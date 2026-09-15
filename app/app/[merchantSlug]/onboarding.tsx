@@ -64,6 +64,12 @@ function SignInForm({ merchantSlug }: { merchantSlug: string }) {
       <BlackButton type="submit" loading={pending} className="w-full">
         Sign in
       </BlackButton>
+      <a
+        href={`/forgot-password?clinic=${encodeURIComponent(merchantSlug)}`}
+        style={{ display: "block", textAlign: "center", fontSize: 14, color: "var(--muted)", textDecoration: "underline", paddingTop: 4 }}
+      >
+        Forgot password?
+      </a>
     </form>
   );
 }

@@ -614,7 +614,9 @@ export async function clientDeleteAccountAction(slug: string): Promise<{ ok: tru
     where: { id: user.customerProfileId! },
     data: { marketingConsent: false, emailConsent: false, smsConsent: false, pushConsent: false },
   });
-  await rawDb.user.update({ where: { id: user.id }, data: { status: "DISABLED" } });
+  // Disabled accounts are refused on every request; sessionsValidAfter keeps
+  // sessions from before the closure dead even if the account is reopened.
+  await rawDb.user.update({ where: { id: user.id }, data: { status: "DISABLED", sessionsValidAfter: new Date() } });
 
   await writeAuditLog({
     tenantId: user.tenantId,

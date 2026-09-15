@@ -47,7 +47,7 @@ export async function requireMerchantAction(merchantId: string, need: MerchantRe
   if (!sessionUser) throw new ActionError("Please sign in again.");
   // Role, clinic and permissions come from the database, not the 30-day token:
   // a deactivated account or a removed permission stops working immediately.
-  const live = await loadLiveAccount(sessionUser.id);
+  const live = await loadLiveAccount(sessionUser.id, sessionUser.authTime);
   if (!live) throw new ActionError("Please sign in again.");
   const user: SessionUserShape = { ...sessionUser, ...live };
 
