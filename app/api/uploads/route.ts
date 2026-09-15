@@ -6,7 +6,7 @@ import { rateLimit } from "@/lib/rate-limit";
 export async function POST(req: NextRequest) {
   const { user } = await requireStaffContext();
 
-  const { ok } = rateLimit(`upload:${user.id}`, 30, 60 * 1000);
+  const { ok } = await rateLimit(`upload:${user.id}`, 30, 60 * 1000);
   if (!ok) return NextResponse.json({ error: "Too many uploads. Slow down." }, { status: 429 });
 
   const formData = await req.formData();

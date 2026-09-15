@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: app_user
+          POSTGRES_PASSWORD: app_password
+          POSTGRES_DB: app_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U app_user -d app_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://app_user:app_password@localhost:5432/app_test
+      AUTH_SECRET: ci-only-not-a-real-secret-0123456789abcdef
+      PAYMENT_PROVIDER: mock
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Start MinIO
+        run: |
+          docker run -d --name ci-minio -p 9001:9000 \
+            -e MINIO_ROOT_USER=minio_user -e MINIO_ROOT_PASSWORD=minio_password \
+            quay.io/minio/minio:latest server /data
+          for i in $(seq 1 30); do curl -sf http://localhost:9001/minio/health/live && break; sleep 2; done
+
+      - name: Prepare test database
+        run: |
+          npx prisma generate
+          npx prisma migrate deploy
+          printf 'DATABASE_URL=%s\nAUTH_SECRET=%s\n' "$DATABASE_URL" "$AUTH_SECRET" > .env.test
+
+      - run: npm run lint
+      - run: npm run typecheck
+
+      - name: Test
+        run: npm test
+        env:
+          S3_TEST_ENDPOINT: http://localhost:9001
+
+      - name: Build
+        run: npm run build

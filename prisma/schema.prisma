@@ -108,7 +108,7 @@ model TenantBranding {
   privacyContent    String?
   cancellationPolicy String?
 
-  currency          String   @default("USD")
+  currency          String   @default("EUR")
   timeZone          String   @default("America/New_York")
 
   createdAt         DateTime @default(now())
@@ -1094,7 +1094,7 @@ model Order {
   loyaltyDiscountCents   Int             @default(0)
   loyaltyPointsRedeemed  Int             @default(0)
   totalCents             Int
-  currency               String          @default("USD")
+  currency               String          @default("EUR")
   promotionId            String?
   promotion              Promotion?      @relation(fields: [promotionId], references: [id], onDelete: SetNull)
   promotionCode          String?
@@ -1162,7 +1162,7 @@ model Payment {
   provider              PaymentProviderName   @default(MOCK)
   providerPaymentId     String?
   amountCents           Int
-  currency              String                @default("USD")
+  currency              String                @default("EUR")
   status                PaymentStatus         @default(PROCESSING)
   failureReason         String?
   method                String?
@@ -1501,4 +1501,15 @@ model AgencySettings {
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+/// Fixed-window rate-limit counters. Kept in Postgres rather than process
+/// memory so a limit holds across every server instance. Expired rows are
+/// swept by the `cleanup` cron job.
+model RateLimitBucket {
+  key     String   @id
+  count   Int
+  resetAt DateTime
+
+  @@index([resetAt])
 }

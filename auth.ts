@@ -40,7 +40,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!portal || !email || !password) return null;
 
         const limitKey = `login:${portal}:${email}`;
-        const { ok } = rateLimit(limitKey, 10, 10 * 60 * 1000);
+        const { ok } = await rateLimit(limitKey, 10, 10 * 60 * 1000);
         if (!ok) throw new Error("Too many sign-in attempts. Try again in a few minutes.");
 
         const include = {

@@ -1,12 +1,14 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { IMPERSONATION_MAX_MS } from "@/lib/impersonation-policy";
 import { redirect } from "next/navigation";
 import { rawDb } from "@/lib/db";
 import { requireRole } from "@/lib/rbac";
 
 // Not exported: a "use server" module may only export async functions.
 const IMPERSONATION_COOKIE = "impersonate_merchant";
+
 const SESSION_ID_COOKIE = "impersonate_session";
 
 /**
@@ -25,7 +27,13 @@ export async function startImpersonationAction(merchantId: string) {
   });
 
   const jar = await cookies();
-  jar.set(IMPERSONATION_COOKIE, merchantId, { httpOnly: true, sameSite: "lax", path: "/" });
+  jar.set(IMPERSONATION_COOKIE, merchantId, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: IMPERSONATION_MAX_MS / 1000,
+  });
   jar.set(SESSION_ID_COOKIE, session.id, { httpOnly: true, sameSite: "lax", path: "/" });
 
   redirect(`/m/${merchantId}`);

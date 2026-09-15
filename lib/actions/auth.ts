@@ -53,9 +53,8 @@ export async function unifiedSignInAction(_prevState: unknown, formData: FormDat
   if (user) {
     const actor = { role: user.role, tenantId: user.tenantId, tenantSlug: user.tenant?.slug ?? null };
     // Signing in at a door this account cannot open — say so, rather than
-    // dropping them into a different portal. `admin@example.com` is a clinic
-    // admin, so typing it at the Admin door used to land silently in the
-    // clinic UI. Bounce back to the same door, where the page explains it.
+    // dropping them into a different portal — a clinic admin who signs in at the
+    // Admin door used to land silently in the clinic UI. Bounce back to the same door, where the page explains it.
     // Checked only after the password succeeds, so it cannot be used to
     // discover which addresses exist or what role they hold.
     destination = canReach(actor, next) ? resolveDestination(actor, next) : `/login?next=${encodeURIComponent(next!)}`;
@@ -87,7 +86,7 @@ export async function customerRegisterAction(tenantSlug: string, _prevState: unk
   }
   const { firstName, lastName, email, phone, password, marketingConsent } = parsed.data;
 
-  const { ok } = rateLimit(`register:${tenantSlug}:${email.toLowerCase()}`, 5, 15 * 60 * 1000);
+  const { ok } = await rateLimit(`register:${tenantSlug}:${email.toLowerCase()}`, 5, 15 * 60 * 1000);
   if (!ok) return { error: "Too many attempts. Try again later." };
 
   const tenant = await rawDb.tenant.findUnique({ where: { slug: tenantSlug } });
