@@ -1,5 +1,6 @@
 import "server-only";
 import type { TenantDb } from "@/lib/tenant-db";
+import { rawDb } from "@/lib/db";
 
 /**
  * Awards loyalty points for a paid order, respecting the tenant's
@@ -38,6 +39,24 @@ export async function awardPointsForOrder(
   });
 }
 
+/** Thrown when a deduction would take a client's balance below zero. */
+export class InsufficientPointsError extends Error {
+  constructor() {
+    super("Not enough points.");
+    this.name = "InsufficientPointsError";
+  }
+}
+
+/**
+ * Adds (or, with a negative number, deducts) points and writes the ledger row,
+ * atomically.
+ *
+ * The balance changes in one conditional UPDATE — never read, then written
+ * back — so two awards at the same moment both count, and two redemptions
+ * cannot both spend the same points: the second finds the balance too low and
+ * throws InsufficientPointsError. The ledger row records the balance that
+ * UPDATE produced, in the same transaction.
+ */
 export async function adjustLoyaltyPoints(
   db: TenantDb,
   params: {
@@ -50,20 +69,27 @@ export async function adjustLoyaltyPoints(
     performedByStaffProfileId?: string;
     expiresAt?: Date | null;
   },
-) {
-  const profile = await db.customerProfile.findFirst({ where: { id: params.customerProfileId } });
+): Promise<number> {
+  if (!Number.isInteger(params.points)) throw new Error("Points must be a whole number.");
+  // Resolved through the tenant-scoped client, so a profile from another clinic is "not found".
+  const profile = await db.customerProfile.findFirst({ where: { id: params.customerProfileId }, select: { id: true, tenantId: true } });
   if (!profile) throw new Error("Customer not found.");
 
-  const balanceAfter = profile.loyaltyPointsBalance + params.points;
+  return rawDb.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<{ balance: number }[]>`
+      UPDATE "CustomerProfile"
+      SET "loyaltyPointsBalance" = "loyaltyPointsBalance" + ${params.points}, "updatedAt" = NOW()
+      WHERE "id" = ${profile.id} AND "tenantId" = ${profile.tenantId}
+        AND "loyaltyPointsBalance" + ${params.points} >= 0
+      RETURNING "loyaltyPointsBalance" AS balance
+    `;
+    if (rows.length === 0) throw new InsufficientPointsError();
+    const balanceAfter = Number(rows[0]!.balance);
 
-  await db.$transaction([
-    db.customerProfile.updateMany({
-      where: { id: params.customerProfileId },
-      data: { loyaltyPointsBalance: balanceAfter },
-    }),
-    db.loyaltyTransaction.create({
+    await tx.loyaltyTransaction.create({
       data: {
-        customerProfileId: params.customerProfileId,
+        tenantId: profile.tenantId,
+        customerProfileId: profile.id,
         type: params.type,
         points: params.points,
         balanceAfter,
@@ -72,11 +98,10 @@ export async function adjustLoyaltyPoints(
         relatedRewardId: params.relatedRewardId,
         performedByStaffProfileId: params.performedByStaffProfileId,
         expiresAt: params.expiresAt ?? undefined,
-      } as never,
-    }),
-  ]);
-
-  return balanceAfter;
+      },
+    });
+    return balanceAfter;
+  });
 }
 
 export function rewardDiscountCents(

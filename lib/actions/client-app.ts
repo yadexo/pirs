@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireCustomerContext } from "@/lib/rbac";
 import { rawDb } from "@/lib/db";
 import { getAvailableSlots } from "@/lib/availability";
-import { adjustLoyaltyPoints, rewardDiscountCents } from "@/lib/loyalty";
+import { adjustLoyaltyPoints, InsufficientPointsError, rewardDiscountCents } from "@/lib/loyalty";
 import { getPaymentProvider } from "@/lib/providers/payments";
 import { writeAuditLog } from "@/lib/audit";
 import { nanoid } from "nanoid";
@@ -311,6 +311,57 @@ export async function clientCheckoutAction(
     include: { items: true },
   });
 
+  // Reserve points and stock before charging. Each is an atomic conditional
+  // update, so two clients cannot both take the last item and two checkouts
+  // cannot spend the same points. Anything reserved is released if a later
+  // step fails, so a failed checkout leaves balances and stock unchanged.
+  const reserved = { points: 0, stock: [] as { productId: string; quantity: number }[] };
+  const release = async () => {
+    for (const r of reserved.stock) {
+      await db.product.updateMany({ where: { id: r.productId }, data: { inventoryQuantity: { increment: r.quantity } } });
+    }
+    if (reserved.points > 0) {
+      await adjustLoyaltyPoints(db, {
+        customerProfileId: user.customerProfileId!,
+        points: reserved.points,
+        type: "REFUNDED",
+        reason: `Order ${orderNumber} did not complete`,
+        relatedOrderId: order.id,
+      });
+    }
+  };
+  const abandon = async (message: string) => {
+    await release();
+    await db.order.updateMany({ where: { id: order.id }, data: { status: "FAILED" } });
+    return { error: message };
+  };
+
+  if (pointsRedeemed > 0) {
+    try {
+      await adjustLoyaltyPoints(db, {
+        customerProfileId: user.customerProfileId!,
+        points: -pointsRedeemed,
+        type: "REDEEMED",
+        reason: `Redeemed on order ${orderNumber}`,
+        relatedOrderId: order.id,
+        relatedRewardId: rewardId ?? undefined,
+      });
+      reserved.points = pointsRedeemed;
+    } catch (err) {
+      if (err instanceof InsufficientPointsError) return abandon("Not enough points for that reward.");
+      throw err;
+    }
+  }
+  for (const i of items) {
+    if (i.itemType !== "PRODUCT" || !i.productId) continue;
+    const taken = await db.product.updateMany({
+      where: { id: i.productId, inventoryQuantity: { gte: i.quantity } },
+      data: { inventoryQuantity: { decrement: i.quantity } },
+    });
+    if (taken.count === 0) return abandon(`${i.product?.name ?? "An item"} just sold out.`);
+    reserved.stock.push({ productId: i.productId, quantity: i.quantity });
+  }
+
   const intent = await provider.createIntent({
     amountCents: totalCents,
     currency,
@@ -332,28 +383,15 @@ export async function clientCheckoutAction(
   });
 
   if (intent.status !== "SUCCEEDED") {
-    await db.order.updateMany({ where: { id: order.id }, data: { status: "FAILED" } });
     // Basket intentionally stays OPEN so the client can retry.
-    return { error: intent.failureReason ?? "Payment failed. Please try another method." };
+    return abandon(intent.failureReason ?? "Payment failed. Please try another method.");
   }
 
   await db.order.updateMany({ where: { id: order.id }, data: { status: "PAID", paidAt: new Date() } });
 
-  if (pointsRedeemed > 0) {
-    await adjustLoyaltyPoints(db, {
-      customerProfileId: user.customerProfileId!,
-      points: -pointsRedeemed,
-      type: "REDEEMED",
-      reason: `Redeemed on order ${orderNumber}`,
-      relatedOrderId: order.id,
-      relatedRewardId: rewardId ?? undefined,
-    });
-  }
-
-  // Decrement stock and record the movement so the clinic's inventory is right.
+  // Stock was already taken above; record the movements now the sale stands.
   for (const i of items) {
     if (i.itemType === "PRODUCT" && i.productId) {
-      await db.product.updateMany({ where: { id: i.productId }, data: { inventoryQuantity: { decrement: i.quantity } } });
       await db.inventoryTransaction.create({
         data: { productId: i.productId, type: "SALE", quantityChange: -i.quantity, reason: `Order ${orderNumber}` } as never,
       });
@@ -400,13 +438,19 @@ export async function clientRedeemRewardAction(
     return { error: `You need ${reward.pointsCost - (profile?.loyaltyPointsBalance ?? 0)} more points.` };
   }
 
-  await adjustLoyaltyPoints(db, {
-    customerProfileId: user.customerProfileId!,
-    points: -reward.pointsCost,
-    type: "REDEEMED",
-    reason: `Redeemed reward: ${reward.name}`,
-    relatedRewardId: reward.id,
-  });
+  try {
+    await adjustLoyaltyPoints(db, {
+      customerProfileId: user.customerProfileId!,
+      points: -reward.pointsCost,
+      type: "REDEEMED",
+      reason: `Redeemed reward: ${reward.name}`,
+      relatedRewardId: reward.id,
+    });
+  } catch (err) {
+    // Another redemption spent the points between the check above and now.
+    if (err instanceof InsufficientPointsError) return { error: "You don't have enough points for this reward any more." };
+    throw err;
+  }
 
   const code = `RW-${nanoid(6).toUpperCase()}`;
 
