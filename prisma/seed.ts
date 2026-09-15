@@ -83,6 +83,7 @@ async function main() {
           appointmentCancellationHours: 24,
           appointmentReminderHours: 24,
           membershipMaxPauseMonths: 2,
+          publiclyListed: true,
         },
       },
     },

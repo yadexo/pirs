@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useActionState } from "react";
+import { useSearchParams } from "next/navigation";
 import { BlackButton } from "@/components/client-app/primitives";
 import { customerSignInAction, customerRegisterAction } from "@/lib/actions/auth";
 
@@ -17,7 +18,9 @@ const field =
  * same either way.
  */
 export function Onboarding({ merchantSlug, merchantName, logoUrl }: { merchantSlug: string; merchantName: string; logoUrl: string | null }) {
-  const [mode, setMode] = React.useState<"signin" | "register">("signin");
+  // Clinic posters link with ?join=1: someone scanning one is usually new.
+  const joining = useSearchParams().get("join") === "1";
+  const [mode, setMode] = React.useState<"signin" | "register">(joining ? "register" : "signin");
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center px-8">

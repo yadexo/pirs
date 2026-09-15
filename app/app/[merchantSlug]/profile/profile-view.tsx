@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Sheet, Icon, EmptyState, money, useToast } from "@/components/client-app/ui";
-import { signOutAction } from "@/lib/actions/session";
+import { signOutOfClinicAction } from "@/lib/actions/session";
 import {
   clientSaveProfileAction,
   clientSaveConsentAction,
@@ -294,8 +295,12 @@ export function ProfileView({
             <SettingRow label="Language" onClick={() => setSheet("language")} />
             <SettingRow label="Help & support" onClick={() => setSheet("help")} />
             <SettingRow label="Terms & privacy" onClick={() => setSheet("legal")} />
+            <Link className="setrow" href="/app?switch=1" prefetch={false}>
+              <span>Switch clinic</span>
+              <Icon name="chevR" size={20} />
+            </Link>
             <SettingRow label="Delete account" danger onClick={() => setSheet("delete")} />
-            <form action={signOutAction}>
+            <form action={signOutOfClinicAction.bind(null, merchantSlug)}>
               <button type="submit" className="setrow" style={{ justifyContent: "space-between" }}>
                 <span>Log out</span>
                 <Icon name="exit" size={20} />
@@ -430,7 +435,7 @@ export function ProfileView({
               setPending(true);
               await clientDeleteAccountAction(merchantSlug);
               setPending(false);
-              await signOutAction();
+              await signOutOfClinicAction(merchantSlug);
             }}
           >
             Delete my account

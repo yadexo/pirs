@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import { NextResponse, type NextRequest } from "next/server";
 import { authConfig } from "@/auth.config";
+import { LAST_CLINIC_COOKIE, slugFromAppPath } from "@/lib/clinic-link";
 
 const { auth } = NextAuth(authConfig);
 
@@ -95,10 +96,20 @@ export default auth((req) => {
     return withPathname(req);
   }
 
+  // --- client app: remember the clinic, so /app reopens it next time ------
+  if (pathname.startsWith("/app/")) {
+    const res = withPathname(req);
+    const slug = slugFromAppPath(pathname);
+    if (slug && req.cookies.get(LAST_CLINIC_COOKIE)?.value !== slug) {
+      res.cookies.set(LAST_CLINIC_COOKIE, slug, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365, secure: req.nextUrl.protocol === "https:" });
+    }
+    return res;
+  }
+
   return withPathname(req);
 });
 
 export const config = {
   // "/" is the portal index and needs no auth, so middleware skips it.
-  matcher: ["/admin/:path*", "/platform/:path*", "/agency/:path*", "/m/:path*", "/login"],
+  matcher: ["/admin/:path*", "/platform/:path*", "/agency/:path*", "/m/:path*", "/login", "/app/:path*"],
 };

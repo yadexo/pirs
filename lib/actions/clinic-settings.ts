@@ -8,6 +8,7 @@ import { issuePasswordToken, INVITE_TTL_MS } from "@/lib/password-tokens";
 import { getEmailProvider } from "@/lib/providers/notifications";
 import { isPermissionKey } from "@/lib/permissions";
 import { WEEKDAYS, type OpeningHours } from "@/lib/opening-hours";
+import { appUrl } from "@/lib/app-url";
 
 /**
  * App Builder → Settings. Each section saves through one action here, named
@@ -210,10 +211,6 @@ export async function saveBrandingAction(merchantId: string, fd: FormData): Prom
 // ---------------------------------------------------------------------------
 // Team
 // ---------------------------------------------------------------------------
-
-function appUrl() {
-  return (process.env.APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
-}
 
 async function sendInvite(merchantId: string, userId: string, email: string, firstName: string) {
   const token = await issuePasswordToken(userId, INVITE_TTL_MS);

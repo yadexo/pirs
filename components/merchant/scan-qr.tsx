@@ -13,6 +13,7 @@ import {
   type CheckInTarget,
   type ClientCard,
 } from "@/lib/actions/check-in";
+import { useQrCamera, type CameraProblem } from "@/components/use-qr-camera";
 
 type Stage =
   | { kind: "scanning" }
@@ -176,92 +177,17 @@ function CheckInFlow({ merchantId, onClose }: { merchantId: string; onClose: () 
   );
 }
 
-type Detector = { detect: (source: CanvasImageSource) => Promise<{ rawValue: string }[]> };
+const CAMERA_PROBLEMS: Record<CameraProblem, string> = {
+  unsupported: "This browser can't use a camera here. Find the client by name instead.",
+  denied: "Camera access was blocked. Allow it in the browser's site settings, or find the client by name.",
+  missing: "No camera found. Find the client by name instead.",
+};
 
-/**
- * Reads QR codes from the camera. Uses the browser's own BarcodeDetector when
- * it has one, and falls back to jsQR (loaded only then) — iPhone Safari, the
- * likeliest front-desk device, has no BarcodeDetector.
- */
+/** The front-desk camera. iPhone Safari, the likeliest device, uses the jsQR fallback. */
 function CameraScanner({ onCode, onUnavailable }: { onCode: (value: string) => void; onUnavailable: () => void }) {
   const videoRef = React.useRef<HTMLVideoElement>(null);
-  const [problem, setProblem] = React.useState<string | null>(null);
-  const [starting, setStarting] = React.useState(true);
-
-  React.useEffect(() => {
-    let stream: MediaStream | null = null;
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    async function start() {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setProblem("This browser can't use a camera here. Find the client by name instead.");
-        setStarting(false);
-        return;
-      }
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
-      } catch (err) {
-        const denied = err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "SecurityError");
-        setProblem(denied ? "Camera access was blocked. Allow it in the browser's site settings, or find the client by name." : "No camera found. Find the client by name instead.");
-        setStarting(false);
-        return;
-      }
-      if (stopped) return stream.getTracks().forEach((t) => t.stop());
-      const video = videoRef.current!;
-      video.srcObject = stream;
-      await video.play().catch(() => {});
-      setStarting(false);
-
-      const Native = (window as unknown as { BarcodeDetector?: new (o: { formats: string[] }) => Detector }).BarcodeDetector;
-      let detector: Detector | null = null;
-      if (Native) {
-        try {
-          detector = new Native({ formats: ["qr_code"] });
-        } catch {
-          detector = null;
-        }
-      }
-      const jsQR = detector ? null : (await import("jsqr")).default;
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-
-      async function tick() {
-        if (stopped) return;
-        try {
-          if (video.readyState >= 2) {
-            let value: string | undefined;
-            if (detector) {
-              value = (await detector.detect(video))[0]?.rawValue;
-            } else if (jsQR && ctx) {
-              // Downscale: plenty of pixels for a phone-screen QR, far less work.
-              const scale = Math.min(1, 640 / (video.videoWidth || 640));
-              canvas.width = Math.round(video.videoWidth * scale);
-              canvas.height = Math.round(video.videoHeight * scale);
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              value = jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height)?.data;
-            }
-            if (value) {
-              stopped = true;
-              onCode(value);
-              return;
-            }
-          }
-        } catch {
-          /* a bad frame; try the next one */
-        }
-        timer = setTimeout(tick, 150);
-      }
-      void tick();
-    }
-
-    void start();
-    return () => {
-      stopped = true;
-      if (timer) clearTimeout(timer);
-      stream?.getTracks().forEach((t) => t.stop());
-    };
-  }, [onCode]);
+  const { problem: problemKind, starting } = useQrCamera(videoRef, onCode);
+  const problem = problemKind ? CAMERA_PROBLEMS[problemKind] : null;
 
   if (problem) {
     return (

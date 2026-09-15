@@ -7,16 +7,13 @@ import { rawDb } from "@/lib/db";
 import { rateLimit } from "@/lib/rate-limit";
 import { getEmailProvider } from "@/lib/providers/notifications";
 import { consumePasswordToken, issuePasswordToken, MIN_PASSWORD_LENGTH, RESET_TTL_MS } from "@/lib/password-tokens";
+import { appUrl } from "@/lib/app-url";
 
 type FormState = { error?: string; sent?: boolean } | undefined;
 
 async function clientIp() {
   const h = await headers();
   return h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "unknown";
-}
-
-function appUrl() {
-  return (process.env.APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
 }
 
 /**

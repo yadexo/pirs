@@ -3,6 +3,8 @@ import { rawDb } from "@/lib/db";
 import type { TenantDb } from "@/lib/tenant-db";
 import type { SettingsSection } from "@/lib/nav";
 import { PERMISSIONS } from "@/lib/permissions";
+import { clinicJoinUrl } from "@/lib/app-url";
+import { qrSvg } from "@/lib/qr";
 
 /**
  * Loads only what the open Settings section needs. Everything crossing to the
@@ -13,8 +15,13 @@ export async function loadSettingsSection(db: TenantDb, merchantId: string, sect
 
   switch (section) {
     case "general": {
-      const [settings, branding] = await Promise.all([db.tenantSettings.findFirst({ where: {} }), db.tenantBranding.findFirst({ where: {} })]);
-      return plain({ section, settings, branding });
+      const [settings, branding, tenant] = await Promise.all([
+        db.tenantSettings.findFirst({ where: {} }),
+        db.tenantBranding.findFirst({ where: {} }),
+        rawDb.tenant.findUniqueOrThrow({ where: { id: merchantId }, select: { slug: true } }),
+      ]);
+      const joinUrl = clinicJoinUrl(tenant.slug);
+      return plain({ section, settings, branding, appLink: { url: joinUrl, qrSvg: qrSvg(joinUrl, { margin: 2 }) } });
     }
     case "branding": {
       const branding = await db.tenantBranding.findFirst({ where: {} });

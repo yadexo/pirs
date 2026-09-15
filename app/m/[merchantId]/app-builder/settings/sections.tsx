@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, Loader2, Plus } from "lucide-react";
+import { Check, Copy, Download, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Drawer, Pill } from "@/components/ui/primitives";
@@ -100,10 +100,55 @@ function SettingsForm({
 // General
 // ---------------------------------------------------------------------------
 
+/**
+ * The clinic's own link and QR code. Posters and the front desk use it; it
+ * opens the clinic's app and offers sign-up, whether or not the clinic is
+ * listed in search.
+ */
+function AppLinkCard({ merchantId, url, qrSvg }: { merchantId: string; url: string; qrSvg: string }) {
+  const [copied, setCopied] = React.useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Couldn't copy. Select the link and copy it instead.");
+    }
+  }
+  return (
+    <FormSection title="Your app link">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        {/* Generated on the server from our own URL — not user-supplied markup. */}
+        <div className="h-36 w-36 shrink-0 rounded-[10px] border border-border bg-surface p-1" dangerouslySetInnerHTML={{ __html: qrSvg }} />
+        <div className="min-w-0 space-y-3">
+          <p className="text-[13px] text-ink-muted">Clients scan this code or open the link to get your app, then add it to their home screen with your icon.</p>
+          <p className="truncate rounded-[8px] bg-app px-3 py-2 font-mono text-[12px] text-ink" title={url}>{url}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={copy}>
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? "Copied" : "Copy link"}
+            </Button>
+            <a
+              href={`/m/${merchantId}/app-qr`}
+              download
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-pill border border-border bg-surface px-4 text-[13px] font-medium text-ink transition-colors hover:bg-app"
+            >
+              <Download className="h-3.5 w-3.5" /> Download QR (PNG)
+            </a>
+          </div>
+        </div>
+      </div>
+    </FormSection>
+  );
+}
+
 export function GeneralSection({ merchantId, data, canEdit }: { merchantId: string; data: Data<"general">; canEdit: boolean }) {
   const s = data.settings;
   const b = data.branding;
   return (
+    <div className="space-y-8">
+    <AppLinkCard merchantId={merchantId} url={data.appLink.url} qrSvg={data.appLink.qrSvg} />
     <SettingsForm merchantId={merchantId} save={saveGeneralSettingsAction} canEdit={canEdit}>
       {(errors) => (
         <>
@@ -145,6 +190,7 @@ export function GeneralSection({ merchantId, data, canEdit }: { merchantId: stri
         </>
       )}
     </SettingsForm>
+    </div>
   );
 }
 
