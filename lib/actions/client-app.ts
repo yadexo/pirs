@@ -10,6 +10,7 @@ import { getPaymentProvider } from "@/lib/providers/payments";
 import { writeAuditLog } from "@/lib/audit";
 import { nanoid } from "nanoid";
 import { tenantCurrency } from "@/lib/currency";
+import { recordActivity } from "@/lib/activity";
 
 /**
  * Every mutating action the patient app can perform.
@@ -114,6 +115,11 @@ export async function clientBookAction(
     });
   }
 
+  await recordActivity(db, {
+    type: "BOOKING",
+    customerProfileId: user.customerProfileId,
+    summary: `${input.appointmentId ? "Rescheduled" : "Booked"} ${service.name}`,
+  });
   revalidateClient(slug);
   return { ok: true, when: startAt.toISOString() };
 }
@@ -136,6 +142,7 @@ export async function clientCancelAppointmentAction(slug: string, appointmentId:
     data: { status: "CANCELLED", cancelledAt: new Date(), cancelledBy: "CUSTOMER" },
   });
 
+  await recordActivity(db, { type: "BOOKING_CANCELLED", customerProfileId: user.customerProfileId, summary: "Cancelled an appointment" });
   revalidateClient(slug);
   return { ok: true };
 }
@@ -416,6 +423,13 @@ export async function clientCheckoutAction(
 
   await db.basket.updateMany({ where: { id: basket.id }, data: { status: "CONVERTED" } });
 
+  await recordActivity(db, {
+    type: "PURCHASE",
+    customerProfileId: user.customerProfileId,
+    summary: `Paid for order ${orderNumber}`,
+    amountCents: totalCents,
+    points: pointsEarned || null,
+  });
   revalidateClient(slug);
   return { ok: true, orderNumber, pointsEarned, totalCents };
 }
@@ -463,45 +477,16 @@ export async function clientRedeemRewardAction(
     } as never,
   });
 
+  await recordActivity(db, {
+    type: "REWARD_REDEEMED",
+    customerProfileId: user.customerProfileId,
+    summary: `Redeemed ${reward.name}`,
+    points: -reward.pointsCost,
+  });
   revalidateClient(slug);
   return { ok: true, code, name: reward.name };
 }
 
-/**
- * Clinic check-in from the Scan tab. Guarded to once per day so a client
- * cannot farm visit points by re-scanning.
- */
-export async function clientCheckInAction(slug: string): Promise<{ error: string } | { ok: true; points: number }> {
-  const { db, user } = await requireCustomerContext();
-
-  const programme = await db.loyaltyProgramme.findFirst({ where: {} });
-  const award = programme?.pointsPerVisit ?? 0;
-
-  const since = new Date();
-  since.setHours(0, 0, 0, 0);
-  const already = await db.loyaltyTransaction.findFirst({
-    where: { customerProfileId: user.customerProfileId!, reason: "Clinic check-in", createdAt: { gte: since } },
-  });
-  if (already) return { error: "You've already checked in today." };
-
-  const profile = await db.customerProfile.findFirst({ where: { id: user.customerProfileId! } });
-  await db.customerProfile.updateMany({
-    where: { id: user.customerProfileId! },
-    data: { visitCount: (profile?.visitCount ?? 0) + 1, lastVisitAt: new Date() },
-  });
-
-  if (award > 0) {
-    await adjustLoyaltyPoints(db, {
-      customerProfileId: user.customerProfileId!,
-      points: award,
-      type: "EARNED",
-      reason: "Clinic check-in",
-    });
-  }
-
-  revalidateClient(slug);
-  return { ok: true, points: award };
-}
 
 /**
  * Google review — awarded once per client when they open the clinic's review
@@ -525,6 +510,7 @@ export async function clientReviewAction(slug: string): Promise<{ error: string 
 
   await adjustLoyaltyPoints(db, { customerProfileId: user.customerProfileId!, points: award, type: "EARNED", reason: "Google review" });
 
+  await recordActivity(db, { type: "REVIEW", customerProfileId: user.customerProfileId, summary: "Opened the Google review page", points: award });
   revalidateClient(slug);
   return { ok: true, points: award };
 }
@@ -549,6 +535,7 @@ export async function clientReferralAction(slug: string): Promise<{ error: strin
     reason: "Referral shared",
   });
 
+  await recordActivity(db, { type: "REFERRAL", customerProfileId: user.customerProfileId, summary: "Shared a referral link", points: award });
   revalidateClient(slug);
   return { ok: true, points: award };
 }
@@ -605,6 +592,12 @@ export async function clientJoinPlanAction(slug: string, planId: string): Promis
     } as never,
   });
 
+  await recordActivity(db, {
+    type: "MEMBERSHIP_JOINED",
+    customerProfileId: user.customerProfileId,
+    summary: `Joined ${plan.name}`,
+    amountCents: plan.priceCents,
+  });
   revalidateClient(slug);
   return { ok: true, name: plan.name };
 }
@@ -629,6 +622,7 @@ export async function clientCancelPlanAction(slug: string): Promise<{ error: str
     data: { customerMembershipId: membership.id, type: "STATUS_CHANGE", description: "Cancelled by client" } as never,
   });
 
+  await recordActivity(db, { type: "MEMBERSHIP_CANCELLED", customerProfileId: user.customerProfileId, summary: "Cancelled their membership" });
   revalidateClient(slug);
   return { ok: true };
 }

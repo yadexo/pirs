@@ -12,7 +12,6 @@ export default async function ScanPage({ params }: { params: Promise<{ merchantS
 
   return (
     <ScanView
-      merchantSlug={merchantSlug}
       firstName={summary.firstName}
       lastName={summary.lastName}
       joinedDaysAgo={summary.joinedDaysAgo}

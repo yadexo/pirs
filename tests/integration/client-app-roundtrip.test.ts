@@ -24,7 +24,6 @@ const {
   clientCartAction,
   clientSetCartQtyAction,
   clientCheckoutAction,
-  clientCheckInAction,
   clientJoinPlanAction,
   clientCancelPlanAction,
   clientSaveProfileAction,
@@ -34,6 +33,7 @@ const {
   getClientSlotsAction,
 } = await import("@/lib/actions/client-app");
 const { getRewardsData } = await import("@/lib/client-app-data");
+const { recordVisit } = await import("@/lib/check-in");
 
 describe("patient app -> clinic portal round trip", () => {
   let tenantId: string;
@@ -274,16 +274,18 @@ describe("patient app -> clinic portal round trip", () => {
     expect(await clientCheckoutAction(SLUG, null)).toEqual({ error: "Your cart is empty." });
   });
 
-  it("check-in bumps the visit count the clinic sees, once per day", async () => {
-    const first = await clientCheckInAction(SLUG);
-    expect(first).toEqual({ ok: true, points: 50 });
+  // Visits are recorded by the clinic scanning the client (lib/actions/check-in.ts),
+  // which uses recordVisit; clients can no longer check themselves in.
+  it("a clinic check-in bumps the visit count and awards points, once per day", async () => {
+    const first = await recordVisit(db, customerProfileId);
+    expect(first).toEqual({ recorded: true, points: 50, visitCount: 1 });
 
     const profile = await db.customerProfile.findFirst({ where: { id: customerProfileId } });
     expect(profile!.visitCount).toBe(1);
     expect(profile!.lastVisitAt).not.toBeNull();
     expect(profile!.loyaltyPointsBalance).toBe(100); // 50 purchase + 50 visit
 
-    expect(await clientCheckInAction(SLUG)).toEqual({ error: "You've already checked in today." });
+    expect(await recordVisit(db, customerProfileId)).toEqual({ recorded: false, reason: "already-today" });
   });
 
   it("joining a plan creates the membership the clinic manages, and cancelling ends it", async () => {

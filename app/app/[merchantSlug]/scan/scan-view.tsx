@@ -1,28 +1,21 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
-import { Gloss, QrCode, useToast } from "@/components/client-app/ui";
+import { Gloss, QrCode } from "@/components/client-app/ui";
 import { mintScanTokenAction } from "@/lib/actions/client-scan";
-import { clientCheckInAction } from "@/lib/actions/client-app";
 
 export function ScanView({
-  merchantSlug,
   firstName,
   lastName,
   joinedDaysAgo,
   isMember,
 }: {
-  merchantSlug: string;
   firstName: string;
   lastName: string;
   joinedDaysAgo: number;
   isMember: boolean;
 }) {
   const [token, setToken] = React.useState<string | null>(null);
-  const [pending, setPending] = React.useState(false);
-  const { toast } = useToast();
-  const router = useRouter();
 
   // The code carries a signed, short-lived token; refreshing it every 60s
   // means a screenshot stops working.
@@ -59,18 +52,6 @@ export function ScanView({
     };
   }, []);
 
-  async function checkIn() {
-    setPending(true);
-    const res = await clientCheckInAction(merchantSlug);
-    setPending(false);
-    if ("error" in res) {
-      toast(res.error);
-      return;
-    }
-    toast(res.points > 0 ? `Checked in · +${res.points} points` : "Checked in");
-    router.refresh();
-  }
-
   const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || "?";
 
   return (
@@ -93,14 +74,6 @@ export function ScanView({
         Show this at the clinic to check in and earn points.
       </p>
 
-      {/* Until a merchant-side scanner exists, this is how a visit is recorded. */}
-      <button
-        onClick={checkIn}
-        disabled={pending}
-        style={{ fontSize: 13, color: "var(--faint)", textDecoration: "underline" }}
-      >
-        {pending ? "Checking in…" : "Simulate a clinic scan"}
-      </button>
     </div>
   );
 }

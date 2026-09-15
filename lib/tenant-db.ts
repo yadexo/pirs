@@ -50,6 +50,7 @@ const TENANT_SCOPED_MODELS = new Set([
   "Message",
   "Notification",
   "NotificationCampaign",
+  "ActivityEvent",
   "NotificationDelivery",
   "AuditLog",
 ]);

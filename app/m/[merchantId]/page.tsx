@@ -58,7 +58,7 @@ export default async function MerchantHomePage({
             <span className="live-dot" />
             <h2 className="text-[14px] font-medium">Live Activity Feed</h2>
           </div>
-          <ActivityFeed initial={metrics.activity} />
+          <ActivityFeed merchantId={merchantId} initial={metrics.activity} />
         </Panel>
       </div>
 

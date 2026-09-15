@@ -7,6 +7,8 @@ import { rawDb } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
 import { resolveDestination, canReach, safeNext } from "@/lib/login-destination";
+import { recordActivity } from "@/lib/activity";
+import { getTenantDb } from "@/lib/tenant-db";
 
 export type ActionResult = { error: string } | never;
 
@@ -99,7 +101,8 @@ export async function customerRegisterAction(tenantSlug: string, _prevState: unk
 
   const passwordHash = await hashPassword(password);
 
-  await rawDb.user.create({
+  const created = await rawDb.user.create({
+    select: { customerProfile: { select: { id: true } } },
     data: {
       tenantId: tenant.id,
       email: email.toLowerCase(),
@@ -116,6 +119,12 @@ export async function customerRegisterAction(tenantSlug: string, _prevState: unk
         },
       },
     },
+  });
+
+  await recordActivity(getTenantDb(tenant.id), {
+    type: "SIGNUP",
+    customerProfileId: created.customerProfile?.id,
+    summary: "Joined the app",
   });
 
   return signInOrError({ portal: "customer", tenantSlug, email, password }, `/app/${tenantSlug}`);
