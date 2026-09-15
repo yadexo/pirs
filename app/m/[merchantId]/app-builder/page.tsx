@@ -7,6 +7,7 @@ import { APP_BUILDER_TABS, DEFAULT_APP_BUILDER_TAB, isAppBuilderTab, isSettingsS
 import { CatalogTab } from "./catalog-tab";
 import { SettingsTab } from "./settings-tab";
 import { cn } from "@/lib/utils";
+import { DEFAULT_CURRENCY } from "@/lib/currency";
 
 export default async function AppBuilderPage({
   params,
@@ -26,7 +27,7 @@ export default async function AppBuilderPage({
 
   const merchant = await rawDb.tenant.findUnique({ where: { id: merchantId }, select: { slug: true } });
   const branding = await ctx.db.tenantBranding.findFirst({ where: {} });
-  const currency = branding?.currency ?? "EUR";
+  const currency = branding?.currency ?? DEFAULT_CURRENCY;
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-6">

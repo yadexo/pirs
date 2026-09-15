@@ -16,6 +16,9 @@ export type RefundResult = {
 };
 
 export interface PaymentProvider {
+  /** Recorded on every Payment row; refunds and webhooks match on it. */
+  readonly name: "MOCK" | "STRIPE";
+
   /** Charge a one-off amount (order checkout). */
   createIntent(params: {
     amountCents: number;

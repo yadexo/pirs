@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { requireStaffContext, requirePermission, requireCustomerContext } from "@/lib/rbac";
 import { getPaymentProvider } from "@/lib/providers/payments";
 import { writeAuditLog } from "@/lib/audit";
+import { tenantCurrency } from "@/lib/currency";
 
 const planSchema = z.object({
   name: z.string().min(1, "Name is required").max(160),
@@ -89,7 +90,7 @@ export async function joinMembershipAction(tenantSlug: string, planId: string): 
     customerRef: user.customerProfileId!,
     planRef: plan.name,
     amountCents: plan.priceCents,
-    currency: "USD",
+    currency: await tenantCurrency(db),
     intervalMonths: plan.billingFrequency === "MONTHLY" ? 1 : 12,
   });
 

@@ -7,6 +7,7 @@ import { Panel, PanelHeader, Pill } from "@/components/ui/primitives";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LineChart } from "@/components/ui/line-chart";
 import { formatMoney } from "@/lib/utils";
+import { DEFAULT_CURRENCY } from "@/lib/currency";
 
 /**
  * Monitoring only. Plans are created and edited in App Builder → Membership,
@@ -36,7 +37,7 @@ export default async function MembershipsPage({ params }: { params: Promise<{ me
     }),
   ]);
 
-  const currency = branding?.currency ?? "EUR";
+  const currency = branding?.currency ?? DEFAULT_CURRENCY;
   const mrr = active.reduce(
     (s, m) =>
       s + (m.membershipPlan.billingFrequency === "ANNUAL" ? Math.round(m.membershipPlan.priceCents / 12) : m.membershipPlan.priceCents),

@@ -1,5 +1,6 @@
 import "server-only";
 import type { TenantDb } from "@/lib/tenant-db";
+import { DEFAULT_CURRENCY } from "@/lib/currency";
 
 export interface ActivityItem {
   id: string;
@@ -103,7 +104,7 @@ export async function getHomeMetrics(db: TenantDb, range: string): Promise<HomeM
     : [];
 
   return {
-    currency: branding?.currency ?? "EUR",
+    currency: branding?.currency ?? DEFAULT_CURRENCY,
     todayCents,
     yesterdayCents: yesterdayAgg._sum.totalCents ?? 0,
     hourly,

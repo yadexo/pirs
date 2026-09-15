@@ -8,6 +8,8 @@ import type { PaymentIntentResult, PaymentProvider, RefundResult, SubscriptionRe
  * is exercised without a real processor.
  */
 export class MockPaymentProvider implements PaymentProvider {
+  readonly name = "MOCK" as const;
+
   async createIntent(params: {
     amountCents: number;
     currency: string;

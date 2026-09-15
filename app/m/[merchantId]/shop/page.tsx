@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { LineChart } from "@/components/ui/line-chart";
 import { formatMoney } from "@/lib/utils";
 import { TypeFilter } from "./type-filter";
+import { DEFAULT_CURRENCY } from "@/lib/currency";
 
 export default async function ShopSummaryPage({
   params,
@@ -32,7 +33,7 @@ export default async function ShopSummaryPage({
     }),
   ]);
 
-  const currency = branding?.currency ?? "EUR";
+  const currency = branding?.currency ?? DEFAULT_CURRENCY;
   const totalSales = salesAgg._sum.totalCents ?? 0;
   const aov = orderCount > 0 ? Math.round(totalSales / orderCount) : 0;
 

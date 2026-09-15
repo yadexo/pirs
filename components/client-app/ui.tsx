@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { DEFAULT_CURRENCY } from "@/lib/currency";
 
 /* ------------------------------------------------------------------ icons */
 
@@ -58,11 +59,17 @@ export function Scribble() {
 
 /* --------------------------------------------------------------- helpers */
 
-export const money = (cents: number, currency = "EUR") => {
-  const v = cents / 100;
-  const sym = currency === "EUR" ? "€" : currency === "GBP" ? "£" : "$";
-  return sym + (Number.isInteger(v) ? v : v.toFixed(2));
-};
+/**
+ * Whole amounts drop the decimals ("€50"), others keep two ("€49.50"). Uses
+ * the real ISO code, so a CHF or SEK clinic is not shown dollar signs.
+ */
+export const money = (cents: number, currency = DEFAULT_CURRENCY) =>
+  new Intl.NumberFormat("en", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(cents / 100);
 
 function mulberry(seed: number) {
   return function () {

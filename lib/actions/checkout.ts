@@ -7,6 +7,7 @@ import { getPaymentProvider } from "@/lib/providers/payments";
 import { awardPointsForOrder, adjustLoyaltyPoints } from "@/lib/loyalty";
 import { computeCheckoutTotals, type LineItem } from "@/lib/checkout-calculations";
 import type { TenantDb } from "@/lib/tenant-db";
+import { tenantCurrency } from "@/lib/currency";
 
 async function loadBasket(db: TenantDb, customerProfileId: string) {
   return db.basket.findFirst({
@@ -148,10 +149,12 @@ export async function placeOrderAction(
     promotionId = promo?.id ?? null;
   }
 
+  const currency = await tenantCurrency(db);
   const order = await db.order.create({
     data: {
       customerProfileId: user.customerProfileId!,
       orderNumber,
+      currency,
       status: "PENDING",
       subtotalCents: quote.subtotalCents,
       discountCents: quote.discountCents,
@@ -182,7 +185,7 @@ export async function placeOrderAction(
   const provider = getPaymentProvider();
   const intent = await provider.createIntent({
     amountCents: quote.totalCents,
-    currency: "USD",
+    currency,
     customerRef: user.customerProfileId!,
     description: `Order ${orderNumber}`,
     simulateFailure,
@@ -191,9 +194,10 @@ export async function placeOrderAction(
   await db.payment.create({
     data: {
       orderId: order.id,
-      provider: "MOCK",
+      provider: provider.name,
       providerPaymentId: intent.providerPaymentId,
       amountCents: quote.totalCents,
+      currency,
       status: intent.status,
       failureReason: intent.failureReason,
     } as never,

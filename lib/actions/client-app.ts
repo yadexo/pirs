@@ -9,6 +9,7 @@ import { adjustLoyaltyPoints, rewardDiscountCents } from "@/lib/loyalty";
 import { getPaymentProvider } from "@/lib/providers/payments";
 import { writeAuditLog } from "@/lib/audit";
 import { nanoid } from "nanoid";
+import { tenantCurrency } from "@/lib/currency";
 
 /**
  * Every mutating action the patient app can perform.
@@ -278,10 +279,14 @@ export async function clientCheckoutAction(
 
   const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}-${nanoid(4).toUpperCase()}`;
 
+  const currency = await tenantCurrency(db);
+  const provider = getPaymentProvider();
+
   const order = await db.order.create({
     data: {
       customerProfileId: user.customerProfileId!,
       orderNumber,
+      currency,
       status: "PENDING",
       subtotalCents,
       discountCents: 0,
@@ -306,9 +311,9 @@ export async function clientCheckoutAction(
     include: { items: true },
   });
 
-  const intent = await getPaymentProvider().createIntent({
+  const intent = await provider.createIntent({
     amountCents: totalCents,
-    currency: "EUR",
+    currency,
     customerRef: user.customerProfileId!,
     description: `Order ${orderNumber}`,
     simulateFailure,
@@ -317,9 +322,10 @@ export async function clientCheckoutAction(
   await db.payment.create({
     data: {
       orderId: order.id,
-      provider: "MOCK",
+      provider: provider.name,
       providerPaymentId: intent.providerPaymentId,
       amountCents: totalCents,
+      currency,
       status: intent.status,
       failureReason: intent.failureReason,
     } as never,
@@ -496,7 +502,7 @@ export async function clientJoinPlanAction(slug: string, planId: string): Promis
     customerRef: user.customerProfileId!,
     planRef: plan.name,
     amountCents: plan.priceCents,
-    currency: "EUR",
+    currency: await tenantCurrency(db),
     intervalMonths: plan.billingFrequency === "MONTHLY" ? 1 : 12,
   });
 

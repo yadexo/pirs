@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { rawDb } from "@/lib/db";
 import { getTenantDb, type TenantDb } from "@/lib/tenant-db";
+import { DEFAULT_CURRENCY } from "@/lib/currency";
 
 export interface ClientAppMerchant {
   id: string;
@@ -49,7 +50,7 @@ export async function getClientAppContext(merchantSlug: string): Promise<ClientA
     name: branding?.businessName ?? tenant.name,
     logoUrl: branding?.logoUrl ?? null,
     accentColor: branding?.primaryColor ?? null,
-    currency: branding?.currency ?? "EUR",
+    currency: branding?.currency ?? DEFAULT_CURRENCY,
     contactPhone: branding?.contactPhone ?? null,
     addressLine1: branding?.addressLine1 ?? null,
     city: branding?.city ?? null,

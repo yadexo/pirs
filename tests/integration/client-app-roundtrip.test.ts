@@ -50,6 +50,9 @@ describe("patient app -> clinic portal round trip", () => {
     tenantId = tenant.id;
     db = getTenantDb(tenantId);
 
+    // GBP, not the EUR default: checkout must charge in the clinic's own
+    // currency. It used to hardcode "EUR" for every clinic.
+    await rawDb.tenantBranding.create({ data: { tenantId, businessName: "Round Trip Clinic", currency: "GBP" } });
     await rawDb.tenantSettings.create({
       data: { tenantId, taxRateBasisPoints: 0, appointmentCancellationHours: 24 },
     });
@@ -245,6 +248,9 @@ describe("patient app -> clinic portal round trip", () => {
     expect(order!.customerProfileId).toBe(customerProfileId);
     expect(order!.items[0]!.quantity).toBe(2);
     expect(order!.payments[0]!.status).toBe("SUCCEEDED");
+    expect(order!.currency).toBe("GBP");
+    expect(order!.payments[0]!.currency).toBe("GBP");
+    expect(order!.payments[0]!.provider).toBe("MOCK");
 
     // Stock came off the shelf the clinic manages.
     const product = await db.product.findFirst({ where: { id: productId } });

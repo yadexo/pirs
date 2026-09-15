@@ -28,6 +28,8 @@ const statusMap: Record<string, PaymentIntentResult["status"]> = {
  * and only a token/payment-method id crosses the network to us.
  */
 export class StripePaymentProvider implements PaymentProvider {
+  readonly name = "STRIPE" as const;
+
   async createIntent(params: {
     amountCents: number;
     currency: string;
