@@ -15,6 +15,7 @@ import {
   type MerchantRequirement,
 } from "@/lib/merchant-action";
 import type { TenantDb } from "@/lib/tenant-db";
+import { pricingOptionsSchema, toStoredPricingOptions, EMPTY_PRICING } from "@/lib/pricing-options";
 
 /**
  * Every create/edit/archive behind the App Builder tabs. Each action names the
@@ -139,12 +140,17 @@ function assertFound<T>(found: T | null | undefined): T {
 export async function getAppBuilderOptionsAction(merchantId: string, kind: ItemKind) {
   return runAction(async () => {
     const { db } = await requireMerchantAction(merchantId, NEEDS[kind]);
-    const [serviceCategories, productCategories, services, products, tags] = await Promise.all([
+    const [serviceCategories, productCategories, services, products, tags, staff] = await Promise.all([
       db.serviceCategory.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { name: true } }),
       db.productCategory.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { name: true } }),
       db.service.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
       db.product.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-      db.customerTag.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+      db.catalogTag.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, icon: true, description: true } }),
+      db.staffProfile.findMany({
+        where: { active: true },
+        orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+        select: { id: true, firstName: true, lastName: true, title: true },
+      }),
     ]);
     return {
       serviceCategories: serviceCategories.map((c) => c.name),
@@ -152,6 +158,7 @@ export async function getAppBuilderOptionsAction(merchantId: string, kind: ItemK
       services,
       products,
       tags,
+      staff: staff.map((p) => ({ id: p.id, name: `${p.firstName} ${p.lastName}`.trim(), title: p.title })),
     };
   });
 }
@@ -166,10 +173,10 @@ export async function getAppBuilderItemAction(merchantId: string, kind: ItemKind
     let item: object | null = null;
     switch (kind) {
       case "service":
-        item = await db.service.findFirst({ where: { id }, include: { category: { select: { name: true } } } });
+        item = await db.service.findFirst({ where: { id }, include: SHOP_ITEM_INCLUDE });
         break;
       case "product":
-        item = await db.product.findFirst({ where: { id }, include: { category: { select: { name: true } } } });
+        item = await db.product.findFirst({ where: { id }, include: SHOP_ITEM_INCLUDE });
         break;
       case "package":
         item = await db.package.findFirst({ where: { id }, include: { items: { select: { serviceId: true } } } });
@@ -198,6 +205,146 @@ export async function getAppBuilderItemAction(merchantId: string, kind: ItemKind
 }
 
 // ---------------------------------------------------------------------------
+// Fields shared by everything a clinic sells in its shop
+//
+// All of them are optional: the clinic decides what its product page shows —
+// what to call a unit, how long it takes, who performs it, what clients should
+// know before and after, what past clients looked like, and whether buying it
+// needs a word with the clinic first.
+// ---------------------------------------------------------------------------
+
+const shortText = z.string().max(160, "Keep it under 160 characters").optional();
+
+/** JSON carried in one hidden field, because the clinic edits a whole list at once. */
+const jsonField = <T extends z.ZodTypeAny>(schema: T, fallback: z.infer<T>) =>
+  z.preprocess((v) => {
+    if (v === undefined || v === null || v === "") return fallback;
+    if (typeof v !== "string") return v;
+    try {
+      return JSON.parse(v);
+    } catch {
+      return fallback;
+    }
+  }, schema);
+
+const tagInputSchema = z.object({
+  id: z.string().max(40).optional(),
+  name: name("a tag name"),
+  icon: z.string().max(40).optional(),
+  description: shortText,
+});
+
+const clientResultSchema = z
+  .object({
+    beforeImageUrl: imageUrl,
+    afterImageUrl: imageUrl,
+    testimonial: longText,
+  })
+  // A row with nothing in it is dropped rather than saved as an empty result.
+  .refine((r) => r.beforeImageUrl || r.afterImageUrl || r.testimonial, { message: "Add a photo or a testimonial" });
+
+const shopItemSchema = z.object({
+  unitLabel: shortText,
+  schedulingUrl: z
+    .string()
+    .max(2048)
+    .refine((v) => /^https?:\/\/[^\s"'<>]+$/.test(v), "Enter a link starting with https://")
+    .optional(),
+  maxQuantity: optionalInt("a maximum quantity", 1, 10_000),
+  requiresConsultation: z.boolean(),
+  consultationNotice: longText,
+  cashBalanceBlocked: z.boolean(),
+  practitionerId: z.string().max(40).optional(),
+  pricingOptions: jsonField(pricingOptionsSchema, EMPTY_PRICING),
+  tags: jsonField(z.array(tagInputSchema).max(12, "Up to 12 tags"), []),
+  clientResults: jsonField(z.array(clientResultSchema).max(20, "Up to 20 results"), []),
+});
+
+type ShopItemInput = z.infer<typeof shopItemSchema>;
+
+function readShopItemFields(fd: FormData): ShopItemInput {
+  return shopItemSchema.parse({
+    unitLabel: formText(fd, "unitLabel"),
+    schedulingUrl: formText(fd, "schedulingUrl"),
+    maxQuantity: formText(fd, "maxQuantity"),
+    requiresConsultation: formBool(fd, "requiresConsultation"),
+    consultationNotice: formText(fd, "consultationNotice"),
+    cashBalanceBlocked: formBool(fd, "cashBalanceBlocked"),
+    practitionerId: formText(fd, "practitionerId"),
+    pricingOptions: formText(fd, "pricingOptions"),
+    tags: formText(fd, "tags"),
+    clientResults: formText(fd, "clientResults"),
+  });
+}
+
+/** The columns on the item itself; tags and results are saved after it exists. */
+async function shopItemColumns(db: TenantDb, data: ShopItemInput) {
+  let practitionerId: string | null = null;
+  if (data.practitionerId) {
+    // Scoped lookup: a staff id from another clinic simply doesn't resolve.
+    const staff = await db.staffProfile.findFirst({ where: { id: data.practitionerId }, select: { id: true } });
+    if (!staff) throw fieldError("practitionerId", "That team member no longer works here.");
+    practitionerId = staff.id;
+  }
+  return {
+    unitLabel: data.unitLabel ?? null,
+    schedulingUrl: data.schedulingUrl ?? null,
+    maxQuantity: data.maxQuantity ?? null,
+    requiresConsultation: data.requiresConsultation,
+    consultationNotice: data.consultationNotice ?? null,
+    cashBalanceBlocked: data.cashBalanceBlocked,
+    practitionerId,
+    pricingOptions: toStoredPricingOptions(data.pricingOptions) ?? Prisma.DbNull,
+  };
+}
+
+/**
+ * Tags and client results are replaced wholesale, so what is saved is exactly
+ * what the clinic sees in the form. A tag the clinic typed is created once and
+ * then shared by every item that uses it.
+ */
+async function saveTagsAndResults(db: TenantDb, kind: "service" | "product", itemId: string, data: ShopItemInput) {
+  const link = kind === "service" ? { serviceId: itemId } : { productId: itemId };
+
+  const tagIds: string[] = [];
+  for (const tag of data.tags) {
+    const existing = await db.catalogTag.findFirst({ where: { name: { equals: tag.name, mode: "insensitive" } } });
+    let tagId: string;
+    if (existing) {
+      await db.catalogTag.updateMany({
+        where: { id: existing.id },
+        data: { icon: tag.icon ?? existing.icon, description: tag.description ?? existing.description },
+      });
+      tagId = existing.id;
+    } else {
+      tagId = (await db.catalogTag.create({ data: { name: tag.name, icon: tag.icon ?? "sparkle", description: tag.description ?? null } as never })).id;
+    }
+    if (!tagIds.includes(tagId)) tagIds.push(tagId);
+  }
+  await db.catalogItemTag.deleteMany({ where: link });
+  for (const tagId of tagIds) await db.catalogItemTag.create({ data: { tagId, ...link } as never });
+
+  await db.clientResult.deleteMany({ where: link });
+  for (const [index, result] of data.clientResults.entries()) {
+    await db.clientResult.create({
+      data: {
+        ...link,
+        beforeImageUrl: result.beforeImageUrl ?? null,
+        afterImageUrl: result.afterImageUrl ?? null,
+        testimonial: result.testimonial ?? null,
+        sortOrder: index,
+      } as never,
+    });
+  }
+}
+
+const SHOP_ITEM_INCLUDE = {
+  category: { select: { name: true } },
+  itemTags: { include: { tag: true } },
+  clientResults: { orderBy: { sortOrder: "asc" as const } },
+} as const;
+
+// ---------------------------------------------------------------------------
 // Services
 // ---------------------------------------------------------------------------
 
@@ -207,7 +354,7 @@ const serviceSchema = z.object({
   description: longText,
   prepInstructions: longText,
   aftercareInstructions: longText,
-  durationMinutes: int("a duration", 5, 24 * 60),
+  durationMinutes: optionalInt("a duration", 1, 24 * 60),
   priceCents: money("a price"),
   imageUrl,
   taxable: z.boolean(),
@@ -219,7 +366,8 @@ export async function saveServiceAction(merchantId: string, id: string | null, f
     const ctx = await requireMerchantAction(merchantId, NEEDS.service);
     const data = serviceSchema.parse({
       name: formText(fd, "name"),
-      categoryName: formText(fd, "categoryName"),
+      // A clinic that never thinks about categories still gets a working shop.
+      categoryName: formText(fd, "categoryName") ?? "General",
       description: formText(fd, "description"),
       prepInstructions: formText(fd, "prepInstructions"),
       aftercareInstructions: formText(fd, "aftercareInstructions"),
@@ -229,14 +377,19 @@ export async function saveServiceAction(merchantId: string, id: string | null, f
       taxable: formBool(fd, "taxable"),
       active: formBool(fd, "active"),
     });
+    const shared = readShopItemFields(fd);
     const { categoryName, ...fields } = data;
     const values = {
       ...fields,
+      ...(await shopItemColumns(ctx.db, shared)),
       categoryId: await findOrCreateCategory(ctx.db, "service", categoryName),
       description: fields.description ?? null,
       prepInstructions: fields.prepInstructions ?? null,
       aftercareInstructions: fields.aftercareInstructions ?? null,
       imageUrl: fields.imageUrl ?? null,
+      // Something sold without a duration can still be bought, just not booked
+      // into the calendar, so it keeps a nominal length.
+      durationMinutes: fields.durationMinutes ?? 30,
     };
 
     let savedId: string;
@@ -247,6 +400,7 @@ export async function saveServiceAction(merchantId: string, id: string | null, f
     } else {
       savedId = (await ctx.db.service.create({ data: values as never })).id;
     }
+    await saveTagsAndResults(ctx.db, "service", savedId, shared);
     await ctx.audit(id ? "service.updated" : "service.created", "Service", savedId, { name: data.name });
     await revalidateMerchant(merchantId);
     return { id: savedId };
@@ -261,6 +415,9 @@ const productSchema = z.object({
   name: name(),
   categoryName: name("a category"),
   description: longText,
+  durationMinutes: optionalInt("a duration", 1, 24 * 60),
+  prepInstructions: longText,
+  aftercareInstructions: longText,
   priceCents: money("a price"),
   sku: z
     .string()
@@ -278,8 +435,12 @@ export async function saveProductAction(merchantId: string, id: string | null, f
     const ctx = await requireMerchantAction(merchantId, NEEDS.product);
     const data = productSchema.parse({
       name: formText(fd, "name"),
-      categoryName: formText(fd, "categoryName"),
+      // A clinic that never thinks about categories still gets a working shop.
+      categoryName: formText(fd, "categoryName") ?? "General",
       description: formText(fd, "description"),
+      durationMinutes: formText(fd, "durationMinutes"),
+      prepInstructions: formText(fd, "prepInstructions"),
+      aftercareInstructions: formText(fd, "aftercareInstructions"),
       priceCents: formText(fd, "price"),
       sku: formText(fd, "sku"),
       inventoryQuantity: formText(fd, "inventoryQuantity") ?? "0",
@@ -287,7 +448,15 @@ export async function saveProductAction(merchantId: string, id: string | null, f
       taxable: formBool(fd, "taxable"),
       active: formBool(fd, "active"),
     });
-    const { categoryName, sku, ...fields } = data;
+    const shared = readShopItemFields(fd);
+    const { categoryName, sku, ...rest } = data;
+    const fields = {
+      ...rest,
+      ...(await shopItemColumns(ctx.db, shared)),
+      durationMinutes: rest.durationMinutes ?? null,
+      prepInstructions: rest.prepInstructions ?? null,
+      aftercareInstructions: rest.aftercareInstructions ?? null,
+    };
     const categoryId = await findOrCreateCategory(ctx.db, "product", categoryName);
 
     let savedId: string;
@@ -326,6 +495,7 @@ export async function saveProductAction(merchantId: string, id: string | null, f
     } catch (err) {
       rethrowUnique(err, "sku", "Another product already uses this SKU");
     }
+    await saveTagsAndResults(ctx.db, "product", savedId, shared);
     await ctx.audit(id ? "product.updated" : "product.created", "Product", savedId, { name: data.name });
     await revalidateMerchant(merchantId);
     return { id: savedId };

@@ -14,13 +14,15 @@ import {
   type FieldErrors,
 } from "@/components/merchant/form";
 import type { ItemKind } from "@/lib/actions/app-builder";
+import { ProductPanelForm } from "./product-form";
 
 export interface FormOptions {
   serviceCategories: string[];
   productCategories: string[];
   services: { id: string; name: string }[];
   products: { id: string; name: string }[];
-  tags: { id: string; name: string }[];
+  tags: { id: string; name: string; icon: string; description: string | null }[];
+  staff: { id: string; name: string; title: string | null }[];
 }
 
 export interface ItemFormProps {
@@ -37,91 +39,22 @@ const isNew = (item: Record<string, unknown>) => !item.id;
 /** New items start visible; existing ones keep their state. */
 const activeDefault = (item: Record<string, unknown>) => (isNew(item) ? true : Boolean(item.active));
 
-function CategoryField({ name, label, value, suggestions, errors }: { name: string; label: string; value: string; suggestions: string[]; errors: FieldErrors }) {
-  const listId = `${name}-suggestions`;
-  return (
-    <>
-      <TextField
-        label={label}
-        name={name}
-        defaultValue={value}
-        list={listId}
-        autoComplete="off"
-        errors={errors}
-        hint="Pick one or type a new category."
-      />
-      <datalist id={listId}>
-        {suggestions.map((c) => (
-          <option key={c} value={c} />
-        ))}
-      </datalist>
-    </>
-  );
-}
-
 function VisibilityField({ item, label = "Visible in the app" }: { item: Record<string, unknown>; label?: string }) {
   return <CheckboxField name="active" label={label} description="Clients can see and buy this." defaultChecked={activeDefault(item)} />;
 }
 
 // ---------------------------------------------------------------------------
 
-export function ServiceForm({ merchantId, currency, item, options, errors }: ItemFormProps) {
-  return (
-    <div className="space-y-5">
-      <FormSection title="Treatment">
-        <TextField label="Name" name="name" defaultValue={str(item.name)} errors={errors} required maxLength={120} />
-        <CategoryField
-          label="Category"
-          name="categoryName"
-          value={str((item.category as { name?: string } | undefined)?.name)}
-          suggestions={options.serviceCategories}
-          errors={errors}
-        />
-        <TextAreaField label="Description" name="description" defaultValue={str(item.description)} errors={errors} />
-        <div className="grid grid-cols-2 gap-3">
-          <MoneyField label="Price" name="price" currency={currency} defaultValue={centsToInput(item.priceCents as number)} errors={errors} required />
-          <TextField label="Duration (minutes)" name="durationMinutes" type="number" min={5} step={5} defaultValue={str(item.durationMinutes ?? 30)} errors={errors} required />
-        </div>
-        <ImageField label="Image" name="imageUrl" merchantId={merchantId} defaultValue={item.imageUrl as string} errors={errors} />
-      </FormSection>
-      <FormSection title="For the client">
-        <TextAreaField label="Before the appointment" name="prepInstructions" defaultValue={str(item.prepInstructions)} errors={errors} />
-        <TextAreaField label="Aftercare" name="aftercareInstructions" defaultValue={str(item.aftercareInstructions)} errors={errors} />
-      </FormSection>
-      <FormSection title="Settings">
-        <VisibilityField item={item} />
-        <CheckboxField name="taxable" label="Taxable" defaultChecked={isNew(item) ? true : Boolean(item.taxable)} />
-      </FormSection>
-    </div>
-  );
+/**
+ * Treatments and products share one panel: everything on it is optional, so a
+ * clinic fills in only what its own product page should show.
+ */
+export function ServiceForm(props: ItemFormProps) {
+  return <ProductPanelForm {...props} kind="service" />;
 }
 
-export function ProductForm({ merchantId, currency, item, options, errors }: ItemFormProps) {
-  return (
-    <div className="space-y-5">
-      <FormSection title="Product">
-        <TextField label="Name" name="name" defaultValue={str(item.name)} errors={errors} required maxLength={120} />
-        <CategoryField
-          label="Category"
-          name="categoryName"
-          value={str((item.category as { name?: string } | undefined)?.name)}
-          suggestions={options.productCategories}
-          errors={errors}
-        />
-        <TextAreaField label="Description" name="description" defaultValue={str(item.description)} errors={errors} />
-        <div className="grid grid-cols-2 gap-3">
-          <MoneyField label="Price" name="price" currency={currency} defaultValue={centsToInput(item.priceCents as number)} errors={errors} required />
-          <TextField label="In stock" name="inventoryQuantity" type="number" min={0} defaultValue={str(item.inventoryQuantity ?? 0)} errors={errors} />
-        </div>
-        <TextField label="SKU" name="sku" defaultValue={str(item.sku)} errors={errors} hint="Leave empty to generate one." />
-        <ImageField label="Images" name="images" merchantId={merchantId} multiple defaultValue={(item.images as string[]) ?? []} errors={errors} />
-      </FormSection>
-      <FormSection title="Settings">
-        <VisibilityField item={item} />
-        <CheckboxField name="taxable" label="Taxable" defaultChecked={isNew(item) ? true : Boolean(item.taxable)} />
-      </FormSection>
-    </div>
-  );
+export function ProductForm(props: ItemFormProps) {
+  return <ProductPanelForm {...props} kind="product" />;
 }
 
 export function PackageForm({ merchantId, currency, item, options, errors }: ItemFormProps) {

@@ -37,8 +37,14 @@ export async function POST(req: NextRequest) {
 
   // An app icon becomes the home-screen icon of the clinic's app, which iOS
   // renders up to 180pt at 3x. It has to be square and sharp at that size.
-  if (formData.get("purpose") === "app-icon") {
+  const purpose = String(formData.get("purpose") ?? "");
+  if (purpose === "app-icon") {
     const problem = await appIconProblem(buffer);
+    if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+  }
+  const limit = MAX_DIMENSIONS[purpose];
+  if (limit) {
+    const problem = await tooLarge(buffer, limit);
     if (problem) return NextResponse.json({ error: problem }, { status: 400 });
   }
 
@@ -52,6 +58,28 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Upload failed.";
     return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+/**
+ * Size limits per kind of image, so a clinic’s phone photo does not become a
+ * 12-megapixel download for every client opening a product page.
+ */
+const MAX_DIMENSIONS: Record<string, { width: number; height: number; label: string }> = {
+  "product-image": { width: 800, height: 800, label: "Product images" },
+  "client-result": { width: 1920, height: 1080, label: "Before and after photos" },
+};
+
+async function tooLarge(buffer: Buffer, limit: { width: number; height: number; label: string }): Promise<string | null> {
+  try {
+    const { width, height } = await sharp(buffer).metadata();
+    if (!width || !height) return "That file isn’t an image we can read.";
+    if (width > limit.width || height > limit.height) {
+      return `${limit.label} can be at most ${limit.width}×${limit.height} pixels. This one is ${width}×${height} — resize it and try again.`;
+    }
+    return null;
+  } catch {
+    return "That file isn’t an image we can read.";
   }
 }
 

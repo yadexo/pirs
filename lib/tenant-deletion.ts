@@ -24,6 +24,9 @@ export async function deleteTenantCompletely(tenantId: string): Promise<void> {
     // Package contents reference services; they have no tenant column of their own.
     await tx.packageItem.deleteMany({ where: { package: { tenantId } } });
     // Catalogue rows that reference categories.
+    await tx.catalogItemTag.deleteMany({ where: { OR: [{ service: { tenantId } }, { product: { tenantId } }] } });
+    await tx.clientResult.deleteMany({ where: { tenantId } });
+    await tx.catalogTag.deleteMany({ where: { tenantId } });
     await tx.service.deleteMany({ where: { tenantId } });
     await tx.product.deleteMany({ where: { tenantId } });
 

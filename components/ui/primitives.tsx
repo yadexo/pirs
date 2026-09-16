@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Rounded surface card — the base container for every panel. */
@@ -114,6 +115,7 @@ export function Toggle({
 export function Drawer({
   open,
   onClose,
+  onBack,
   title,
   subtitle,
   children,
@@ -122,6 +124,8 @@ export function Drawer({
 }: {
   open: boolean;
   onClose: () => void;
+  /** Shows a back arrow beside the title; use it when leaving means going back. */
+  onBack?: () => void;
   title: string;
   subtitle?: string;
   children: React.ReactNode;
@@ -153,9 +157,16 @@ export function Drawer({
         className={cn("relative flex h-full w-full flex-col border-l border-border bg-surface", width)}
       >
         <div className="flex items-start justify-between border-b border-border px-5 py-4">
-          <div>
+          <div className="flex items-start gap-2">
+            {onBack && (
+              <button type="button" onClick={onBack} aria-label="Back" className="-ml-1 rounded-md p-1 text-ink-muted hover:bg-app">
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+            )}
+            <div>
             <h2 className="text-[15px] font-semibold">{title}</h2>
             {subtitle && <p className="mt-0.5 text-[12px] text-ink-muted">{subtitle}</p>}
+            </div>
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="rounded-md p-1 text-ink-faint hover:bg-app">
             ✕

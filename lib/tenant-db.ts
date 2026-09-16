@@ -23,6 +23,8 @@ const TENANT_SCOPED_MODELS = new Set([
   "BlockedTime",
   "CustomerProfile",
   "CustomerTag",
+  "CatalogTag",
+  "ClientResult",
   "CustomerNote",
   "Lead",
   "ServiceCategory",

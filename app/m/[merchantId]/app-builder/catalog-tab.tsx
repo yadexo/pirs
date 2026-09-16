@@ -153,6 +153,8 @@ export function CatalogTab({
     else void open(config.kinds[0]!, null);
   }
 
+  const createdLabel = editor.mode === "open" && (editor.kind === "product" || editor.kind === "service") ? "product" : KIND_LABEL[editor.mode === "open" ? editor.kind : "product"];
+
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (editor.mode !== "open") return;
@@ -169,7 +171,7 @@ export function CatalogTab({
       requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>("[aria-invalid='true']")?.focus());
       return;
     }
-    toast.success(editor.id ? "Saved" : `${capitalise(KIND_LABEL[editor.kind])} created`);
+    toast.success(editor.id ? "Saved" : `${capitalise(createdLabel)} created`);
     setOptions(null); // categories and pickers may have changed
     close();
     router.refresh();
@@ -203,12 +205,20 @@ export function CatalogTab({
 
   const Form = editor.mode === "open" ? FORMS[editor.kind] : undefined;
   const kindLabel = editor.mode === "open" || editor.mode === "loading" ? KIND_LABEL[editor.kind] : "item";
+  // Everything sold in the shop is "a product" to the clinic, whatever it
+  // chooses to call the thing itself inside the form.
+  const isShopItem = editor.mode === "open" && (editor.kind === "product" || editor.kind === "service");
   const title =
     editor.mode === "choose"
       ? config.create
-      : editor.mode === "open" && editor.id
-        ? String(editor.item.name ?? editor.item.title ?? `Edit ${kindLabel}`)
-        : `New ${kindLabel}`;
+      : isShopItem
+        ? editor.id
+          ? "Edit product"
+          : "Create a product"
+        : editor.mode === "open" && editor.id
+          ? String(editor.item.name ?? editor.item.title ?? `Edit ${kindLabel}`)
+          : `New ${kindLabel}`;
+  const saveLabel = editor.mode === "open" && editor.id ? "Save changes" : isShopItem ? "Create product" : `Create ${kindLabel}`;
 
   return (
     <>
@@ -284,6 +294,7 @@ export function CatalogTab({
       <Drawer
         open={editor.mode !== "closed"}
         onClose={close}
+        onBack={editor.mode === "open" ? close : undefined}
         title={title}
         width="max-w-xl"
         footer={
@@ -320,7 +331,7 @@ export function CatalogTab({
                 </Button>
                 <Button type="submit" size="sm" form="app-builder-form" disabled={busy !== null}>
                   {busy === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  {editor.id ? "Save changes" : `Create ${kindLabel}`}
+                  {saveLabel}
                 </Button>
               </div>
             </div>

@@ -191,6 +191,7 @@ export function ImageField({
   max = 6,
   hint,
   purpose,
+  onChange,
 }: {
   label: string;
   name: string;
@@ -202,6 +203,8 @@ export function ImageField({
   hint?: React.ReactNode;
   /** Tells the upload endpoint which extra checks apply, e.g. "app-icon". */
   purpose?: string;
+  /** Called with the current URLs, for forms that keep images in their own state. */
+  onChange?: (urls: string[]) => void;
 }) {
   const initial = Array.isArray(defaultValue) ? defaultValue : defaultValue ? [defaultValue] : [];
   const [urls, setUrls] = React.useState<string[]>(initial);
@@ -227,7 +230,11 @@ export function ImageField({
         if (!res.ok || !json.url) throw new Error(json.error ?? "Upload failed.");
         added.push(json.url);
       }
-      setUrls((prev) => (multiple ? [...prev, ...added].slice(0, limit) : added.slice(0, 1)));
+      setUrls((prev) => {
+        const next = multiple ? [...prev, ...added].slice(0, limit) : added.slice(0, 1);
+        onChange?.(next);
+        return next;
+      });
     } catch (e) {
       setUploadError(e instanceof Error ? e.message : "Upload failed.");
     } finally {
@@ -248,7 +255,13 @@ export function ImageField({
             <img src={u} alt="" className="h-full w-full object-cover" />
             <button
               type="button"
-              onClick={() => setUrls((prev) => prev.filter((x) => x !== u))}
+              onClick={() =>
+              setUrls((prev) => {
+                const next = prev.filter((x) => x !== u);
+                onChange?.(next);
+                return next;
+              })
+            }
               aria-label="Remove image"
               className="absolute right-1 top-1 rounded-full bg-surface/90 p-0.5 text-ink shadow"
             >

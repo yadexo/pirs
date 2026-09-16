@@ -48,6 +48,8 @@ model Tenant {
   staffProfiles        StaffProfile[]
   customerProfiles     CustomerProfile[]
   customerTags         CustomerTag[]
+  catalogTags          CatalogTag[]
+  clientResults        ClientResult[]
   leads                Lead[]
   roles                Role[]
   serviceCategories    ServiceCategory[]
@@ -296,6 +298,8 @@ model StaffProfile {
 
   locations        StaffLocation[]
   services         StaffService[]
+  practitionerServices Service[] @relation("ServicePractitioner")
+  practitionerProducts Product[] @relation("ProductPractitioner")
   availability      StaffAvailability[]
   blockedTimes      BlockedTime[]
   appointments      Appointment[]
@@ -532,9 +536,28 @@ model Service {
   active              Boolean          @default(true)
   archivedAt          DateTime?
 
+  /// What the clinic calls this in its own app: "session", "treatment",
+  /// "product", "syringe" — shown to clients next to the price.
+  unitLabel             String?
+  /// The clinic's own booking or intake link for this item, if it has one.
+  schedulingUrl         String?
+  /// Most a client may put in one order. Null = no limit.
+  maxQuantity           Int?
+  /// Warn the client before they buy, and make them acknowledge it.
+  requiresConsultation  Boolean          @default(false)
+  consultationNotice    String?
+  /// Account credit ("cash balance") may not be spent on this item.
+  cashBalanceBlocked    Boolean          @default(false)
+  /// Bundle and variation prices the clinic defined — see lib/pricing-options.ts.
+  pricingOptions        Json?
+  practitionerId        String?
+  practitioner        StaffProfile?    @relation("ServicePractitioner", fields: [practitionerId], references: [id], onDelete: SetNull)
+
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
+  itemTags            CatalogItemTag[]
+  clientResults       ClientResult[]
   staff               StaffService[]
   packageItems        PackageItem[]
   appointments        Appointment[]
@@ -563,6 +586,63 @@ model ProductCategory {
   @@index([tenantId])
 }
 
+/// A label a clinic puts on the things it sells — "Popular", "No downtime" —
+/// with an icon and a sentence explaining it. Shown as cards on the product
+/// page in the client app.
+model CatalogTag {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  /// Icon key from the client app's own set (components/client-app/ui.tsx).
+  icon        String   @default("sparkle")
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items       CatalogItemTag[]
+
+  @@unique([tenantId, name])
+}
+
+model CatalogItemTag {
+  id        String     @id @default(cuid())
+  tagId     String
+  tag       CatalogTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  serviceId String?
+  service   Service?   @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product?   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([tagId, serviceId])
+  @@unique([tagId, productId])
+  @@index([serviceId])
+  @@index([productId])
+}
+
+/// A before/after pair with what the client said about it.
+model ClientResult {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  serviceId      String?
+  service        Service? @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  productId      String?
+  product        Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  beforeImageUrl String?
+  afterImageUrl  String?
+  testimonial    String?
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([serviceId])
+  @@index([productId])
+}
+
 model Product {
   id                String            @id @default(cuid())
   tenantId          String
@@ -580,9 +660,34 @@ model Product {
   active            Boolean           @default(true)
   archivedAt        DateTime?
 
+  /// Anything sold in the shop can also be a treatment: a duration, what to
+  /// do before and after, and who performs it are all optional.
+  durationMinutes   Int?
+  prepInstructions  String?
+  aftercareInstructions String?
+
+  /// What the clinic calls this in its own app: "session", "treatment",
+  /// "product", "syringe" — shown to clients next to the price.
+  unitLabel             String?
+  /// The clinic's own booking or intake link for this item, if it has one.
+  schedulingUrl         String?
+  /// Most a client may put in one order. Null = no limit.
+  maxQuantity           Int?
+  /// Warn the client before they buy, and make them acknowledge it.
+  requiresConsultation  Boolean          @default(false)
+  consultationNotice    String?
+  /// Account credit ("cash balance") may not be spent on this item.
+  cashBalanceBlocked    Boolean          @default(false)
+  /// Bundle and variation prices the clinic defined — see lib/pricing-options.ts.
+  pricingOptions        Json?
+  practitionerId        String?
+  practitioner      StaffProfile?     @relation("ProductPractitioner", fields: [practitionerId], references: [id], onDelete: SetNull)
+
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
+  itemTags          CatalogItemTag[]
+  clientResults     ClientResult[]
   basketItems       BasketItem[]
   orderItems        OrderItem[]
   inventoryTx       InventoryTransaction[]
