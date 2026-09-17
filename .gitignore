@@ -8,14 +8,22 @@
 # production
 /build
 
-# env
+# env — every env file is ignored by default. Only the two that hold no
+# secrets are committed: the empty template and the throwaway local test config.
 .env
-.env.local
-.env.*.local
+.env*
+!.env.example
+!.env.test
 
 # misc
 .DS_Store
+
+# keys and certificates
 *.pem
+*.key
+*.p8
+*.p12
+*.pfx
 npm-debug.log*
 
 # typescript
@@ -34,3 +42,6 @@ next-env.d.ts
 
 # self-signed certificate for phone testing (scripts/https-proxy.mjs)
 /.certs
+
+# deployment
+.vercel
