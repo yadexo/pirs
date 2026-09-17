@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:clean": "node scripts/rm-next.mjs && next dev",
+    "postinstall": "prisma generate",
     "build": "next build",
     "start": "next start",
     "setup": "node scripts/dev-up.mjs",
