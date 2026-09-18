@@ -3,7 +3,7 @@ import { ADMIN_LOGIN, CLINIC_LOGIN, loginForHost, loginRedirectForHost } from "@
 
 describe("subdomain logins", () => {
   it("sends the clinic subdomains to the clinic login", () => {
-    for (const host of ["clinic.pirs.io", "login.pirs.io", "clinics.pirs.io"]) expect(loginForHost(host)).toBe(CLINIC_LOGIN);
+    for (const host of ["clinic.pirs.io", "login.pirs.io"]) expect(loginForHost(host)).toBe(CLINIC_LOGIN);
     expect(CLINIC_LOGIN).toBe("/login");
   });
 
@@ -24,7 +24,7 @@ describe("subdomain logins", () => {
   });
 
   it("keeps the landing page everywhere else", () => {
-    for (const host of ["pirs-git-main-yadexo.vercel.app", "pirs.vercel.app", "localhost:3000", "192.168.178.25:3443", "pirs.io", "evil.admin.pirs.io.example.com", "", null, undefined]) {
+    for (const host of ["pirs-git-main-yadexo.vercel.app", "pirs.vercel.app", "localhost:3000", "192.168.178.25:3443", "pirs.io", "clinics.pirs.io", "evil.admin.pirs.io.example.com", "", null, undefined]) {
       expect(loginForHost(host)).toBeNull();
     }
   });
