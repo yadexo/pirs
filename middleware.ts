@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import { NextResponse, type NextRequest } from "next/server";
 import { authConfig } from "@/auth.config";
 import { LAST_CLINIC_COOKIE, slugFromAppPath } from "@/lib/clinic-link";
+import { loginRedirectForHost } from "@/lib/portal-hosts";
 
 const { auth } = NextAuth(authConfig);
 
@@ -54,6 +55,15 @@ export default auth((req) => {
   const user = req.auth?.user;
   const isAgencyAdmin = user?.role === "PLATFORM_ADMIN";
   const isMerchantUser = user?.role === "TENANT_ADMIN" || user?.role === "STAFF";
+
+  // --- custom subdomains open straight on their own login -----------------
+  // clinic./login.pirs.io → clinic login, admin.pirs.io → admin login. Any
+  // other host (*.vercel.app, localhost) keeps the three-portal landing page.
+  // 307, not permanent, so browsers don't cache it if the mapping changes.
+  if (pathname === "/") {
+    const login = loginRedirectForHost(req.headers.get("x-forwarded-host") ?? req.headers.get("host"));
+    if (login) return NextResponse.redirect(login, 307);
+  }
 
   // --- legacy auth entry points ------------------------------------------
   if (pathname === "/admin/login" || pathname === "/platform/login") {
@@ -110,6 +120,6 @@ export default auth((req) => {
 });
 
 export const config = {
-  // "/" is the portal index and needs no auth, so middleware skips it.
-  matcher: ["/admin/:path*", "/platform/:path*", "/agency/:path*", "/m/:path*", "/login", "/app/:path*"],
+  // "/" is here only for the subdomain redirect above; the landing page itself needs no auth.
+  matcher: ["/", "/admin/:path*", "/platform/:path*", "/agency/:path*", "/m/:path*", "/login", "/app/:path*"],
 };
