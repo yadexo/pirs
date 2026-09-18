@@ -57,7 +57,7 @@ export default auth((req) => {
   const isMerchantUser = user?.role === "TENANT_ADMIN" || user?.role === "STAFF";
 
   // --- custom subdomains open straight on their own login -----------------
-  // clinic./login.pirs.io → clinic login, admin.pirs.io → admin login. Any
+  // clinic.pirs.io → clinic login, admin.pirs.io → admin login. Any
   // other host (*.vercel.app, localhost) keeps the three-portal landing page.
   // 307, not permanent, so browsers don't cache it if the mapping changes.
   if (pathname === "/") {

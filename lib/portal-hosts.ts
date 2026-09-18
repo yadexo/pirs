@@ -14,7 +14,6 @@ export const ADMIN_LOGIN = `/login?next=${encodeURIComponent("/agency")}`;
 
 const LOGIN_BY_HOST: Record<string, string> = {
   "clinic.pirs.io": CLINIC_LOGIN,
-  "login.pirs.io": CLINIC_LOGIN,
   "admin.pirs.io": ADMIN_LOGIN,
 };
 
