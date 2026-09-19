@@ -777,14 +777,166 @@ export function NotificationsSection({ merchantId, data, canEdit }: { merchantId
 // Integrations (read-only until payments are connected per clinic)
 // ---------------------------------------------------------------------------
 
-export function IntegrationsSection({ data }: { data: Data<"integrations"> }) {
+const STRIPE_NOTICES: Record<string, { tone: "info" | "warn"; text: string }> = {
+  returned: { tone: "info", text: "Welcome back from Stripe. The status below is what Stripe reports right now." },
+  "not-configured": { tone: "warn", text: "Stripe isn't set up on this platform yet, so accounts can't be connected. Contact support." },
+  "owner-only": { tone: "warn", text: "Only the clinic owner can connect or manage Stripe." },
+  "no-country": { tone: "warn", text: "Add your clinic's country to its address (Settings → Branding) before connecting Stripe." },
+  "country-changed": { tone: "warn", text: "Your clinic's country changed since this page loaded. Check it below and confirm again." },
+  "not-confirmed": { tone: "warn", text: "Confirm the country below before continuing to Stripe." },
+  failed: { tone: "warn", text: "Stripe couldn't be reached or refused the request. Try again in a moment." },
+};
+
+const STRIPE_STATUS: Record<
+  Data<"integrations">["stripe"]["status"],
+  { label: string; tone: "green" | "amber" | "neutral" | "red"; detail: string }
+> = {
+  NOT_CONNECTED: { label: "Not connected", tone: "neutral", detail: "Connect your own Stripe account so clients' payments go straight to you." },
+  ONBOARDING: { label: "Setup not finished", tone: "amber", detail: "Your Stripe account exists, but Stripe still needs details from you." },
+  PENDING_VERIFICATION: {
+    label: "Pending verification",
+    tone: "amber",
+    detail: "You've sent your details to Stripe. It is still verifying them, and payments stay off until Stripe approves the account.",
+  },
+  ACTIVE: { label: "Connected", tone: "green", detail: "Stripe has enabled card payments on your account." },
+  RESTRICTED: { label: "Action needed", tone: "red", detail: "Stripe has paused payments on your account until you provide more information." },
+};
+
+function StripeConnectCard({ merchantId, stripe, isOwner }: { merchantId: string; stripe: Data<"integrations">["stripe"]; isOwner: boolean }) {
+  const [confirming, setConfirming] = React.useState(false);
+  const [confirmed, setConfirmed] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
+  const status = STRIPE_STATUS[stripe.status];
+  const base = `/m/${encodeURIComponent(merchantId)}/stripe`;
+
+  return (
+    <div className="rounded-card border border-border p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[13px] font-semibold">Stripe payments</p>
+          <p className="mt-0.5 text-[12px] text-ink-muted">{status.detail}</p>
+        </div>
+        <Pill tone={status.tone}>{status.label}</Pill>
+      </div>
+
+      {stripe.connected && (
+        <dl className="mt-3 grid grid-cols-2 gap-2 text-[12px]">
+          <div>
+            <dt className="text-ink-muted">Card payments</dt>
+            <dd className="font-medium">{stripe.chargesEnabled ? "Enabled" : "Not yet"}</dd>
+          </div>
+          <div>
+            <dt className="text-ink-muted">Payouts to your bank</dt>
+            <dd className="font-medium">{stripe.payoutsEnabled ? "Enabled" : "Not yet"}</dd>
+          </div>
+          {stripe.accountCountry && (
+            <div>
+              <dt className="text-ink-muted">Account country</dt>
+              <dd className="font-medium">{stripe.accountCountry}</dd>
+            </div>
+          )}
+          {stripe.checkedAt && (
+            <div>
+              <dt className="text-ink-muted">Last checked with Stripe</dt>
+              <dd className="font-medium">{new Date(stripe.checkedAt).toLocaleString()}</dd>
+            </div>
+          )}
+        </dl>
+      )}
+
+      <div className="mt-4 space-y-3">
+        {!stripe.configured ? (
+          <p className="rounded-[10px] bg-app px-3 py-2 text-[12px] text-ink-muted">Stripe isn&apos;t set up on this platform yet. Contact support.</p>
+        ) : !isOwner ? (
+          <p className="rounded-[10px] bg-app px-3 py-2 text-[12px] text-ink-muted">Only the clinic owner can connect or manage Stripe.</p>
+        ) : stripe.status === "NOT_CONNECTED" ? (
+          !stripe.countryCode ? (
+            <p className="rounded-[10px] bg-[var(--accent-amber)]/10 px-3 py-2 text-[12px] text-ink">
+              {stripe.addressCountry
+                ? `We can't tell which country "${stripe.addressCountry}" is. `
+                : "Your clinic's address has no country yet. "}
+              Set it under{" "}
+              <a className="font-medium underline" href={`/m/${encodeURIComponent(merchantId)}/app-builder?tab=settings&section=branding`}>
+                Settings → Branding
+              </a>{" "}
+              first — your Stripe account is created in that country.
+            </p>
+          ) : !confirming ? (
+            <Button type="button" onClick={() => setConfirming(true)}>
+              Connect Stripe
+            </Button>
+          ) : (
+            <form method="post" action={`${base}/connect`} onSubmit={() => setSubmitting(true)} className="space-y-3 rounded-[10px] border border-border p-3">
+              <input type="hidden" name="country" value={stripe.countryCode} />
+              <p className="text-[13px]">
+                Your Stripe account will be created in <strong>{stripe.countryLabel}</strong>, taken from your clinic&apos;s address. Stripe
+                doesn&apos;t allow changing the country afterwards.
+              </p>
+              <label className="flex cursor-pointer items-start gap-2 text-[13px]">
+                <input type="checkbox" name="confirmed" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--primary)]" />
+                <span>Yes, my business is based in {stripe.countryLabel}.</span>
+              </label>
+              <p className="text-[12px] text-ink-muted">
+                Wrong country? Correct your address under{" "}
+                <a className="underline" href={`/m/${encodeURIComponent(merchantId)}/app-builder?tab=settings&section=branding`}>
+                  Settings → Branding
+                </a>{" "}
+                first.
+              </p>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={!confirmed || submitting}>
+                  {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Continue to Stripe
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setConfirming(false)} disabled={submitting}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          )
+        ) : stripe.status === "ONBOARDING" ? (
+          <form method="post" action={`${base}/connect`} onSubmit={() => setSubmitting(true)}>
+            <Button type="submit" disabled={submitting}>
+              {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Continue setup on Stripe
+            </Button>
+          </form>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <a
+              href={`${base}/return`}
+              className="inline-flex h-9 items-center rounded-pill border border-border bg-surface px-4 text-[13px] font-medium text-ink hover:bg-app"
+            >
+              Check status now
+            </a>
+            <a
+              href="https://dashboard.stripe.com/"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-9 items-center rounded-pill border border-border bg-surface px-4 text-[13px] font-medium text-ink hover:bg-app"
+            >
+              Open Stripe Dashboard
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function IntegrationsSection({
+  merchantId,
+  data,
+  isOwner,
+  notice,
+}: {
+  merchantId: string;
+  data: Data<"integrations">;
+  isOwner: boolean;
+  notice: string | null;
+}) {
+  const shownNotice = notice ? STRIPE_NOTICES[notice] : undefined;
   const rows = [
-    {
-      name: "Payments",
-      state: data.payments === "stripe" ? "Stripe" : "Test mode",
-      tone: data.payments === "stripe" ? ("green" as const) : ("amber" as const),
-      detail: data.payments === "stripe" ? "Payments are processed by Stripe." : "Checkout works, but no real money moves.",
-    },
     {
       name: "Email",
       state: data.email === "resend" ? "Connected" : "Not set up",
@@ -800,18 +952,32 @@ export function IntegrationsSection({ data }: { data: Data<"integrations"> }) {
   ];
   return (
     <div className="space-y-4">
-      <p className="text-[12px] text-ink-muted">These are configured by the platform. Contact support to change them.</p>
-      <ul className="divide-y divide-border rounded-card border border-border">
-        {rows.map((r) => (
-          <li key={r.name} className="flex items-center justify-between gap-3 px-4 py-3">
-            <div>
-              <p className="text-[13px] font-semibold">{r.name}</p>
-              <p className="text-[11px] text-ink-muted">{r.detail}</p>
-            </div>
-            <Pill tone={r.tone}>{r.state}</Pill>
-          </li>
-        ))}
-      </ul>
+      {shownNotice && (
+        <p
+          role="status"
+          className={`rounded-[10px] px-3 py-2 text-[12px] text-ink ${shownNotice.tone === "warn" ? "bg-[var(--accent-amber)]/10" : "bg-primary-soft"}`}
+        >
+          {shownNotice.text}
+        </p>
+      )}
+      <StripeConnectCard merchantId={merchantId} stripe={data.stripe} isOwner={isOwner} />
+      {data.payments !== "stripe" && (
+        <p className="text-[12px] text-ink-muted">Checkout in the client app still runs in test mode: no real money moves until payments are switched to Stripe.</p>
+      )}
+      <div>
+        <p className="mb-2 text-[12px] text-ink-muted">These are configured by the platform. Contact support to change them.</p>
+        <ul className="divide-y divide-border rounded-card border border-border">
+          {rows.map((r) => (
+            <li key={r.name} className="flex items-center justify-between gap-3 px-4 py-3">
+              <div>
+                <p className="text-[13px] font-semibold">{r.name}</p>
+                <p className="text-[11px] text-ink-muted">{r.detail}</p>
+              </div>
+              <Pill tone={r.tone}>{r.state}</Pill>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

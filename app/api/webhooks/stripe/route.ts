@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { rawDb } from "@/lib/db";
+import { disconnectClinicAccount, syncClinicFromAccount } from "@/lib/stripe-connect";
 
 /**
- * Stripe webhook receiver. Only active when PAYMENT_PROVIDER=stripe and
- * STRIPE_WEBHOOK_SECRET is configured. Verifies the signature, then updates
- * the matching Payment/Order (by providerPaymentId) or CustomerMembership
- * (by stripeSubscriptionId) rows. Register this endpoint
- * (`/api/webhooks/stripe`) in the Stripe dashboard once real keys are added.
+ * Stripe webhook receiver, registered in Stripe as an endpoint for events on
+ * **connected accounts** (the clinics' own Standard accounts). Active once
+ * STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are set; verifies the signature
+ * before reading anything.
+ *
+ * - account.updated: keeps each clinic's Connect status in step with Stripe.
+ * - account.application.deauthorized: the clinic disconnected the platform.
+ * - payment_intent.* / customer.subscription.*: updates the matching Payment,
+ *   Order or CustomerMembership rows.
  */
 export async function POST(req: NextRequest) {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -30,6 +35,15 @@ export async function POST(req: NextRequest) {
   }
 
   switch (event.type) {
+    case "account.updated": {
+      // Stamped with the event's own time, so a late, older event can't undo a newer state.
+      await syncClinicFromAccount(event.data.object as Stripe.Account, new Date(event.created * 1000));
+      break;
+    }
+    case "account.application.deauthorized": {
+      if (event.account) await disconnectClinicAccount(event.account);
+      break;
+    }
     case "payment_intent.succeeded": {
       const intent = event.data.object as Stripe.PaymentIntent;
       const payment = await rawDb.payment.findFirst({ where: { providerPaymentId: intent.id } });

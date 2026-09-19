@@ -37,6 +37,8 @@ export function SettingsTab({
   data,
   canEdit,
   currency,
+  isOwner,
+  stripeNotice,
 }: {
   merchantId: string;
   section: SettingsSection;
@@ -44,6 +46,10 @@ export function SettingsTab({
   /** Whether the viewer may save this section; the server checks again on save. */
   canEdit: boolean;
   currency: string;
+  /** The clinic's own owner — not staff, not an agency admin viewing the clinic. */
+  isOwner: boolean;
+  /** Set when Stripe has just sent the browser back here. */
+  stripeNotice: string | null;
 }) {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-[180px_1fr]">
@@ -74,7 +80,7 @@ export function SettingsTab({
           {data.section === "loyalty-rules" && <LoyaltySection merchantId={merchantId} data={data} canEdit={canEdit} currency={currency} />}
           {data.section === "booking" && <BookingSection merchantId={merchantId} data={data} canEdit={canEdit} />}
           {data.section === "notifications" && <NotificationsSection merchantId={merchantId} data={data} canEdit={canEdit} />}
-          {data.section === "integrations" && <IntegrationsSection data={data} />}
+          {data.section === "integrations" && <IntegrationsSection merchantId={merchantId} data={data} isOwner={isOwner} notice={stripeNotice} />}
           {data.section === "audit-log" && <AuditLogSection data={data} />}
         </div>
       </Panel>

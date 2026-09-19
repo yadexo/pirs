@@ -30,6 +30,19 @@ enum SubscriptionStatus {
   CANCELLED
 }
 
+/// Where a clinic stands with its own Stripe account.
+enum StripeConnectStatus {
+  NOT_CONNECTED
+  /// Account created, onboarding form not finished.
+  ONBOARDING
+  /// Form submitted; Stripe is still verifying. No card payments yet.
+  PENDING_VERIFICATION
+  /// Card payments enabled.
+  ACTIVE
+  /// Stripe has disabled payments until more information is provided.
+  RESTRICTED
+}
+
 model Tenant {
   id                 String              @id @default(cuid())
   slug               String              @unique
@@ -38,6 +51,20 @@ model Tenant {
   subscriptionStatus SubscriptionStatus  @default(TRIAL)
   suspendedAt        DateTime?
   suspendedReason    String?
+
+  /// The clinic's own Stripe account (Connect, Standard). Clients' payments go
+  /// to this account; the platform never holds the clinic's money.
+  stripeAccountId        String?             @unique
+  stripeStatus           StripeConnectStatus @default(NOT_CONNECTED)
+  /// Stripe's own flags, copied as-is so stripeStatus is always derived from them.
+  stripeChargesEnabled   Boolean             @default(false)
+  stripePayoutsEnabled   Boolean             @default(false)
+  stripeDetailsSubmitted Boolean             @default(false)
+  /// Country the account was created in — fixed by Stripe once set.
+  stripeCountry          String?
+  /// When the stored status was last read from Stripe. Older webhooks are ignored.
+  stripeStatusCheckedAt  DateTime?
+
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 

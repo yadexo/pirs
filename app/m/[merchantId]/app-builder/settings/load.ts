@@ -5,6 +5,7 @@ import type { SettingsSection } from "@/lib/nav";
 import { PERMISSIONS } from "@/lib/permissions";
 import { clinicJoinUrl } from "@/lib/app-url";
 import { qrSvg } from "@/lib/qr";
+import { countryCodeFrom, countryName, isStripeConfigured } from "@/lib/stripe-connect";
 
 /**
  * Loads only what the open Settings section needs. Everything crossing to the
@@ -76,8 +77,34 @@ export async function loadSettingsSection(db: TenantDb, merchantId: string, sect
       return plain({ section, settings });
     }
     case "integrations": {
+      const clinic = await rawDb.tenant.findUniqueOrThrow({
+        where: { id: merchantId },
+        select: {
+          stripeAccountId: true,
+          stripeStatus: true,
+          stripeChargesEnabled: true,
+          stripePayoutsEnabled: true,
+          stripeCountry: true,
+          stripeStatusCheckedAt: true,
+          branding: { select: { country: true } },
+        },
+      });
+      const addressCountry = clinic.branding?.country ?? null;
+      const countryCode = countryCodeFrom(addressCountry);
       return {
         section,
+        stripe: {
+          configured: isStripeConfigured(),
+          connected: Boolean(clinic.stripeAccountId),
+          status: clinic.stripeStatus,
+          chargesEnabled: clinic.stripeChargesEnabled,
+          payoutsEnabled: clinic.stripePayoutsEnabled,
+          accountCountry: clinic.stripeCountry ? countryName(clinic.stripeCountry) : null,
+          checkedAt: clinic.stripeStatusCheckedAt?.toISOString() ?? null,
+          addressCountry,
+          countryCode,
+          countryLabel: countryCode ? countryName(countryCode) : null,
+        },
         payments: process.env.PAYMENT_PROVIDER === "stripe" ? ("stripe" as const) : ("test" as const),
         email: process.env.EMAIL_PROVIDER === "resend" && process.env.RESEND_API_KEY ? ("resend" as const) : ("not-configured" as const),
         push: process.env.PUSH_PROVIDER === "webpush" ? ("webpush" as const) : ("not-configured" as const),

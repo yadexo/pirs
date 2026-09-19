@@ -31,7 +31,7 @@ export default async function AppBuilderPage({
   searchParams,
 }: {
   params: Promise<{ merchantId: string }>;
-  searchParams: Promise<{ tab?: string; section?: string; q?: string; type?: string }>;
+  searchParams: Promise<{ tab?: string; section?: string; q?: string; type?: string; stripe?: string }>;
 }) {
   const { merchantId } = await params;
   const sp = await searchParams;
@@ -85,6 +85,8 @@ export default async function AppBuilderPage({
             currency={currency}
             data={await loadSettingsSection(ctx.db, merchantId, section)}
             canEdit={viewerCan(ctx.viewer, SECTION_NEEDS[section])}
+            isOwner={ctx.viewer.role === "TENANT_ADMIN"}
+            stripeNotice={sp.stripe ?? null}
           />
         ) : (
           <CatalogTab
