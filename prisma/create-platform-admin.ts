@@ -14,15 +14,14 @@
  * Before writing it shows which database it is about to change and asks for
  * "yes"; `--yes` skips that for automation.
  */
-import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../lib/password";
+import { AdminSetupError, arg, ask, checkPassword, confirmOrCancel, exitWith, flag, readNewPassword } from "./admin-cli";
 
-export const MIN_ADMIN_PASSWORD_LENGTH = 12;
+export { AdminSetupError, MIN_ADMIN_PASSWORD_LENGTH } from "./admin-cli";
+
 const STAFF_ROLES = ["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF"] as const;
-
-export class AdminSetupError extends Error {}
 
 export async function createPlatformAdmin(
   db: PrismaClient,
@@ -30,10 +29,7 @@ export async function createPlatformAdmin(
 ): Promise<{ id: string; email: string }> {
   const email = input.email.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw new AdminSetupError("That isn't a valid email address.");
-  if (input.password.length < MIN_ADMIN_PASSWORD_LENGTH) {
-    throw new AdminSetupError(`Use a password of at least ${MIN_ADMIN_PASSWORD_LENGTH} characters.`);
-  }
-  if (input.password.length > 200) throw new AdminSetupError("Keep the password under 200 characters.");
+  checkPassword(input.password);
 
   const passwordHash = await hashPassword(input.password);
 
@@ -50,79 +46,19 @@ export async function createPlatformAdmin(
         }
       }
 
-      const user = await tx.user.create({
+      return tx.user.create({
         data: { email, passwordHash, role: "PLATFORM_ADMIN", tenantId: null, status: "ACTIVE" },
         select: { id: true, email: true },
       });
-      return user;
     },
     { isolationLevel: "Serializable" },
   );
 }
 
-// ---------------------------------------------------------------------------
-// Command line
-// ---------------------------------------------------------------------------
-
-function arg(name: string): string | undefined {
-  const i = process.argv.indexOf(`--${name}`);
-  if (i === -1) return undefined;
-  const value = process.argv[i + 1];
-  return value && !value.startsWith("--") ? value : undefined;
-}
-
-const flag = (name: string) => process.argv.includes(`--${name}`);
-
-function ask(question: string, { hidden = false } = {}): Promise<string> {
-  return new Promise((resolve) => {
-    const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-    if (hidden && process.stdin.isTTY) {
-      // Print the question, then swallow what readline would echo.
-      const write = (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput;
-      (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput = (s: string) => {
-        if (s.includes(question)) write.call(rl, s);
-      };
-    }
-    rl.question(question, (answer) => {
-      rl.close();
-      if (hidden) process.stdout.write("\n");
-      resolve(answer);
-    });
-  });
-}
-
-/** "ep-xxx.neon.tech / neondb" — enough to recognise the target, never the password. */
-function describeDatabase(url: string | undefined): string {
-  if (!url) return "(DATABASE_URL is not set)";
-  try {
-    const u = new URL(url);
-    return `${u.hostname} / ${u.pathname.replace(/^\//, "") || "(default)"}`;
-  } catch {
-    return "(DATABASE_URL could not be read)";
-  }
-}
-
 async function main() {
   const email = arg("email") ?? (await ask("Email: "));
-  let password = arg("password");
-  if (password) {
-    console.warn("Note: --password is now in your shell history. Prefer the prompt next time.");
-  } else {
-    if (!process.stdin.isTTY) {
-      console.warn("Warning: this terminal isn't interactive, so the password may be shown as you type. PowerShell or Windows Terminal hides it.");
-    }
-    password = await ask(`Password (min ${MIN_ADMIN_PASSWORD_LENGTH} characters): `, { hidden: true });
-    const again = await ask("Repeat password: ", { hidden: true });
-    if (again !== password) throw new AdminSetupError("The passwords don't match. Nothing was changed.");
-  }
-
-  const target = describeDatabase(process.env.DATABASE_URL);
-  console.log(`\nAbout to create a PLATFORM_ADMIN account for ${email.trim().toLowerCase()}`);
-  console.log(`in database: ${target}`);
-  if (!flag("yes")) {
-    const answer = await ask('Type "yes" to continue: ');
-    if (answer.trim().toLowerCase() !== "yes") throw new AdminSetupError("Cancelled. Nothing was changed.");
-  }
+  const password = await readNewPassword();
+  await confirmOrCancel(`About to create a PLATFORM_ADMIN account for ${email.trim().toLowerCase()}`);
 
   const db = new PrismaClient();
   try {
@@ -134,8 +70,5 @@ async function main() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((err) => {
-    console.error(`\n${err instanceof AdminSetupError ? err.message : err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
-  });
+  main().catch(exitWith);
 }
