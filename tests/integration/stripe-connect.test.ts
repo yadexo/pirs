@@ -3,7 +3,7 @@ import Stripe from "stripe";
 import { NextRequest } from "next/server";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
-import type { StripeConnectClient } from "@/lib/stripe-connect";
+import type { StripeConnectClient, V2AccountCreateBody, V2AccountLinkBody } from "@/lib/stripe-connect";
 
 const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
 vi.mock("@/auth", () => authMock);
@@ -14,32 +14,28 @@ const webhook = await import("@/app/api/webhooks/stripe/route");
 
 const ORIGIN = "https://clinic.pirs.io";
 
-/** A Stripe client that records calls and returns accounts we control. */
+/** A Stripe client that records the v2 calls and returns accounts we control. */
 function fakeStripe() {
   let n = 0;
   const accounts = new Map<string, Stripe.Account>();
-  const calls = { create: [] as { params: Stripe.AccountCreateParams; key?: string }[], links: [] as Stripe.AccountLinkCreateParams[] };
-  const byKey = new Map<string, Stripe.Account>();
+  const calls = { create: [] as { body: V2AccountCreateBody; key: string }[], links: [] as V2AccountLinkBody[] };
+  const byKey = new Map<string, { id: string; identity: { country: string } }>();
   const client: StripeConnectClient = {
-    accounts: {
-      async create(params, options) {
-        calls.create.push({ params, key: options?.idempotencyKey });
-        const existing = options?.idempotencyKey ? byKey.get(options.idempotencyKey) : undefined;
-        if (existing) return existing;
-        const account = { id: `acct_test_${++n}`, country: params.country, charges_enabled: false, payouts_enabled: false, details_submitted: false, requirements: { disabled_reason: "requirements.past_due" } } as unknown as Stripe.Account;
-        accounts.set(account.id, account);
-        if (options?.idempotencyKey) byKey.set(options.idempotencyKey, account);
-        return account;
-      },
-      async retrieve(id) {
-        return accounts.get(id)!;
-      },
+    async createAccount(body, key) {
+      calls.create.push({ body, key });
+      const existing = byKey.get(key);
+      if (existing) return existing;
+      const created = { id: `acct_test_${++n}`, identity: { country: body.identity.country.toUpperCase() } };
+      accounts.set(created.id, { id: created.id, country: created.identity.country, charges_enabled: false, payouts_enabled: false, details_submitted: false, requirements: { disabled_reason: "requirements.past_due" } } as unknown as Stripe.Account);
+      byKey.set(key, created);
+      return created;
     },
-    accountLinks: {
-      async create(params) {
-        calls.links.push(params);
-        return { url: `https://connect.stripe.com/setup/s/${params.account}/${calls.links.length}` } as Stripe.AccountLink;
-      },
+    async createAccountLink(body) {
+      calls.links.push(body);
+      return { url: `https://connect.stripe.com/setup/s/${body.account}/${calls.links.length}` };
+    },
+    async retrieveAccount(id) {
+      return accounts.get(id)!;
     },
   };
   return { client, calls, accounts };
@@ -120,12 +116,29 @@ describe("Stripe Connect onboarding", () => {
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toMatch(/^https:\/\/connect\.stripe\.com\/setup\//);
 
+    // Accounts v2: the Standard-account equivalent, in the confirmed country.
     expect(calls.create).toHaveLength(1);
-    expect(calls.create[0]!.params).toMatchObject({ type: "standard", country: "NL", email: "hello@clinic.example", business_profile: { name: "Stripe Clinic BV" } });
-    expect(calls.links[0]).toMatchObject({
-      type: "account_onboarding",
-      refresh_url: `${ORIGIN}/m/${clinic}/stripe/refresh`,
-      return_url: `${ORIGIN}/m/${clinic}/stripe/return`,
+    expect(calls.create[0]!.body).toEqual({
+      contact_email: "hello@clinic.example",
+      display_name: "Stripe Clinic BV",
+      dashboard: "full",
+      identity: { country: "nl" },
+      configuration: { merchant: { capabilities: { card_payments: { requested: true } } } },
+      defaults: { responsibilities: { fees_collector: "stripe", losses_collector: "stripe" } },
+      metadata: { tenantId: clinic },
+      include: ["identity"],
+    });
+    expect(calls.create[0]!.key).toBe(`connect-account-v2-${clinic}-NL`);
+    expect(calls.links[0]).toEqual({
+      account: calls.links[0]!.account,
+      use_case: {
+        type: "account_onboarding",
+        account_onboarding: {
+          configurations: ["merchant"],
+          refresh_url: `${ORIGIN}/m/${clinic}/stripe/refresh`,
+          return_url: `${ORIGIN}/m/${clinic}/stripe/return`,
+        },
+      },
     });
 
     const saved = await rawDb.tenant.findUniqueOrThrow({ where: { id: clinic } });
@@ -143,20 +156,18 @@ describe("Stripe Connect onboarding", () => {
     const { stripeAccountId } = await rawDb.tenant.findUniqueOrThrow({ where: { id: clinic } });
     const res = await handleRefresh(get("refresh"), clinic, client);
     expect(res.headers.get("location")).toContain(stripeAccountId!);
-    expect(calls.links[0]).toMatchObject({ account: stripeAccountId, type: "account_onboarding" });
+    expect(calls.links[0]).toMatchObject({ account: stripeAccountId, use_case: { type: "account_onboarding" } });
   });
 
   it("return_url reads Stripe and shows pending verification, not verified", async () => {
     const { stripeAccountId } = await rawDb.tenant.findUniqueOrThrow({ where: { id: clinic } });
     const stripe: StripeConnectClient = {
-      accounts: {
-        create: async () => {
-          throw new Error("not used");
-        },
-        retrieve: async () =>
-          ({ id: stripeAccountId, country: "NL", charges_enabled: false, payouts_enabled: false, details_submitted: true, requirements: { disabled_reason: "requirements.pending_verification" } }) as unknown as Stripe.Account,
+      createAccount: async () => {
+        throw new Error("not used");
       },
-      accountLinks: { create: async () => ({ url: "unused" }) as Stripe.AccountLink },
+      createAccountLink: async () => ({ url: "unused" }),
+      retrieveAccount: async () =>
+        ({ id: stripeAccountId, country: "NL", charges_enabled: false, payouts_enabled: false, details_submitted: true, requirements: { disabled_reason: "requirements.pending_verification" } }) as unknown as Stripe.Account,
     };
     const res = await handleReturn(get("return"), clinic, stripe);
     expect(notice(res)).toBe("returned");

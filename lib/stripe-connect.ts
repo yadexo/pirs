@@ -4,13 +4,26 @@ import type { StripeConnectStatus } from "@prisma/client";
 import { rawDb } from "@/lib/db";
 
 /**
- * Stripe Connect for clinics: each clinic links its own Standard account, and
- * clients' payments go to that account. Onboarding uses Stripe's hosted flow
- * (Accounts API + Account Links), never OAuth.
+ * Stripe Connect for clinics: each clinic links its own Stripe account, and
+ * clients' payments go to that account. Onboarding uses Stripe's hosted flow,
+ * never OAuth.
+ *
+ * Accounts are created with Stripe's Accounts v2 API (POST /v2/core/accounts):
+ * Stripe refuses Accounts v1 creation for new Connect platforms. The account is
+ * the v2 equivalent of a Standard account — the clinic gets the full Stripe
+ * Dashboard, and Stripe (not the platform) collects its fees and covers losses.
+ * Onboarding links are v2 too (POST /v2/core/account_links).
+ *
+ * Reading an account still uses GET /v1/accounts/:id, which Stripe supports for
+ * v2 accounts and answers in the v1 shape — so the status logic, and the v1
+ * `account.updated` webhook (still sent for v2 accounts), stay as they were.
  *
  * The status stored on the clinic is always derived from Stripe's own flags —
  * returning from onboarding does not mean the account is verified.
  */
+
+/** Stripe's stable API version that serves the v2 Accounts endpoints used here. */
+export const STRIPE_V2_API_VERSION = "2026-08-26.dahlia";
 
 export class StripeNotConfiguredError extends Error {
   constructor() {
@@ -18,25 +31,59 @@ export class StripeNotConfiguredError extends Error {
   }
 }
 
-/** The subset of the Stripe client this module uses — lets tests pass a fake. */
+/** Body of POST /v2/core/accounts, limited to what this module sends. */
+export interface V2AccountCreateBody {
+  contact_email?: string;
+  display_name: string;
+  dashboard: "full";
+  identity: { country: string };
+  configuration: { merchant: { capabilities: { card_payments: { requested: true } } } };
+  defaults: { responsibilities: { fees_collector: "stripe"; losses_collector: "stripe" } };
+  metadata: Record<string, string>;
+  include: "identity"[];
+}
+
+/** Body of POST /v2/core/account_links for onboarding. */
+export interface V2AccountLinkBody {
+  account: string;
+  use_case: {
+    type: "account_onboarding";
+    account_onboarding: { configurations: "merchant"[]; refresh_url: string; return_url: string };
+  };
+}
+
+/** The Stripe calls this module makes — lets tests pass a fake. */
 export interface StripeConnectClient {
-  accounts: {
-    create: (params: Stripe.AccountCreateParams, options?: Stripe.RequestOptions) => Promise<Stripe.Account>;
-    retrieve: (id: string) => Promise<Stripe.Account>;
-  };
-  accountLinks: {
-    create: (params: Stripe.AccountLinkCreateParams) => Promise<Stripe.AccountLink>;
-  };
+  /** POST /v2/core/accounts */
+  createAccount: (body: V2AccountCreateBody, idempotencyKey: string) => Promise<{ id: string; identity?: { country?: string | null } | null }>;
+  /** POST /v2/core/account_links */
+  createAccountLink: (body: V2AccountLinkBody) => Promise<{ url: string }>;
+  /** GET /v1/accounts/:id — answered in the v1 shape, including for v2 accounts. */
+  retrieveAccount: (id: string) => Promise<Stripe.Account>;
 }
 
 export function isStripeConfigured(): boolean {
   return Boolean(process.env.STRIPE_SECRET_KEY);
 }
 
-export function stripeClient(): StripeConnectClient {
+/** `config` is for tests that point the client at a local server. */
+export function stripeClient(config?: Stripe.StripeConfig): StripeConnectClient {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) throw new StripeNotConfiguredError();
-  return new Stripe(key) as unknown as StripeConnectClient;
+  const stripe = new Stripe(key, config);
+  // The installed SDK has no typed v2 Accounts methods; rawRequest sends /v2
+  // paths as JSON with the v2 headers. The API version is pinned per request so
+  // the rest of the app keeps its own.
+  const v2 = { apiVersion: STRIPE_V2_API_VERSION };
+  return {
+    createAccount: async (body, idempotencyKey) =>
+      (await stripe.rawRequest("POST", "/v2/core/accounts", { ...body }, { ...v2, idempotencyKey })) as unknown as {
+        id: string;
+        identity?: { country?: string | null } | null;
+      },
+    createAccountLink: async (body) => (await stripe.rawRequest("POST", "/v2/core/account_links", { ...body }, v2)) as unknown as { url: string },
+    retrieveAccount: (id) => stripe.accounts.retrieve(id),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -195,43 +242,59 @@ export async function ensureConnectedAccount(
 ): Promise<string> {
   if (clinic.stripeAccountId) return clinic.stripeAccountId;
 
-  const account = await stripe.accounts.create(
+  const account = await stripe.createAccount(
     {
-      type: "standard",
-      country,
-      email: clinic.email ?? undefined,
-      business_profile: { name: clinic.name },
+      contact_email: clinic.email ?? undefined,
+      display_name: clinic.name,
+      // Standard-account equivalent: the clinic's own full Stripe Dashboard, and
+      // Stripe — not the platform — collects its fees and carries its losses.
+      dashboard: "full",
+      identity: { country: country.toLowerCase() },
+      configuration: { merchant: { capabilities: { card_payments: { requested: true } } } },
+      defaults: { responsibilities: { fees_collector: "stripe", losses_collector: "stripe" } },
       metadata: { tenantId: clinic.id },
+      include: ["identity"],
     },
-    { idempotencyKey: `connect-account-${clinic.id}-${country}` },
+    // "v2" in the key: an earlier v1 attempt with the old key must not be replayed.
+    `connect-account-v2-${clinic.id}-${country}`,
   );
 
   // Only store it if nothing else did first; otherwise keep the stored one.
   const claimed = await rawDb.tenant.updateMany({
     where: { id: clinic.id, stripeAccountId: null },
-    data: { stripeAccountId: account.id, stripeCountry: account.country ?? country },
+    data: {
+      stripeAccountId: account.id,
+      stripeCountry: (account.identity?.country ?? country).toUpperCase(),
+      // A brand-new account has not been through onboarding yet. The return
+      // page and account.updated webhooks fill in Stripe's real flags from here.
+      stripeStatus: "ONBOARDING",
+      stripeChargesEnabled: false,
+      stripePayoutsEnabled: false,
+      stripeDetailsSubmitted: false,
+    },
   });
   if (claimed.count === 0) {
     const current = await rawDb.tenant.findUniqueOrThrow({ where: { id: clinic.id }, select: { stripeAccountId: true } });
     return current.stripeAccountId ?? account.id;
   }
-  await syncClinicFromAccount(account);
   return account.id;
 }
 
 /** A fresh, single-use link into Stripe's hosted onboarding. Links expire within minutes. */
 export async function createOnboardingLink(stripe: StripeConnectClient, accountId: string, origin: string, merchantId: string): Promise<string> {
-  const link = await stripe.accountLinks.create({
+  const link = await stripe.createAccountLink({
     account: accountId,
-    type: "account_onboarding",
-    ...onboardingUrls(origin, merchantId),
+    use_case: {
+      type: "account_onboarding",
+      account_onboarding: { configurations: ["merchant"], ...onboardingUrls(origin, merchantId) },
+    },
   });
   return link.url;
 }
 
 /** Reads the account from Stripe now and stores its status. */
 export async function refreshClinicStatus(stripe: StripeConnectClient, accountId: string): Promise<StripeConnectStatus> {
-  const account = await stripe.accounts.retrieve(accountId);
+  const account = await stripe.retrieveAccount(accountId);
   await syncClinicFromAccount(account);
   return deriveStripeStatus(account);
 }
