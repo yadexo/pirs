@@ -7,8 +7,11 @@ import {
   clientSetCartQtyAction,
   clientCheckoutAction,
   clientRedeemableRewardsAction,
+  clientOrderStatusAction,
+  clientAbandonOrderAction,
 } from "@/lib/actions/client-app";
 import { useCart, type CartLine } from "./cart-context";
+import { CardPayment, type PaymentHandoff } from "./card-payment";
 
 interface Reward {
   id: string;
@@ -18,7 +21,7 @@ interface Reward {
   discountPercent: number | null;
 }
 
-type Stage = "cart" | "pay" | "done";
+type Stage = "cart" | "pay" | "card" | "done";
 
 export function CartSheet({
   merchantSlug,
@@ -43,6 +46,9 @@ export function CartSheet({
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<{ orderNumber: string; pointsEarned: number } | null>(null);
+  /** Set when the clinic takes real cards: the client confirms in the Payment Element. */
+  const [handoff, setHandoff] = React.useState<{ payment: PaymentHandoff; orderNumber: string; totalCents: number } | null>(null);
+  const [settling, setSettling] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) return;
@@ -50,6 +56,7 @@ export function CartSheet({
     setError(null);
     setRewardId(null);
     setResult(null);
+    setHandoff(null);
     void refresh();
     clientRedeemableRewardsAction().then(setRewards).catch(() => setRewards([]));
   }, [open, refresh]);
@@ -78,13 +85,62 @@ export function CartSheet({
       setError(res.error);
       return;
     }
+    if (!res.paid) {
+      // The clinic takes real cards: collect them, then let the webhook settle.
+      setHandoff({ payment: res.payment, orderNumber: res.orderNumber, totalCents: res.totalCents });
+      setStage("card");
+      return;
+    }
     setResult({ orderNumber: res.orderNumber, pointsEarned: res.pointsEarned });
     setStage("done");
     await refresh();
     router.refresh();
   }
 
-  const title = stage === "done" ? "Order confirmed" : stage === "pay" ? "Checkout" : "Your cart";
+  /**
+   * Stripe says the payment went through; our order is settled by the webhook,
+   * which usually lands within a second. Ask a few times before saying it is
+   * still processing — never claim an outcome the server hasn't confirmed.
+   */
+  async function afterCardPayment() {
+    if (!handoff) return;
+    setSettling(true);
+    let pointsEarned = 0;
+    let settled = false;
+    for (let attempt = 0; attempt < 6 && !settled; attempt++) {
+      const status = await clientOrderStatusAction(merchantSlug, handoff.orderNumber).catch(() => null);
+      if (status && "ok" in status) {
+        if (status.status === "PAID") {
+          pointsEarned = status.pointsEarned;
+          settled = true;
+          break;
+        }
+        if (status.status === "FAILED") {
+          setSettling(false);
+          setStage("pay");
+          setError("That payment didn't go through. Please try another method.");
+          return;
+        }
+      }
+      await new Promise((r) => setTimeout(r, 700));
+    }
+    setSettling(false);
+    setResult({ orderNumber: handoff.orderNumber, pointsEarned });
+    setStage("done");
+    setHandoff(null);
+    await refresh();
+    router.refresh();
+    if (!settled) toast("Payment received. Your order is being confirmed.");
+  }
+
+  async function cancelCardPayment() {
+    if (handoff) await clientAbandonOrderAction(merchantSlug, handoff.orderNumber).catch(() => undefined);
+    setHandoff(null);
+    setStage("cart");
+    await refresh();
+  }
+
+  const title = stage === "done" ? "Order confirmed" : stage === "card" ? "Payment" : stage === "pay" ? "Checkout" : "Your cart";
 
   return (
     <Sheet
@@ -96,7 +152,7 @@ export function CartSheet({
           <button className="btn-black" onClick={onClose}>
             Done
           </button>
-        ) : items.length === 0 ? undefined : stage === "pay" ? (
+        ) : stage === "card" ? undefined : items.length === 0 ? undefined : stage === "pay" ? (
           <button className="btn-black" disabled={pending} onClick={pay}>
             {pending ? "Processing…" : `Pay ${money(total, currency)}`}
           </button>
@@ -107,7 +163,19 @@ export function CartSheet({
         )
       }
     >
-      {stage === "done" && result ? (
+      {stage === "card" && handoff ? (
+        settling ? (
+          <p style={{ textAlign: "center", padding: "32px 0", color: "var(--muted)", fontSize: 15 }}>Confirming your payment…</p>
+        ) : (
+          <CardPayment
+            payment={handoff.payment}
+            amountCents={handoff.totalCents}
+            currency={currency}
+            onPaid={afterCardPayment}
+            onCancel={cancelCardPayment}
+          />
+        )
+      ) : stage === "done" && result ? (
         <div style={{ textAlign: "center", paddingTop: 8 }}>
           <span className="okring" style={{ margin: "0 auto 10px" }}>
             <Icon name="check" size={40} width={2.4} />

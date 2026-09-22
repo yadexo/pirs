@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { rawDb } from "@/lib/db";
-import { disconnectClinicAccount, syncClinicFromAccount } from "@/lib/stripe-connect";
+import { alreadyProcessed, forgetProcessed, handleStripeEvent } from "@/lib/stripe-webhook";
 
 /**
  * Stripe webhook receiver, registered in Stripe as an endpoint for events on
- * **connected accounts** (the clinics' own Standard accounts). Active once
- * STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are set; verifies the signature
- * before reading anything.
+ * **connected accounts** (the clinics' own accounts, where clients' payments
+ * are charged). Active once STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are
+ * set; the signature is verified before anything is read.
  *
- * - account.updated: keeps each clinic's Connect status in step with Stripe.
- * - account.application.deauthorized: the clinic disconnected the platform.
- * - payment_intent.* / customer.subscription.*: updates the matching Payment,
- *   Order or CustomerMembership rows.
+ * Handled: account.updated, account.application.deauthorized,
+ * payment_intent.succeeded, payment_intent.payment_failed, charge.refunded,
+ * charge.dispute.created, and membership subscription changes.
+ * See lib/stripe-webhook.ts.
  */
 export async function POST(req: NextRequest) {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -34,62 +33,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
   }
 
-  switch (event.type) {
-    case "account.updated": {
-      // Stamped with the event's own time, so a late, older event can't undo a newer state.
-      await syncClinicFromAccount(event.data.object as Stripe.Account, new Date(event.created * 1000));
-      break;
-    }
-    case "account.application.deauthorized": {
-      if (event.account) await disconnectClinicAccount(event.account);
-      break;
-    }
-    case "payment_intent.succeeded": {
-      const intent = event.data.object as Stripe.PaymentIntent;
-      const payment = await rawDb.payment.findFirst({ where: { providerPaymentId: intent.id } });
-      if (payment) {
-        await rawDb.payment.update({ where: { id: payment.id }, data: { status: "SUCCEEDED" } });
-        if (payment.orderId) {
-          await rawDb.order.update({ where: { id: payment.orderId }, data: { status: "PAID", paidAt: new Date() } });
-        }
-      }
-      break;
-    }
-    case "payment_intent.payment_failed": {
-      const intent = event.data.object as Stripe.PaymentIntent;
-      const payment = await rawDb.payment.findFirst({ where: { providerPaymentId: intent.id } });
-      if (payment) {
-        await rawDb.payment.update({
-          where: { id: payment.id },
-          data: { status: "FAILED", failureReason: intent.last_payment_error?.message },
-        });
-        if (payment.orderId) {
-          await rawDb.order.update({ where: { id: payment.orderId }, data: { status: "FAILED" } });
-        }
-      }
-      break;
-    }
-    case "customer.subscription.updated":
-    case "customer.subscription.deleted": {
-      const sub = event.data.object as Stripe.Subscription;
-      const membership = await rawDb.customerMembership.findFirst({ where: { stripeSubscriptionId: sub.id } });
-      if (membership) {
-        const status =
-          sub.status === "active"
-            ? "ACTIVE"
-            : sub.status === "trialing"
-              ? "TRIAL"
-              : sub.status === "past_due"
-                ? "PAST_DUE"
-                : sub.status === "canceled"
-                  ? "CANCELLED"
-                  : membership.status;
-        await rawDb.customerMembership.update({ where: { id: membership.id }, data: { status } });
-      }
-      break;
-    }
-    default:
-      break;
+  // Stripe retries until it gets a 2xx, so the same event can arrive twice.
+  if (await alreadyProcessed(event)) return NextResponse.json({ received: true, duplicate: true });
+
+  try {
+    await handleStripeEvent(event);
+  } catch (err) {
+    // Tell Stripe to retry rather than swallowing a half-applied change.
+    await forgetProcessed(event.id);
+    console.error(`[stripe-webhook] ${event.type} (${event.id}) failed:`, err instanceof Error ? err.message : err);
+    return NextResponse.json({ error: "Could not process this event." }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });

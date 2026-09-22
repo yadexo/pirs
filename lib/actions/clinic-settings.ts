@@ -36,6 +36,15 @@ const wholeNumber = (label: string, min: number, max: number) =>
       .max(max, `Must be at most ${max}`),
   );
 const optionalText = (max: number) => z.string().max(max, `Keep it under ${max} characters`).optional();
+/** Money typed as "25" or "25.50", stored as cents. */
+const moneyCents = (label: string) =>
+  z.preprocess(
+    (v) => (v === undefined || v === "" ? undefined : String(v).replace(",", ".").trim()),
+    z
+      .string({ required_error: `Enter ${label}` })
+      .regex(/^d{1,7}(.d{1,2})?$/, "Enter an amount like 25 or 25.50")
+      .transform((n) => Math.round(Number(n) * 100)),
+  );
 const httpsUrl = z
   .string()
   .max(2048)
@@ -537,6 +546,8 @@ const bookingSchema = z
     externalBookingUrl: httpsUrl.optional(),
     appointmentCancellationHours: wholeNumber("a notice period", 0, 24 * 14),
     appointmentReminderHours: wholeNumber("a reminder time", 0, 24 * 14),
+    bookingDepositPercent: wholeNumber("a deposit percentage", 0, 100),
+    bookingDepositFixedCents: moneyCents("a deposit amount").optional(),
   })
   .superRefine((b, ctx) => {
     if (b.bookingMode === "EXTERNAL" && !b.externalBookingUrl) {
@@ -552,8 +563,14 @@ export async function saveBookingSettingsAction(merchantId: string, fd: FormData
       externalBookingUrl: formText(fd, "externalBookingUrl"),
       appointmentCancellationHours: formText(fd, "appointmentCancellationHours") ?? "0",
       appointmentReminderHours: formText(fd, "appointmentReminderHours") ?? "0",
+      bookingDepositPercent: formText(fd, "bookingDepositPercent") ?? "0",
+      bookingDepositFixedCents: formText(fd, "bookingDeposit"),
     });
-    await upsertSettings(merchantId, { ...data, externalBookingUrl: data.externalBookingUrl ?? null });
+    await upsertSettings(merchantId, {
+      ...data,
+      externalBookingUrl: data.externalBookingUrl ?? null,
+      bookingDepositFixedCents: data.bookingDepositFixedCents ?? 0,
+    });
     await ctx.audit("settings.booking.updated", "TenantSettings", merchantId, data);
     await revalidateMerchant(merchantId);
     return {};

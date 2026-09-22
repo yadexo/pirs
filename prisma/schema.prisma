@@ -164,6 +164,12 @@ model TenantSettings {
   shopBannerSubtitle            String?
   shopBannerButtonLabel         String?
 
+  /// Deposit a client pays to book. 0 (the default) means booking is free and
+  /// the treatment is paid at the clinic. A fixed amount wins over the
+  /// percentage when both are set.
+  bookingDepositPercent         Int      @default(0)
+  bookingDepositFixedCents      Int      @default(0)
+
   /// IN_APP books through the availability engine; EXTERNAL sends clients to
   /// the clinic's own booking site.
   bookingMode                   BookingMode @default(IN_APP)
@@ -1242,6 +1248,8 @@ enum OrderStatus {
   REFUNDED
   PARTIALLY_REFUNDED
   CANCELLED
+  /// The client's bank is disputing the payment; the money is held by Stripe.
+  DISPUTED
 }
 
 model Order {
@@ -1314,6 +1322,8 @@ enum PaymentStatus {
   SUCCEEDED
   FAILED
   CANCELLED
+  /// Charged back by the client's bank.
+  DISPUTED
 }
 
 model Payment {
@@ -1327,11 +1337,19 @@ model Payment {
 
   provider              PaymentProviderName   @default(MOCK)
   providerPaymentId     String?
+  /// The clinic's connected account the charge was made on. Refunds, reads and
+  /// webhook lookups all need it, and it is kept even if the clinic later
+  /// disconnects Stripe.
+  stripeAccountId       String?
   amountCents           Int
+  /// What the platform took from this charge (application fee). 0 when the
+  /// platform takes nothing.
+  applicationFeeCents   Int                   @default(0)
   currency              String                @default("EUR")
   status                PaymentStatus         @default(PROCESSING)
   failureReason         String?
   method                String?
+  disputedAt            DateTime?
 
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
@@ -1340,6 +1358,7 @@ model Payment {
 
   @@index([tenantId, orderId])
   @@index([tenantId, status])
+  @@index([providerPaymentId])
 }
 
 enum RefundStatus {
@@ -1667,6 +1686,18 @@ model AgencySettings {
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+/// Every Stripe event we have already acted on. Stripe retries events and can
+/// deliver one twice; without this a repeat of payment_intent.succeeded would
+/// award loyalty points again.
+model ProcessedStripeEvent {
+  id          String   @id
+  type        String
+  accountId   String?
+  processedAt DateTime @default(now())
+
+  @@index([processedAt])
 }
 
 /// Fixed-window rate-limit counters. Kept in Postgres rather than process

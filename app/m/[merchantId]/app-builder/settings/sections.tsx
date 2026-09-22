@@ -10,9 +10,11 @@ import {
   CheckboxField,
   FormSection,
   ImageField,
+  MoneyField,
   SelectField,
   TextAreaField,
   TextField,
+  centsToInput,
   type FieldErrors,
 } from "@/components/merchant/form";
 import {
@@ -718,7 +720,7 @@ export function LoyaltySection({ merchantId, data, canEdit, currency }: { mercha
 // Booking
 // ---------------------------------------------------------------------------
 
-export function BookingSection({ merchantId, data, canEdit }: { merchantId: string; data: Data<"booking">; canEdit: boolean }) {
+export function BookingSection({ merchantId, data, canEdit, currency }: { merchantId: string; data: Data<"booking">; canEdit: boolean; currency: string }) {
   const s = data.settings;
   const [mode, setMode] = React.useState(str(s?.bookingMode) || "IN_APP");
   return (
@@ -743,6 +745,31 @@ export function BookingSection({ merchantId, data, canEdit }: { merchantId: stri
             <div className="grid gap-3 sm:grid-cols-2">
               <TextField label="Cancellation notice (hours)" name="appointmentCancellationHours" type="number" min={0} defaultValue={str(s?.appointmentCancellationHours ?? 24)} errors={errors} hint="Clients can't cancel in the app later than this." />
               <TextField label="Reminder before (hours)" name="appointmentReminderHours" type="number" min={0} defaultValue={str(s?.appointmentReminderHours ?? 24)} errors={errors} />
+            </div>
+          </FormSection>
+          <FormSection title="Deposit">
+            <p className="text-[12px] text-ink-muted">
+              Leave both at zero and booking stays free: clients pay at the clinic. With a deposit set, the appointment is held as requested until the client pays
+              it. Deposits need Stripe connected and active.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <TextField
+                label="Deposit (% of the treatment price)"
+                name="bookingDepositPercent"
+                type="number"
+                min={0}
+                max={100}
+                defaultValue={str(s?.bookingDepositPercent ?? 0)}
+                errors={errors}
+              />
+              <MoneyField
+                label="Or a fixed deposit"
+                name="bookingDeposit"
+                currency={currency}
+                defaultValue={centsToInput(s?.bookingDepositFixedCents ?? 0)}
+                errors={errors}
+                hint="A fixed amount wins over the percentage."
+              />
             </div>
           </FormSection>
         </>

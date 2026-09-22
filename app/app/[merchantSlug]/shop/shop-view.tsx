@@ -468,6 +468,7 @@ export function ShopView({
 
       <BookingSheet
         merchantSlug={merchantSlug}
+        currency={currency}
         service={booking}
         onClose={() => setBooking(null)}
         onBooked={() => {

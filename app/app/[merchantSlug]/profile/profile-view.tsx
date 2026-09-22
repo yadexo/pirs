@@ -506,6 +506,7 @@ export function ProfileView({
 
       <BookingSheet
         merchantSlug={merchantSlug}
+        currency={currency}
         appointmentId={reschedule?.appt.id}
         service={
           reschedule

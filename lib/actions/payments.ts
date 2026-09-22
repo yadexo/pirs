@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission, requireStaffContext } from "@/lib/rbac";
 import { getPaymentProvider } from "@/lib/providers/payments";
+import { refundDirectCharge } from "@/lib/stripe-payments";
 import { writeAuditLog } from "@/lib/audit";
 
 export async function refundPaymentAction(_prevState: unknown, formData: FormData) {
@@ -28,12 +29,28 @@ export async function refundPaymentAction(_prevState: unknown, formData: FormDat
     return { error: "Refund amount exceeds the remaining refundable balance." };
   }
 
-  const provider = getPaymentProvider();
-  const result = await provider.refund({
-    providerPaymentId: payment.providerPaymentId ?? "",
-    amountCents,
-    reason,
-  });
+  // A charge made on the clinic's own Stripe account is refunded there, and
+  // the platform's fee goes back with it — otherwise the clinic refunds the
+  // client in full while the platform keeps its cut.
+  let result;
+  if (payment.provider === "STRIPE" && payment.stripeAccountId && payment.providerPaymentId) {
+    try {
+      result = await refundDirectCharge({
+        stripeAccountId: payment.stripeAccountId,
+        paymentIntentId: payment.providerPaymentId,
+        amountCents,
+        reason,
+        hasApplicationFee: payment.applicationFeeCents > 0,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Stripe refused the refund.";
+      console.error("[refund] Stripe refused:", message);
+      return { error: `Stripe couldn't refund this payment: ${message}` };
+    }
+  } else {
+    const provider = getPaymentProvider();
+    result = await provider.refund({ providerPaymentId: payment.providerPaymentId ?? "", amountCents, reason });
+  }
 
   await db.refund.create({
     data: {

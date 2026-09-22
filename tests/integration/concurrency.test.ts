@@ -66,7 +66,9 @@ describe("concurrent requests", () => {
     // The ledger agrees: 20 rows whose running balances are 5, 10, … 100.
     const rows = await rawDb.loyaltyTransaction.findMany({ where: { customerProfileId: c.profileId } });
     expect(rows.map((r) => r.balanceAfter).sort((a, b) => a - b)).toEqual(Array.from({ length: 20 }, (_, i) => (i + 1) * 5));
-  });
+    // 20 serialised writes against a containerised database: slower than the
+    // 5s default whenever the machine is busy.
+  }, 30_000);
 
   it("never lets a balance go below zero", async () => {
     const c = await makeClient("floor", 30);

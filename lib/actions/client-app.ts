@@ -11,6 +11,9 @@ import { writeAuditLog } from "@/lib/audit";
 import { nanoid } from "nanoid";
 import { tenantCurrency } from "@/lib/currency";
 import { recordActivity } from "@/lib/activity";
+import { clinicPaymentMode, createDirectCharge } from "@/lib/stripe-payments";
+import { completePaidOrder, releaseFailedOrder } from "@/lib/order-completion";
+import { bookingDepositCents } from "@/lib/booking-deposit";
 
 /**
  * Every mutating action the patient app can perform.
@@ -67,10 +70,20 @@ const bookSchema = z.object({
   startAtIso: z.string().min(1),
 });
 
+export type BookResult =
+  | { error: string }
+  | { ok: true; when: string; deposit?: undefined }
+  | {
+      ok: true;
+      when: string;
+      /** The clinic asks for a deposit: the appointment stays REQUESTED until it is paid. */
+      deposit: { orderNumber: string; amountCents: number; payment: { clientSecret: string; publishableKey: string | null; stripeAccountId: string } };
+    };
+
 export async function clientBookAction(
   slug: string,
   input: { serviceId: string; staffProfileId: string; locationId: string; startAtIso: string; appointmentId?: string },
-): Promise<{ error: string } | { ok: true; when: string }> {
+): Promise<BookResult> {
   const { db, user } = await requireCustomerContext();
 
   const parsed = bookSchema.safeParse(input);
@@ -102,6 +115,89 @@ export async function clientBookAction(
       data: { startAt, endAt, staffProfileId: input.staffProfileId, locationId: input.locationId, status: "CONFIRMED" },
     });
   } else {
+    const settings = await db.tenantSettings.findFirst({ where: {} });
+    const depositCents = bookingDepositCents(settings, service.priceCents);
+    const payment = depositCents > 0 ? await clinicPaymentMode(user.tenantId!) : null;
+
+    // A clinic that asks for a deposit but can't take cards yet would otherwise
+    // block booking entirely; let the booking through and collect at the desk.
+    if (depositCents > 0 && payment && payment.mode === "stripe") {
+      const currency = await tenantCurrency(db);
+      const orderNumber = `BKG-${Date.now().toString(36).toUpperCase()}-${nanoid(4).toUpperCase()}`;
+      const order = await db.order.create({
+        data: {
+          customerProfileId: user.customerProfileId!,
+          orderNumber,
+          currency,
+          status: "PENDING",
+          subtotalCents: depositCents,
+          totalCents: depositCents,
+          items: {
+            create: [
+              {
+                itemType: "SERVICE",
+                serviceId: service.id,
+                name: `Deposit — ${service.name}`,
+                quantity: 1,
+                unitPriceCents: depositCents,
+                totalCents: depositCents,
+                taxCents: 0,
+              },
+            ],
+          },
+        } as never,
+      });
+      const appointment = await db.appointment.create({
+        data: {
+          customerProfileId: user.customerProfileId!,
+          serviceId: input.serviceId,
+          staffProfileId: input.staffProfileId,
+          locationId: input.locationId,
+          orderId: order.id,
+          startAt,
+          endAt,
+          status: "REQUESTED",
+        } as never,
+      });
+      try {
+        const charge = await createDirectCharge({
+          stripeAccountId: payment.stripeAccountId,
+          amountCents: depositCents,
+          subtotalCents: depositCents,
+          currency,
+          description: `Deposit for ${service.name}`,
+          metadata: { orderId: order.id, orderNumber, tenantId: user.tenantId!, appointmentId: appointment.id },
+          idempotencyKey: `booking-${order.id}`,
+        });
+        await db.payment.create({
+          data: {
+            orderId: order.id,
+            provider: "STRIPE",
+            providerPaymentId: charge.paymentIntentId,
+            stripeAccountId: charge.stripeAccountId,
+            amountCents: depositCents,
+            applicationFeeCents: charge.applicationFeeCents,
+            currency,
+            status: "REQUIRES_ACTION",
+          } as never,
+        });
+        revalidateClient(slug);
+        return {
+          ok: true,
+          when: startAt.toISOString(),
+          deposit: {
+            orderNumber,
+            amountCents: depositCents,
+            payment: { clientSecret: charge.clientSecret, publishableKey: charge.publishableKey, stripeAccountId: charge.stripeAccountId },
+          },
+        };
+      } catch (err) {
+        console.error("[booking] could not start the deposit payment:", err instanceof Error ? err.message : err);
+        await releaseFailedOrder(db, order.id, "the deposit could not be started");
+        return { error: "We couldn't start the deposit payment. Please try again." };
+      }
+    }
+
     await db.appointment.create({
       data: {
         customerProfileId: user.customerProfileId!,
@@ -245,11 +341,20 @@ export async function clientRedeemableRewardsAction() {
     }));
 }
 
-export async function clientCheckoutAction(
-  slug: string,
-  rewardId: string | null,
-  simulateFailure = false,
-): Promise<{ error: string } | { ok: true; orderNumber: string; pointsEarned: number; totalCents: number }> {
+/** What the cart does next: nothing more, or collect card details. */
+export type CheckoutResult =
+  | { error: string }
+  | { ok: true; paid: true; orderNumber: string; pointsEarned: number; totalCents: number }
+  | {
+      ok: true;
+      paid: false;
+      orderNumber: string;
+      totalCents: number;
+      /** For the Payment Element; the charge lives on the clinic's own account. */
+      payment: { clientSecret: string; publishableKey: string | null; stripeAccountId: string };
+    };
+
+export async function clientCheckoutAction(slug: string, rewardId: string | null, simulateFailure = false): Promise<CheckoutResult> {
   const { db, user } = await requireCustomerContext();
 
   const basket = await db.basket.findFirst({
@@ -287,6 +392,10 @@ export async function clientCheckoutAction(
   const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}-${nanoid(4).toUpperCase()}`;
 
   const currency = await tenantCurrency(db);
+  // Decided before anything is written: a clinic that can't take card payments
+  // must not end up with a pending order and reserved stock.
+  const payment = await clinicPaymentMode(user.tenantId!);
+  if (payment.mode === "blocked") return { error: payment.reason };
   const provider = getPaymentProvider();
 
   const order = await db.order.create({
@@ -369,6 +478,47 @@ export async function clientCheckoutAction(
     reserved.stock.push({ productId: i.productId, quantity: i.quantity });
   }
 
+  // Real cards: the charge is made on the clinic's own Stripe account, the
+  // client confirms it in the browser, and the webhook settles the order. The
+  // order id is the idempotency key, so a double-submit reuses the same charge.
+  if (payment.mode === "stripe") {
+    try {
+      const charge = await createDirectCharge({
+        stripeAccountId: payment.stripeAccountId,
+        amountCents: totalCents,
+        subtotalCents,
+        currency,
+        description: `Order ${orderNumber}`,
+        metadata: { orderId: order.id, orderNumber, tenantId: user.tenantId!, customerProfileId: user.customerProfileId! },
+        idempotencyKey: `order-${order.id}`,
+      });
+      await db.payment.create({
+        data: {
+          orderId: order.id,
+          provider: "STRIPE",
+          providerPaymentId: charge.paymentIntentId,
+          stripeAccountId: charge.stripeAccountId,
+          amountCents: totalCents,
+          applicationFeeCents: charge.applicationFeeCents,
+          currency,
+          status: "REQUIRES_ACTION",
+        } as never,
+      });
+      revalidateClient(slug);
+      return {
+        ok: true,
+        paid: false,
+        orderNumber,
+        totalCents,
+        payment: { clientSecret: charge.clientSecret, publishableKey: charge.publishableKey, stripeAccountId: charge.stripeAccountId },
+      };
+    } catch (err) {
+      console.error("[checkout] could not start the payment:", err instanceof Error ? err.message : err);
+      return abandon("We couldn't start the payment. Please try again.");
+    }
+  }
+
+  // No Stripe keys on this deployment: the mock provider settles immediately.
   const intent = await provider.createIntent({
     amountCents: totalCents,
     currency,
@@ -394,44 +544,43 @@ export async function clientCheckoutAction(
     return abandon(intent.failureReason ?? "Payment failed. Please try another method.");
   }
 
-  await db.order.updateMany({ where: { id: order.id }, data: { status: "PAID", paidAt: new Date() } });
-
-  // Stock was already taken above; record the movements now the sale stands.
-  for (const i of items) {
-    if (i.itemType === "PRODUCT" && i.productId) {
-      await db.inventoryTransaction.create({
-        data: { productId: i.productId, type: "SALE", quantityChange: -i.quantity, reason: `Order ${orderNumber}` } as never,
-      });
-    }
-  }
-
-  const programme = await db.loyaltyProgramme.findFirst({ where: {} });
-  let pointsEarned = 0;
-  if (programme?.active) {
-    pointsEarned = Math.floor(totalCents * programme.pointsPerCents);
-    if (pointsEarned > 0) {
-      await adjustLoyaltyPoints(db, {
-        customerProfileId: user.customerProfileId!,
-        points: pointsEarned,
-        type: "EARNED",
-        reason: "Earned from purchase",
-        relatedOrderId: order.id,
-        expiresAt: programme.pointsExpiryDays ? new Date(Date.now() + programme.pointsExpiryDays * 86_400_000) : null,
-      });
-    }
-  }
-
-  await db.basket.updateMany({ where: { id: basket.id }, data: { status: "CONVERTED" } });
-
-  await recordActivity(db, {
-    type: "PURCHASE",
-    customerProfileId: user.customerProfileId,
-    summary: `Paid for order ${orderNumber}`,
-    amountCents: totalCents,
-    points: pointsEarned || null,
-  });
+  const { pointsEarned } = await completePaidOrder(db, order.id);
   revalidateClient(slug);
-  return { ok: true, orderNumber, pointsEarned, totalCents };
+  return { ok: true, paid: true, orderNumber, pointsEarned, totalCents };
+}
+
+/**
+ * Called when the client comes back from the Payment Element. The webhook is
+ * what actually settles the order; this only reports where it stands, so the
+ * cart can say "paid" or "still processing" without inventing an outcome.
+ */
+export async function clientOrderStatusAction(
+  slug: string,
+  orderNumber: string,
+): Promise<{ error: string } | { ok: true; status: "PAID" | "PENDING" | "FAILED"; pointsEarned: number; totalCents: number }> {
+  const { db, user } = await requireCustomerContext();
+  const order = await db.order.findFirst({
+    where: { orderNumber, customerProfileId: user.customerProfileId! },
+    select: { status: true, totalCents: true, id: true },
+  });
+  if (!order) return { error: "That order no longer exists." };
+  const points = await db.loyaltyTransaction.findFirst({ where: { relatedOrderId: order.id, type: "EARNED" }, select: { points: true } });
+  revalidateClient(slug);
+  return {
+    ok: true,
+    status: order.status === "PAID" ? "PAID" : order.status === "PENDING" ? "PENDING" : "FAILED",
+    pointsEarned: points?.points ?? 0,
+    totalCents: order.totalCents,
+  };
+}
+
+/** The client gave up in the Payment Element: let the stock and points go. */
+export async function clientAbandonOrderAction(slug: string, orderNumber: string): Promise<{ ok: true }> {
+  const { db, user } = await requireCustomerContext();
+  const order = await db.order.findFirst({ where: { orderNumber, customerProfileId: user.customerProfileId! }, select: { id: true } });
+  if (order) await releaseFailedOrder(db, order.id, "cancelled by the client");
+  revalidateClient(slug);
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------

@@ -78,7 +78,7 @@ export function SettingsTab({
           {data.section === "team" && <TeamSection merchantId={merchantId} data={data} canEdit={canEdit} />}
           {data.section === "locations" && <LocationsSection merchantId={merchantId} data={data} canEdit={canEdit} />}
           {data.section === "loyalty-rules" && <LoyaltySection merchantId={merchantId} data={data} canEdit={canEdit} currency={currency} />}
-          {data.section === "booking" && <BookingSection merchantId={merchantId} data={data} canEdit={canEdit} />}
+          {data.section === "booking" && <BookingSection merchantId={merchantId} data={data} canEdit={canEdit} currency={currency} />}
           {data.section === "notifications" && <NotificationsSection merchantId={merchantId} data={data} canEdit={canEdit} />}
           {data.section === "integrations" && <IntegrationsSection merchantId={merchantId} data={data} isOwner={isOwner} notice={stripeNotice} />}
           {data.section === "audit-log" && <AuditLogSection data={data} />}

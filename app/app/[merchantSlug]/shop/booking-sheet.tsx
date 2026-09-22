@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { Sheet, useToast } from "@/components/client-app/ui";
-import { getBookingOptionsForServiceAction, getClientSlotsAction, clientBookAction } from "@/lib/actions/client-app";
+import { getBookingOptionsForServiceAction, getClientSlotsAction, clientBookAction, clientOrderStatusAction, clientAbandonOrderAction } from "@/lib/actions/client-app";
+import { CardPayment, type PaymentHandoff } from "../card-payment";
 import type { ShopService } from "./shop-view";
 
 interface Options {
@@ -18,12 +19,15 @@ interface Options {
  */
 export function BookingSheet({
   merchantSlug,
+  currency,
   service,
   appointmentId,
   onClose,
   onBooked,
 }: {
   merchantSlug: string;
+  /** For showing a deposit amount in the clinic's own currency. */
+  currency: string;
   service: ShopService | null;
   /** Set when rescheduling an existing appointment. */
   appointmentId?: string;
@@ -40,6 +44,9 @@ export function BookingSheet({
   const [loading, setLoading] = React.useState(false);
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  /** The clinic asks for a deposit: the slot is held as requested until it is paid. */
+  const [deposit, setDeposit] = React.useState<{ payment: PaymentHandoff; orderNumber: string; amountCents: number } | null>(null);
+  const [settling, setSettling] = React.useState(false);
 
   React.useEffect(() => {
     if (!service) return;
@@ -79,8 +86,38 @@ export function BookingSheet({
       setError(res.error);
       return;
     }
+    if ("deposit" in res && res.deposit) {
+      setDeposit({ payment: res.deposit.payment, orderNumber: res.deposit.orderNumber, amountCents: res.deposit.amountCents });
+      return;
+    }
     toast(appointmentId ? "Appointment updated" : "Booking requested");
     onBooked();
+  }
+
+  /** The deposit is confirmed by the webhook, which also confirms the appointment. */
+  async function afterDeposit() {
+    if (!deposit) return;
+    setSettling(true);
+    let confirmed = false;
+    for (let attempt = 0; attempt < 6 && !confirmed; attempt++) {
+      const status = await clientOrderStatusAction(merchantSlug, deposit.orderNumber).catch(() => null);
+      if (status && "ok" in status && status.status === "PAID") confirmed = true;
+      else if (status && "ok" in status && status.status === "FAILED") {
+        setSettling(false);
+        setDeposit(null);
+        setError("That payment didn't go through. Please pick a time again.");
+        return;
+      } else await new Promise((r) => setTimeout(r, 700));
+    }
+    setSettling(false);
+    setDeposit(null);
+    toast(confirmed ? "Booking confirmed" : "Deposit received. Your booking is being confirmed.");
+    onBooked();
+  }
+
+  async function cancelDeposit() {
+    if (deposit) await clientAbandonOrderAction(merchantSlug, deposit.orderNumber).catch(() => undefined);
+    setDeposit(null);
   }
 
   const days = nextDays();
@@ -89,13 +126,28 @@ export function BookingSheet({
     <Sheet
       open={!!service}
       onClose={onClose}
-      title={service ? `${appointmentId ? "Reschedule" : "Book"} · ${service.name}` : undefined}
+      title={service ? (deposit ? "Deposit" : `${appointmentId ? "Reschedule" : "Book"} · ${service.name}`) : undefined}
       cta={
-        <button className="btn-black" disabled={!slot || pending} onClick={confirm}>
-          {pending ? "Confirming…" : "Confirm booking"}
-        </button>
+        deposit ? undefined : (
+          <button className="btn-black" disabled={!slot || pending} onClick={confirm}>
+            {pending ? "Confirming…" : "Confirm booking"}
+          </button>
+        )
       }
     >
+      {deposit ? (
+        settling ? (
+          <p style={{ textAlign: "center", padding: "32px 0", color: "var(--muted)", fontSize: 15 }}>Confirming your booking…</p>
+        ) : (
+          <>
+            <p style={{ color: "var(--muted)", fontSize: 15, paddingBottom: 8 }}>
+              This clinic asks for a deposit to hold your appointment. Your slot is reserved until you pay.
+            </p>
+            <CardPayment payment={deposit.payment} amountCents={deposit.amountCents} currency={currency} onPaid={afterDeposit} onCancel={cancelDeposit} />
+          </>
+        )
+      ) : (
+        <>
       {options && options.staff.length === 0 ? (
         <p style={{ color: "var(--muted)", fontSize: 15 }}>
           No practitioner is assigned to this treatment yet. Please call the clinic to book.
@@ -155,6 +207,8 @@ export function BookingSheet({
           )}
 
           {error && <p style={{ color: "var(--danger)", fontSize: 14 }}>{error}</p>}
+        </>
+      )}
         </>
       )}
     </Sheet>

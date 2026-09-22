@@ -75,6 +75,7 @@ describe("Stripe Connect onboarding", () => {
   });
 
   afterAll(async () => {
+    await rawDb.processedStripeEvent.deleteMany({ where: { id: { contains: String(stamp) } } });
     await deleteTenantCompletely(clinic);
     await rawDb.user.delete({ where: { id: agencyId } });
   });
@@ -193,7 +194,7 @@ describe("Stripe Connect onboarding", () => {
       return webhook.POST(new NextRequest(`${ORIGIN}/api/webhooks/stripe`, { method: "POST", body: payload, headers: { "stripe-signature": signature } }));
     };
     const accountEvent = (accountId: string, created: number, flags: { charges: boolean; payouts: boolean }) => ({
-      id: `evt_${created}`,
+      id: `evt_${stamp}_${created}`,
       object: "event",
       type: "account.updated",
       created,
@@ -220,7 +221,7 @@ describe("Stripe Connect onboarding", () => {
 
     it("disconnects the clinic when it revokes the platform's access", async () => {
       const { stripeAccountId } = await rawDb.tenant.findUniqueOrThrow({ where: { id: clinic } });
-      await send({ id: "evt_deauth", object: "event", type: "account.application.deauthorized", created: Math.floor(Date.now() / 1000), account: stripeAccountId, data: { object: { id: "ca_x", object: "application" } } });
+      await send({ id: `evt_deauth_${stamp}`, object: "event", type: "account.application.deauthorized", created: Math.floor(Date.now() / 1000), account: stripeAccountId, data: { object: { id: "ca_x", object: "application" } } });
       expect(await rawDb.tenant.findUniqueOrThrow({ where: { id: clinic } })).toMatchObject({ stripeAccountId: null, stripeStatus: "NOT_CONNECTED" });
     });
   });
