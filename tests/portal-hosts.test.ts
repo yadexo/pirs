@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ADMIN_LOGIN, CLINIC_LOGIN, loginForHost, loginRedirectForHost } from "@/lib/portal-hosts";
+import { ADMIN_LOGIN, CLINIC_LOGIN, clientAppPath, isClientHost, loginForHost, loginRedirectForHost } from "@/lib/portal-hosts";
 
 describe("subdomain logins", () => {
   it("sends the clinic subdomains to the clinic login", () => {
@@ -26,6 +26,27 @@ describe("subdomain logins", () => {
   it("keeps the landing page everywhere else", () => {
     for (const host of ["pirs-git-main-yadexo.vercel.app", "pirs.vercel.app", "localhost:3000", "192.168.178.25:3443", "pirs.io", "clinics.pirs.io", "login.pirs.io", "evil.admin.pirs.io.example.com", "", null, undefined]) {
       expect(loginForHost(host)).toBeNull();
+    }
+  });
+});
+
+describe("the root domain serves the client app", () => {
+  it("knows which hosts are the client app", () => {
+    for (const host of ["pirs.io", "www.pirs.io", "PIRS.io:443"]) expect(isClientHost(host)).toBe(true);
+    for (const host of ["clinic.pirs.io", "admin.pirs.io", "pirs.vercel.app", "localhost:3000", "", null]) expect(isClientHost(host)).toBe(false);
+  });
+
+  it("turns the first path segment into a clinic", () => {
+    expect(clientAppPath("/riverside-wellness")).toBe("/app/riverside-wellness");
+    expect(clientAppPath("/riverside-wellness/shop")).toBe("/app/riverside-wellness/shop");
+    expect(clientAppPath("/riverside-wellness/shop?tab=treatments")).toBe("/app/riverside-wellness/shop?tab=treatments");
+    // The bare domain opens "Find your clinic".
+    expect(clientAppPath("/")).toBe("/app");
+  });
+
+  it("leaves the app's own routes alone", () => {
+    for (const path of ["/api/health", "/login", "/m/abc", "/agency", "/agency/settings", "/set-password", "/forgot-password", "/app/riverside", "/client-sw.js", "/favicon.ico", "/uploads/x.png"]) {
+      expect(clientAppPath(path)).toBeNull();
     }
   });
 });

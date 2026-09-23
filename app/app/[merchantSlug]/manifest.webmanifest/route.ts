@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
-import { getPublicClinic, shortAppName } from "@/lib/public-clinic";
+import { clientBasePath, getPublicClinic, shortAppName } from "@/lib/public-clinic";
 
 /**
  * Each clinic's app installs as its own home-screen app: its name, its scope,
  * and the icon the clinic uploaded.
  */
-export async function GET(_req: Request, { params }: { params: Promise<{ merchantSlug: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ merchantSlug: string }> }) {
   const { merchantSlug } = await params;
   const clinic = await getPublicClinic(merchantSlug);
   if (!clinic) return new NextResponse("Not found", { status: 404 });
 
-  const base = `/app/${encodeURIComponent(clinic.slug)}`;
+  const base = clientBasePath(clinic.slug, req.headers.get("x-forwarded-host") ?? req.headers.get("host"));
   const icon = (file: string) => `${base}/app-icon/${file}?v=${clinic.version}`;
   const manifest = {
     id: base,

@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { rawDb } from "@/lib/db";
+import { isClientHost } from "@/lib/portal-hosts";
 
 export interface PublicClinic {
   id: string;
@@ -40,6 +41,15 @@ export const getPublicClinic = cache(async (slug: string): Promise<PublicClinic 
     version: String(b?.updatedAt.getTime() ?? 0),
   };
 });
+
+/**
+ * Where this clinic's app lives on the host the request came in on: "/riverside"
+ * on the root domain, "/app/riverside" everywhere else. The installable app's
+ * scope and icons have to match the address the client is actually using.
+ */
+export function clientBasePath(slug: string, host: string | null | undefined): string {
+  return isClientHost(host) ? `/${encodeURIComponent(slug)}` : `/app/${encodeURIComponent(slug)}`;
+}
 
 /** Home-screen label: iOS truncates past roughly 12 characters. */
 export function shortAppName(name: string): string {

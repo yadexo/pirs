@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { getClientAppContext } from "@/lib/client-app-context";
-import { getPublicClinic, shortAppName } from "@/lib/public-clinic";
+import { headers } from "next/headers";
+import { clientBasePath, getPublicClinic, shortAppName } from "@/lib/public-clinic";
 import { InstallPrompt, ServiceWorker } from "@/components/client-app/pwa";
 import { getClientSummary, getRewardsData } from "@/lib/client-app-data";
 import { Onboarding } from "./onboarding";
@@ -17,7 +18,8 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { merchantSlug } = await params;
   const clinic = await getPublicClinic(merchantSlug);
   if (!clinic) return {};
-  const base = `/app/${encodeURIComponent(clinic.slug)}`;
+  const requestHeaders = await headers();
+  const base = clientBasePath(clinic.slug, requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"));
   const v = `?v=${clinic.version}`;
   return {
     title: clinic.name,

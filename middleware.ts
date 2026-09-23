@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import { NextResponse, type NextRequest } from "next/server";
 import { authConfig } from "@/auth.config";
 import { LAST_CLINIC_COOKIE, slugFromAppPath } from "@/lib/clinic-link";
-import { loginRedirectForHost } from "@/lib/portal-hosts";
+import { clientAppPath, isClientHost, loginRedirectForHost } from "@/lib/portal-hosts";
 
 const { auth } = NextAuth(authConfig);
 
@@ -43,11 +43,23 @@ const AGENCY_REDIRECTS: Record<string, string> = {
   "/platform/tenants/new": "/agency",
 };
 
-function withPathname(req: NextRequest) {
+function withPathnameHeaders(req: NextRequest) {
   // Server layouts have no direct access to the pathname; pass it down.
   const headers = new Headers(req.headers);
   headers.set("x-pathname", req.nextUrl.pathname);
-  return NextResponse.next({ request: { headers } });
+  return headers;
+}
+
+function withPathname(req: NextRequest) {
+  return NextResponse.next({ request: { headers: withPathnameHeaders(req) } });
+}
+
+/** Remembers the clinic being viewed, so /app (and pirs.io) reopens it next time. */
+function rememberClinic(req: NextRequest, res: NextResponse, appPath: string) {
+  const slug = slugFromAppPath(appPath);
+  if (slug && req.cookies.get(LAST_CLINIC_COOKIE)?.value !== slug) {
+    res.cookies.set(LAST_CLINIC_COOKIE, slug, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365, secure: req.nextUrl.protocol === "https:" });
+  }
 }
 
 export default auth((req) => {
@@ -56,12 +68,30 @@ export default auth((req) => {
   const isAgencyAdmin = user?.role === "PLATFORM_ADMIN";
   const isMerchantUser = user?.role === "TENANT_ADMIN" || user?.role === "STAFF";
 
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+
+  // --- the root domain is the client app ---------------------------------
+  // pirs.io/<clinic>/... serves /app/<clinic>/... without the client ever
+  // seeing "/app", and pirs.io itself opens "Find your clinic". A rewrite, not
+  // a redirect, so the short address stays in the browser. Reserved routes
+  // (/api, /login, /m, /agency, …) are untouched.
+  if (isClientHost(host)) {
+    const target = clientAppPath(pathname);
+    if (target) {
+      const url = req.nextUrl.clone();
+      url.pathname = target;
+      const res = NextResponse.rewrite(url, { request: { headers: withPathnameHeaders(req) } });
+      rememberClinic(req, res, target);
+      return res;
+    }
+  }
+
   // --- custom subdomains open straight on their own login -----------------
   // clinic.pirs.io → clinic login, admin.pirs.io → admin login. Any
   // other host (*.vercel.app, localhost) keeps the three-portal landing page.
   // 307, not permanent, so browsers don't cache it if the mapping changes.
   if (pathname === "/") {
-    const login = loginRedirectForHost(req.headers.get("x-forwarded-host") ?? req.headers.get("host"));
+    const login = loginRedirectForHost(host);
     if (login) return NextResponse.redirect(login, 307);
   }
 
@@ -109,10 +139,7 @@ export default auth((req) => {
   // --- client app: remember the clinic, so /app reopens it next time ------
   if (pathname.startsWith("/app/")) {
     const res = withPathname(req);
-    const slug = slugFromAppPath(pathname);
-    if (slug && req.cookies.get(LAST_CLINIC_COOKIE)?.value !== slug) {
-      res.cookies.set(LAST_CLINIC_COOKIE, slug, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365, secure: req.nextUrl.protocol === "https:" });
-    }
+    rememberClinic(req, res, pathname);
     return res;
   }
 
@@ -120,6 +147,7 @@ export default auth((req) => {
 });
 
 export const config = {
-  // "/" is here only for the subdomain redirect above; the landing page itself needs no auth.
-  matcher: ["/", "/admin/:path*", "/platform/:path*", "/agency/:path*", "/m/:path*", "/login", "/app/:path*"],
+  // Everything except Next's own static output: the root domain turns any
+  // first segment into a clinic, so the paths can't be listed in advance.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

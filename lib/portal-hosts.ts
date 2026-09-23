@@ -17,6 +17,53 @@ const LOGIN_BY_HOST: Record<string, string> = {
   "admin.pirs.io": ADMIN_LOGIN,
 };
 
+/**
+ * Hosts that serve the client app at the root, so a clinic's clients get
+ * pirs.io/<clinic> instead of clinic.pirs.io/app/<clinic>. Everything under
+ * /app still works on every host; this only adds the shorter address.
+ */
+const CLIENT_HOSTS = new Set(["pirs.io", "www.pirs.io"]);
+
+/**
+ * First path segments that belong to the app itself and can never be a clinic.
+ * A clinic slug that collided with one of these would be unreachable, so
+ * lib/actions/merchants.ts should refuse them when creating a clinic.
+ */
+export const RESERVED_SLUGS = new Set([
+  "api",
+  "_next",
+  "app",
+  "m",
+  "agency",
+  "admin",
+  "login",
+  "logout",
+  "set-password",
+  "forgot-password",
+  "uploads",
+  "static",
+  "assets",
+  "well-known",
+]);
+
+export function isClientHost(host: string | null | undefined): boolean {
+  return CLIENT_HOSTS.has(normaliseHost(host));
+}
+
+/**
+ * The client-app path that a root-domain URL stands for, or null to leave the
+ * request alone: pirs.io/riverside/shop serves /app/riverside/shop, with the
+ * short address still showing in the browser.
+ */
+export function clientAppPath(pathname: string): string | null {
+  if (pathname === "/" || pathname === "") return "/app";
+  const [, first = ""] = pathname.split("/");
+  // Reserved routes, and anything with a file extension (client-sw.js,
+  // favicon.ico), are served as-is.
+  if (!first || RESERVED_SLUGS.has(first.toLowerCase()) || first.includes(".")) return null;
+  return `/app${pathname}`;
+}
+
 /** "Admin.Pirs.io:443" → "admin.pirs.io". */
 export function normaliseHost(host: string | null | undefined): string {
   return (host ?? "").trim().toLowerCase().replace(/:\d+$/, "").replace(/\.$/, "");
