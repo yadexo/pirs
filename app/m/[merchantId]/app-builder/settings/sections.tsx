@@ -159,7 +159,7 @@ export function GeneralSection({ merchantId, data, canEdit }: { merchantId: stri
               name="publiclyListed"
               label="List this clinic in the app's clinic search"
               description="Clients can find you by name. Anyone with your QR code or link can always open your app."
-              defaultChecked={Boolean(s?.publiclyListed)}
+              defaultChecked={s ? s.publiclyListed : true}
             />
             <CheckboxField
               name="payLaterEnabled"

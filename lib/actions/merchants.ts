@@ -61,7 +61,7 @@ export async function createMerchantAction(_prevState: unknown, formData: FormDa
             timeZone: parsed.data.timezone,
           },
         },
-        settings: { create: {} },
+        settings: { create: { publiclyListed: true } },
         // Seed defaults so App Builder is usable the moment they log in.
         loyaltyProgramme: { create: { pointsPerCents: 0.01, pointsPerVisit: 0 } },
       },

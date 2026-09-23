@@ -27,6 +27,21 @@ describe("find your clinic + installable clinic app", () => {
     for (const id of ids) await deleteTenantCompletely(id);
   });
 
+  it("finds a clinic by its address as well as its name", async () => {
+    const results = await searchListedClinics(slug("pwa-listed"));
+    expect(results.map((r) => r.slug)).toEqual([slug("pwa-listed")]);
+  });
+
+  it("lists a clinic that never touched the setting — new clinics are findable", async () => {
+    const t = await rawDb.tenant.create({ data: { slug: slug("pwa-default"), name: `Aurora Default ${stamp}` } });
+    ids.push(t.id);
+    await rawDb.tenantBranding.create({ data: { tenantId: t.id, businessName: `Aurora Default ${stamp}` } });
+    // No publiclyListed given: it takes the default.
+    await rawDb.tenantSettings.create({ data: { tenantId: t.id } });
+    const results = await searchListedClinics(`Aurora Default ${stamp}`);
+    expect(results.map((r) => r.slug)).toEqual([slug("pwa-default")]);
+  });
+
   it("search finds only active clinics that opted in", async () => {
     const results = await searchListedClinics(`zephyr ${stamp}`);
     expect(results.map((r) => r.slug)).toEqual([slug("pwa-listed")]);

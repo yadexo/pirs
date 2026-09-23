@@ -23,6 +23,8 @@ export async function searchListedClinics(query: string): Promise<ListedClinic[]
       AND: words.map((w) => ({
         OR: [
           { name: { contains: w, mode: "insensitive" as const } },
+          // People type what they saw on the poster, which may be the address.
+          { slug: { contains: w, mode: "insensitive" as const } },
           { branding: { businessName: { contains: w, mode: "insensitive" as const } } },
           { branding: { city: { contains: w, mode: "insensitive" as const } } },
         ],

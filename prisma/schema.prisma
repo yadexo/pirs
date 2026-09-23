@@ -178,8 +178,10 @@ model TenantSettings {
   /// "Review us on Google" row on the client's Rewards tab.
   googleReviewUrl               String?
 
-  /// Listed in the general client app's clinic search. Off until the clinic opts in.
-  publiclyListed                Boolean  @default(false)
+  /// Listed in the client app's clinic search, so clients can find the clinic
+  /// by name and sign in or create an account. On by default; a clinic that
+  /// would rather only be reachable by its own link or QR can turn it off.
+  publiclyListed                Boolean  @default(true)
 
   /// Automatic messages to clients. Each still respects the client's own consent.
   notifyBookingConfirmations    Boolean  @default(true)
