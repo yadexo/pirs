@@ -175,6 +175,24 @@ npm run prisma:studio     # browse the database visually
 npm run seed               # (re)seed demo data — safe to re-run, replaces the demo tenant
 ```
 
+### One-off tasks against production
+
+`scripts/prod.ps1` (PowerShell) asks once for the production connection string,
+shows which database it is about to touch, waits for confirmation, and clears
+the connection string afterwards — nothing is written to disk, so there is no
+`.env.production.local` to remember to delete.
+
+```bash
+npm run prod:status                                  # read-only: what is pending?
+npm run prod:migrate                                 # apply pending migrations
+npm run prod:admin -- --email you@example.com        # create the first platform admin
+npm run prod:reset-admin -- --email you@example.com  # reset a platform admin password
+npm run prod:client -- --clinic testclinic --email client@example.com
+```
+
+Paste Neon's **direct** connection string (the host without `-pooler`): a
+migration takes a lock that a pooled connection can fail on.
+
 ## Development commands
 
 ```bash

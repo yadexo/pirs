@@ -21,6 +21,11 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
+    "prod:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 status",
+    "prod:migrate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 migrate",
+    "prod:admin": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 admin",
+    "prod:reset-admin": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 reset-admin",
+    "prod:client": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 client",
     "prisma:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
     "serve": "node scripts/serve.mjs"
