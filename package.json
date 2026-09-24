@@ -23,6 +23,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prod:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 status",
     "prod:migrate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 migrate",
+    "prod:stripe": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 stripe",
     "prod:admin": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 admin",
     "prod:reset-admin": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 reset-admin",
     "prod:client": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 client",
