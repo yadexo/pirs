@@ -187,6 +187,7 @@ npm run prod:status                                  # read-only: what is pendin
 npm run prod:migrate                                 # apply pending migrations
 npm run prod:admin -- --email you@example.com        # create the first platform admin
 npm run prod:reset-admin -- --email you@example.com  # reset a platform admin password
+npm run prod:apple-pay                               # register Apple Pay domains on connected accounts
 npm run prod:client -- --clinic testclinic --email client@example.com
 ```
 

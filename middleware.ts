@@ -149,5 +149,7 @@ export default auth((req) => {
 export const config = {
   // Everything except Next's own static output: the root domain turns any
   // first segment into a clinic, so the paths can't be listed in advance.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // /.well-known is excluded outright: Apple fetches the Apple Pay domain
+  // association file there, on every host, and follows no redirect.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|\\.well-known).*)"],
 };

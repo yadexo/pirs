@@ -4,6 +4,8 @@ import { rawDb } from "@/lib/db";
 import { getTenantDb } from "@/lib/tenant-db";
 import { completePaidOrder, releaseFailedOrder } from "@/lib/order-completion";
 import { disconnectClinicAccount, syncClinicFromAccount } from "@/lib/stripe-connect";
+import { domainsApi, registerApplePayDomains } from "@/lib/apple-pay-domains";
+import { stripe } from "@/lib/stripe-payments";
 
 /**
  * What each Stripe event does to our records. Split out of the route so the
@@ -42,12 +44,33 @@ function intentId(charge: Stripe.Charge): string | null {
   return typeof charge.payment_intent === "string" ? charge.payment_intent : (charge.payment_intent?.id ?? null);
 }
 
+/**
+ * Apple Pay domain registration is a convenience, not part of the event. If it
+ * fails the clinic still takes card payments, so it must never make the webhook
+ * return an error — that would have Stripe retry the whole event.
+ */
+async function registerDomainsQuietly(stripeAccountId: string): Promise<void> {
+  try {
+    const results = await registerApplePayDomains(domainsApi(stripe()), stripeAccountId);
+    for (const result of results.filter((r) => r.status === "failed")) {
+      console.error(`[stripe-webhook] Apple Pay domain ${result.domain} not registered for ${stripeAccountId}: ${result.error}`);
+    }
+  } catch (err) {
+    console.error(`[stripe-webhook] Apple Pay domains skipped for ${stripeAccountId}:`, err instanceof Error ? err.message : err);
+  }
+}
+
 export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
   switch (event.type) {
     // --- the clinic's Stripe account -------------------------------------
     case "account.updated": {
+      const account = event.data.object as Stripe.Account;
+      const before = await rawDb.tenant.findFirst({ where: { stripeAccountId: account.id }, select: { stripeChargesEnabled: true } });
       // Stamped with the event's own time, so a late, older event can't undo a newer state.
-      await syncClinicFromAccount(event.data.object as Stripe.Account, new Date(event.created * 1000));
+      await syncClinicFromAccount(account, new Date(event.created * 1000));
+      // The moment Stripe switches charges on is when Apple Pay can be set up
+      // for this clinic: the domains have to be registered on the clinic's own account.
+      if (account.charges_enabled && before && !before.stripeChargesEnabled) await registerDomainsQuietly(account.id);
       return;
     }
     case "account.application.deauthorized": {
