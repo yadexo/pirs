@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useBasePath } from "../base-path";
 import { Gloss, Sheet, Icon, Stepper, Carousel, EmptyState, money, useToast } from "@/components/client-app/ui";
 import { clientAddToCartAction, clientJoinPlanAction } from "@/lib/actions/client-app";
 import { useCart } from "../cart-context";
@@ -72,6 +73,7 @@ export function ShopView({
   externalBookingUrl: string | null;
 }) {
   const router = useRouter();
+  const base = useBasePath();
   const { refresh } = useCart();
   const { toast } = useToast();
   const segRef = React.useRef<HTMLDivElement>(null);
@@ -100,7 +102,7 @@ export function ShopView({
     const sp = new URLSearchParams();
     if (next !== "browse") sp.set("tab", next);
     if (cat) sp.set("category", cat);
-    router.push(`/app/${merchantSlug}/shop${sp.toString() ? `?${sp}` : ""}`);
+    router.push(`${base}/shop${sp.toString() ? `?${sp}` : ""}`);
   }
 
   const visibleTreatments = React.useMemo(() => {

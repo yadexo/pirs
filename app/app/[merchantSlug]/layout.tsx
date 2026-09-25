@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { getClientAppContext } from "@/lib/client-app-context";
 import { headers } from "next/headers";
-import { clientBasePath, getPublicClinic, shortAppName } from "@/lib/public-clinic";
+import { clientBasePath, currentClientBasePath, getPublicClinic, shortAppName } from "@/lib/public-clinic";
 import { InstallPrompt, ServiceWorker } from "@/components/client-app/pwa";
 import { getClientSummary, getRewardsData } from "@/lib/client-app-data";
 import { Onboarding } from "./onboarding";
@@ -50,6 +50,8 @@ export default async function ClientAppLayout({
 }) {
   const { merchantSlug } = await params;
   const ctx = await getClientAppContext(merchantSlug);
+  // Every link in the app hangs off this, and so does the installed app's scope.
+  const base = await currentClientBasePath(merchantSlug);
 
   // The merchant's own brand colour is the only colour the client app takes
   // from configuration; everything else is the fixed monochrome palette.
@@ -61,7 +63,7 @@ export default async function ClientAppLayout({
     return (
       <div className="client-app" style={style}>
         <Onboarding merchantSlug={merchantSlug} merchantName={ctx.merchant.name} logoUrl={ctx.merchant.logoUrl} />
-        <ServiceWorker />
+        <ServiceWorker scope={`${base}/`} />
       </div>
     );
   }
@@ -77,6 +79,7 @@ export default async function ClientAppLayout({
   return (
     <div className="client-app" style={style}>
       <ClientAppShell
+        base={base}
         merchantSlug={merchantSlug}
         merchantName={ctx.merchant.name}
         logoUrl={ctx.merchant.logoUrl}
@@ -85,8 +88,8 @@ export default async function ClientAppLayout({
       >
         {children}
       </ClientAppShell>
-      <ServiceWorker />
-      <InstallPrompt merchantSlug={merchantSlug} merchantName={ctx.merchant.name} />
+      <ServiceWorker scope={`${base}/`} />
+      <InstallPrompt base={base} merchantSlug={merchantSlug} merchantName={ctx.merchant.name} />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useBasePath, useFinderPath } from "../base-path";
 import { Sheet, Icon, EmptyState, money, useToast } from "@/components/client-app/ui";
 import { signOutOfClinicAction } from "@/lib/actions/session";
 import {
@@ -84,7 +85,8 @@ export function ProfileView({
 }) {
   const router = useRouter();
   const { toast } = useToast();
-  const base = `/app/${merchantSlug}`;
+  const base = useBasePath();
+  const finder = useFinderPath();
   const segRef = React.useRef<HTMLDivElement>(null);
 
   const [sheet, setSheet] = React.useState<SettingsSheet>(null);
@@ -295,7 +297,7 @@ export function ProfileView({
             <SettingRow label="Language" onClick={() => setSheet("language")} />
             <SettingRow label="Help & support" onClick={() => setSheet("help")} />
             <SettingRow label="Terms & privacy" onClick={() => setSheet("legal")} />
-            <Link className="setrow" href="/app?switch=1" prefetch={false}>
+            <Link className="setrow" href={`${finder}?switch=1`} prefetch={false}>
               <span>Switch clinic</span>
               <Icon name="chevR" size={20} />
             </Link>

@@ -9,7 +9,12 @@ import { slugFromScannedCode } from "@/lib/clinic-link";
 import { describeActionFailure } from "@/lib/action-failure";
 import { useQrCamera, type CameraProblem } from "@/components/use-qr-camera";
 
-export function ClinicFinder({ appName }: { appName: string }) {
+/**
+ * `prefix` is where clinics live on this host: "" on the root domain, where a
+ * clinic is pirs.io/riverside, and "/app" elsewhere. Opening a clinic on the
+ * wrong one of those would leave the installed app's scope.
+ */
+export function ClinicFinder({ appName, prefix }: { appName: string; prefix: string }) {
   const router = useRouter();
   const [q, setQ] = React.useState("");
   const [results, setResults] = React.useState<ListedClinic[] | null>(null);
@@ -45,9 +50,9 @@ export function ClinicFinder({ appName }: { appName: string }) {
   const open = React.useCallback(
     (slug: string, join: boolean) => {
       setOpening(slug);
-      router.push(`/app/${slug}${join ? "?join=1" : ""}`);
+      router.push(`${prefix}/${slug}${join ? "?join=1" : ""}`);
     },
-    [router],
+    [router, prefix],
   );
   // Stable: a new function each render would restart the camera.
   const openScanned = React.useCallback((slug: string) => open(slug, true), [open]);

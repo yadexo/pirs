@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import { NextResponse, type NextRequest } from "next/server";
 import { authConfig } from "@/auth.config";
 import { LAST_CLINIC_COOKIE, slugFromAppPath } from "@/lib/clinic-link";
-import { clientAppPath, isClientHost, loginRedirectForHost } from "@/lib/portal-hosts";
+import { clientAppPath, isClientHost, loginRedirectForHost, shortClientAppPath } from "@/lib/portal-hosts";
 
 const { auth } = NextAuth(authConfig);
 
@@ -76,6 +76,15 @@ export default auth((req) => {
   // a redirect, so the short address stays in the browser. Reserved routes
   // (/api, /login, /m, /agency, …) are untouched.
   if (isClientHost(host)) {
+    // An old /app/<clinic> link still works, but it is outside the installed
+    // app's scope — iOS would open it in Safari, address bar and all. Send it
+    // to the short address so the app stays full screen.
+    const short = shortClientAppPath(pathname);
+    if (short) {
+      const url = req.nextUrl.clone();
+      url.pathname = short;
+      return NextResponse.redirect(url, 308);
+    }
     const target = clientAppPath(pathname);
     if (target) {
       const url = req.nextUrl.clone();

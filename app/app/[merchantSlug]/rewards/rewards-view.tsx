@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useBasePath } from "../base-path";
 import { Gloss, Sheet, Icon, EmptyState, QrCode, CountUp, money, useToast } from "@/components/client-app/ui";
 import { clientRedeemRewardAction, clientReferralAction, clientReviewAction } from "@/lib/actions/client-app";
 import type { ClientSummary, RewardsData } from "@/lib/client-app-data";
@@ -18,6 +19,7 @@ export function RewardsView({
   data: RewardsData;
 }) {
   const router = useRouter();
+  const base = useBasePath();
   const { toast } = useToast();
 
   const [selected, setSelected] = React.useState<RewardsData["rewards"][number] | null>(null);
@@ -51,7 +53,7 @@ export function RewardsView({
       return;
     }
     if (key === "referral") {
-      const url = typeof window !== "undefined" ? window.location.origin + `/app/${merchantSlug}` : "";
+      const url = typeof window !== "undefined" ? window.location.origin + base : "";
       if (typeof navigator !== "undefined" && navigator.share) {
         try {
           await navigator.share({ title: "Join me", url });
@@ -70,8 +72,8 @@ export function RewardsView({
       }
       return;
     }
-    if (key === "purchase") router.push(`/app/${merchantSlug}/shop`);
-    if (key === "visit") router.push(`/app/${merchantSlug}/scan`);
+    if (key === "purchase") router.push(`${base}/shop`);
+    if (key === "visit") router.push(`${base}/scan`);
   }
 
   return (

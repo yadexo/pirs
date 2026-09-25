@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useBasePath } from "./base-path";
 import { Sheet, Stepper, EmptyState, Icon, money, useToast, Gloss, CountUp } from "@/components/client-app/ui";
 import {
   clientSetCartQtyAction,
@@ -37,6 +38,7 @@ export function CartSheet({
   const { items, refresh } = useCart();
   const { toast } = useToast();
   const router = useRouter();
+  const base = useBasePath();
 
   const [stage, setStage] = React.useState<Stage>("cart");
   const [rewards, setRewards] = React.useState<Reward[]>([]);
@@ -199,7 +201,7 @@ export function CartSheet({
               className="btn-black"
               onClick={() => {
                 onClose();
-                router.push(`/app/${merchantSlug}/shop`);
+                router.push(`${base}/shop`);
               }}
             >
               Browse the shop

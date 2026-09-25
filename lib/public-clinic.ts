@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import { headers } from "next/headers";
 import { rawDb } from "@/lib/db";
 import { isClientHost } from "@/lib/portal-hosts";
 
@@ -50,6 +51,13 @@ export const getPublicClinic = cache(async (slug: string): Promise<PublicClinic 
 export function clientBasePath(slug: string, host: string | null | undefined): string {
   return isClientHost(host) ? `/${encodeURIComponent(slug)}` : `/app/${encodeURIComponent(slug)}`;
 }
+
+/** The clinic app's base path for the request being handled. */
+export async function currentClientBasePath(slug: string): Promise<string> {
+  const requestHeaders = await headers();
+  return clientBasePath(slug, requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"));
+}
+
 
 /** Home-screen label: iOS truncates past roughly 12 characters. */
 export function shortAppName(name: string): string {

@@ -2,24 +2,23 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useBasePath } from "./base-path";
 import { Gloss, Icon, Sheet, money } from "@/components/client-app/ui";
 import type { ClientSummary, HomeData } from "@/lib/client-app-data";
 
 export function HomeView({
-  merchantSlug,
   merchantName,
   currency,
   summary,
   home,
 }: {
-  merchantSlug: string;
   merchantName: string;
   currency: string;
   summary: ClientSummary;
   home: HomeData;
 }) {
   const router = useRouter();
-  const base = `/app/${merchantSlug}`;
+  const base = useBasePath();
   const [offer, setOffer] = React.useState<HomeData["offers"][number] | null>(null);
   const [locIndex, setLocIndex] = React.useState(0);
 

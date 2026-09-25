@@ -9,6 +9,7 @@ import { hashPassword } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
 import { resolveDestination, canReach, safeNext } from "@/lib/login-destination";
 import { recordActivity } from "@/lib/activity";
+import { currentClientBasePath } from "@/lib/public-clinic";
 import { getTenantDb } from "@/lib/tenant-db";
 
 export type ActionResult = { error: string } | never;
@@ -33,7 +34,7 @@ export async function customerSignInAction(tenantSlug: string, _prevState: unkno
   const password = String(formData.get("password") ?? "");
   // `next` is form input, so only a same-origin path is honoured; the default
   // is the client app itself (the old /:tenant customer app no longer exists).
-  const next = safeNext(String(formData.get("next") ?? "") || undefined) ?? `/app/${tenantSlug}`;
+  const next = safeNext(String(formData.get("next") ?? "") || undefined) ?? (await currentClientBasePath(tenantSlug));
   if (!email || !password) return { error: "Email and password are required." };
   return signInOrError({ portal: "customer", tenantSlug, email, password }, next, "client");
 }
@@ -133,5 +134,5 @@ export async function customerRegisterAction(tenantSlug: string, _prevState: unk
     summary: "Joined the app",
   });
 
-  return signInOrError({ portal: "customer", tenantSlug, email, password }, `/app/${tenantSlug}`, "client");
+  return signInOrError({ portal: "customer", tenantSlug, email, password }, await currentClientBasePath(tenantSlug), "client");
 }

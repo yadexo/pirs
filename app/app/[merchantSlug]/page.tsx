@@ -17,7 +17,6 @@ export default async function ClientHomePage({ params }: { params: Promise<{ mer
 
   return (
     <HomeView
-      merchantSlug={merchantSlug}
       merchantName={ctx.merchant.name}
       currency={ctx.merchant.currency}
       summary={summary}

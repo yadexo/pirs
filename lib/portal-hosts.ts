@@ -55,6 +55,18 @@ export function isClientHost(host: string | null | undefined): boolean {
  * request alone: pirs.io/riverside/shop serves /app/riverside/shop, with the
  * short address still showing in the browser.
  */
+/**
+ * The short address for a long one: /app/riverside/shop -> /riverside/shop.
+ * On the root domain the long form works but sits outside the installed
+ * app's scope, so an old link would drop the client into Safari with an
+ * address bar. Null when the path isn't a client-app path.
+ */
+export function shortClientAppPath(pathname: string): string | null {
+  if (pathname !== "/app" && !pathname.startsWith("/app/")) return null;
+  const rest = pathname.slice("/app".length);
+  return rest === "" || rest === "/" ? "/" : rest;
+}
+
 export function clientAppPath(pathname: string): string | null {
   if (pathname === "/" || pathname === "") return "/app";
   const [, first = ""] = pathname.split("/");

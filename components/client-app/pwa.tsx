@@ -4,12 +4,17 @@ import * as React from "react";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/client-app/ui";
 
-/** Registers the clients' service worker (offline page, fast relaunch, push). */
-export function ServiceWorker() {
+/**
+ * Registers the clients' service worker (offline page, fast relaunch, push).
+ * `scope` is the clinic's own base path, so the worker controls exactly the
+ * pages the installed app runs on — on the root domain that is /riverside/,
+ * not /app/.
+ */
+export function ServiceWorker({ scope }: { scope: string }) {
   React.useEffect(() => {
     if (!("serviceWorker" in navigator) || process.env.NODE_ENV !== "production") return;
-    navigator.serviceWorker.register("/client-sw.js", { scope: "/app/" }).catch(() => {});
-  }, []);
+    navigator.serviceWorker.register("/client-sw.js", { scope }).catch(() => {});
+  }, [scope]);
   return null;
 }
 
@@ -31,7 +36,7 @@ const dismissKey = (slug: string) => `install-dismissed:${slug}`;
  * iPhone has no install API, so it explains the Share-sheet steps. Shown on
  * Home only, never when already installed, and gone for 30 days once closed.
  */
-export function InstallPrompt({ merchantSlug, merchantName }: { merchantSlug: string; merchantName: string }) {
+export function InstallPrompt({ base, merchantSlug, merchantName }: { base: string; merchantSlug: string; merchantName: string }) {
   const pathname = usePathname();
   const [mode, setMode] = React.useState<"android" | "ios" | null>(null);
   const deferred = React.useRef<BeforeInstallPromptEvent | null>(null);
@@ -73,7 +78,7 @@ export function InstallPrompt({ merchantSlug, merchantName }: { merchantSlug: st
     else close();
   }
 
-  if (!mode || pathname !== `/app/${merchantSlug}`) return null;
+  if (!mode || (pathname !== base && pathname !== `/app/${merchantSlug}`)) return null;
 
   return (
     <div className="ca-install" role="dialog" aria-label={`Add ${merchantName} to your Home Screen`}>

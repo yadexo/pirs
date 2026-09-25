@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useBasePath } from "./base-path";
 import { Sheet, Icon, money } from "@/components/client-app/ui";
 import { searchCatalogAction, type CatalogSearchResult } from "@/lib/actions/client-catalog";
 
@@ -22,6 +23,7 @@ export function SearchSheet({
   const [results, setResults] = React.useState<CatalogSearchResult[]>([]);
   const [recents, setRecents] = React.useState<string[]>([]);
   const router = useRouter();
+  const base = useBasePath();
 
   React.useEffect(() => {
     if (!open) return;
@@ -54,7 +56,7 @@ export function SearchSheet({
     }
     onClose();
     const tab = r.type === "Membership" ? "memberships" : r.type === "Treatment" ? "treatments" : "browse";
-    router.push(`/app/${merchantSlug}/shop?tab=${tab}`);
+    router.push(`${base}/shop?tab=${tab}`);
   }
 
   const groups: [string, CatalogSearchResult[]][] = [

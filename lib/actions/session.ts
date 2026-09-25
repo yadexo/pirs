@@ -4,6 +4,9 @@ import { signOut } from "@/auth";
 import { clientSignOut } from "@/client-auth";
 import { safeNext } from "@/lib/login-destination";
 import { isClinicSlug } from "@/lib/clinic-link";
+import { currentClientBasePath } from "@/lib/public-clinic";
+import { isClientHost } from "@/lib/portal-hosts";
+import { headers } from "next/headers";
 
 export async function signOutAction() {
   await signOut({ redirectTo: "/" });
@@ -11,7 +14,14 @@ export async function signOutAction() {
 
 /** A client logging out stays in their clinic's app, on its sign-in screen. */
 export async function signOutOfClinicAction(merchantSlug: string) {
-  await clientSignOut({ redirectTo: isClinicSlug(merchantSlug) ? `/app/${merchantSlug}` : "/app" });
+  if (isClinicSlug(merchantSlug)) {
+    await clientSignOut({ redirectTo: await currentClientBasePath(merchantSlug) });
+    return;
+  }
+  // No clinic to return to: the finder, which on the root domain is the domain itself.
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  await clientSignOut({ redirectTo: isClientHost(host) ? "/" : "/app" });
 }
 
 /**

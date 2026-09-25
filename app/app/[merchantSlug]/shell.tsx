@@ -4,6 +4,7 @@ import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Icon, ToastProvider } from "@/components/client-app/ui";
+import { BasePathProvider, useBasePath } from "./base-path";
 import { CartProvider, useCart } from "./cart-context";
 import { SearchSheet } from "./search-sheet";
 import { CartSheet } from "./cart-sheet";
@@ -19,6 +20,7 @@ const TABS = [
 const TITLES: Record<string, string> = { home: "Home", shop: "Shop", scan: "", rewards: "Rewards", profile: "Account" };
 
 export function ClientAppShell({
+  base,
   merchantSlug,
   merchantName,
   logoUrl,
@@ -26,6 +28,8 @@ export function ClientAppShell({
   rewardsDot,
   children,
 }: {
+  /** Where this clinic's app lives on this host — see base-path.tsx. */
+  base: string;
   merchantSlug: string;
   merchantName: string;
   logoUrl: string | null;
@@ -36,17 +40,19 @@ export function ClientAppShell({
 }) {
   return (
     <ToastProvider>
-      <CartProvider merchantSlug={merchantSlug}>
-        <Frame
-          merchantSlug={merchantSlug}
-          merchantName={merchantName}
-          logoUrl={logoUrl}
-          currency={currency}
-          rewardsDot={rewardsDot}
-        >
-          {children}
-        </Frame>
-      </CartProvider>
+      <BasePathProvider base={base}>
+        <CartProvider merchantSlug={merchantSlug}>
+          <Frame
+            merchantSlug={merchantSlug}
+            merchantName={merchantName}
+            logoUrl={logoUrl}
+            currency={currency}
+            rewardsDot={rewardsDot}
+          >
+            {children}
+          </Frame>
+        </CartProvider>
+      </BasePathProvider>
     </ToastProvider>
   );
 }
@@ -68,7 +74,7 @@ function Frame({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const base = `/app/${merchantSlug}`;
+  const base = useBasePath();
   const { count, open, openCart, closeCart } = useCart();
   const [searchOpen, setSearchOpen] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);

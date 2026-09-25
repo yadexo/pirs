@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ADMIN_LOGIN, CLINIC_LOGIN, clientAppPath, isClientHost, loginForHost, loginRedirectForHost } from "@/lib/portal-hosts";
+import { ADMIN_LOGIN, CLINIC_LOGIN, clientAppPath, isClientHost, loginForHost, loginRedirectForHost, shortClientAppPath } from "@/lib/portal-hosts";
 
 describe("subdomain logins", () => {
   it("sends the clinic subdomains to the clinic login", () => {
@@ -48,5 +48,21 @@ describe("the root domain serves the client app", () => {
     for (const path of ["/api/health", "/login", "/m/abc", "/agency", "/agency/settings", "/set-password", "/forgot-password", "/app/riverside", "/client-sw.js", "/favicon.ico", "/uploads/x.png"]) {
       expect(clientAppPath(path)).toBeNull();
     }
+  });
+});
+
+describe("the short address on the root domain", () => {
+  it("turns a long client-app path into the short one", () => {
+    expect(shortClientAppPath("/app/riverside/shop")).toBe("/riverside/shop");
+    expect(shortClientAppPath("/app/riverside")).toBe("/riverside");
+    expect(shortClientAppPath("/app")).toBe("/");
+    expect(shortClientAppPath("/app/")).toBe("/");
+  });
+
+  it("leaves anything that isn't a client-app path alone", () => {
+    expect(shortClientAppPath("/riverside/shop")).toBeNull();
+    expect(shortClientAppPath("/application/form")).toBeNull();
+    expect(shortClientAppPath("/m/abc")).toBeNull();
+    expect(shortClientAppPath("/")).toBeNull();
   });
 });
