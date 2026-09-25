@@ -46,6 +46,20 @@ export const RESERVED_SLUGS = new Set([
   "well-known",
 ]);
 
+/**
+ * The installed app's scope on this host. Always ends in "/", which is what
+ * iOS treats as a directory — a scope of "/riverside" has Safari open every
+ * deeper page (the Shop tab, say) in a browser view with an address bar
+ * instead of inside the app.
+ *
+ * On the root domain that is the domain itself: everything there is the
+ * client app, and the short /riverside and long /app/riverside address are
+ * both inside it. Elsewhere it is /app/, which keeps the clinic portal and
+ * the agency console — different surfaces on the same host — outside.
+ */
+export function clientAppScope(host: string | null | undefined): string {
+  return isClientHost(host) ? "/" : "/app/";
+}
 export function isClientHost(host: string | null | undefined): boolean {
   return CLIENT_HOSTS.has(normaliseHost(host));
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { clientBasePath, getPublicClinic, shortAppName } from "@/lib/public-clinic";
+import { clientAppScope } from "@/lib/portal-hosts";
 
 /**
  * Each clinic's app installs as its own home-screen app: its name, its scope,
@@ -10,14 +11,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ merchant
   const clinic = await getPublicClinic(merchantSlug);
   if (!clinic) return new NextResponse("Not found", { status: 404 });
 
-  const base = clientBasePath(clinic.slug, req.headers.get("x-forwarded-host") ?? req.headers.get("host"));
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  const base = clientBasePath(clinic.slug, host);
   const icon = (file: string) => `${base}/app-icon/${file}?v=${clinic.version}`;
   const manifest = {
     id: base,
     name: clinic.name,
     short_name: shortAppName(clinic.name),
     start_url: base,
-    scope: `${base}`,
+    scope: clientAppScope(host),
     display: "standalone",
     background_color: "#f4f5f7",
     theme_color: "#f4f5f7",

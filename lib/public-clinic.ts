@@ -52,6 +52,7 @@ export function clientBasePath(slug: string, host: string | null | undefined): s
   return isClientHost(host) ? `/${encodeURIComponent(slug)}` : `/app/${encodeURIComponent(slug)}`;
 }
 
+
 /** The clinic app's base path for the request being handled. */
 export async function currentClientBasePath(slug: string): Promise<string> {
   const requestHeaders = await headers();

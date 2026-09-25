@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ADMIN_LOGIN, CLINIC_LOGIN, clientAppPath, isClientHost, loginForHost, loginRedirectForHost, shortClientAppPath } from "@/lib/portal-hosts";
+import { ADMIN_LOGIN, CLINIC_LOGIN, clientAppPath, isClientHost, loginForHost, loginRedirectForHost, shortClientAppPath, clientAppScope } from "@/lib/portal-hosts";
 
 describe("subdomain logins", () => {
   it("sends the clinic subdomains to the clinic login", () => {
@@ -64,5 +64,22 @@ describe("the short address on the root domain", () => {
     expect(shortClientAppPath("/application/form")).toBeNull();
     expect(shortClientAppPath("/m/abc")).toBeNull();
     expect(shortClientAppPath("/")).toBeNull();
+  });
+});
+
+describe("the installed app's scope", () => {
+  it("is the whole root domain, where every path is the client app", () => {
+    expect(clientAppScope("pirs.io")).toBe("/");
+    expect(clientAppScope("www.pirs.io")).toBe("/");
+  });
+
+  it("is only /app/ elsewhere, keeping the clinic and agency surfaces out", () => {
+    expect(clientAppScope("clinic.pirs.io")).toBe("/app/");
+    expect(clientAppScope("localhost:3000")).toBe("/app/");
+    expect(clientAppScope(null)).toBe("/app/");
+  });
+
+  it("always ends in a slash — iOS treats a scope without one as a single page", () => {
+    for (const host of ["pirs.io", "clinic.pirs.io", null]) expect(clientAppScope(host).endsWith("/")).toBe(true);
   });
 });

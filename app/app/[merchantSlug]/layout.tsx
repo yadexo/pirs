@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { getClientAppContext } from "@/lib/client-app-context";
 import { headers } from "next/headers";
 import { clientBasePath, currentClientBasePath, getPublicClinic, shortAppName } from "@/lib/public-clinic";
+import { clientAppScope } from "@/lib/portal-hosts";
 import { InstallPrompt, ServiceWorker } from "@/components/client-app/pwa";
 import { getClientSummary, getRewardsData } from "@/lib/client-app-data";
 import { Onboarding } from "./onboarding";
@@ -50,8 +51,12 @@ export default async function ClientAppLayout({
 }) {
   const { merchantSlug } = await params;
   const ctx = await getClientAppContext(merchantSlug);
-  // Every link in the app hangs off this, and so does the installed app's scope.
+  // Every link in the app hangs off this.
   const base = await currentClientBasePath(merchantSlug);
+  // The worker controls the whole app, home page included — the same scope the
+  // installed app has, so the two can't disagree about what is inside it.
+  const requestHeaders = await headers();
+  const scope = clientAppScope(requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"));
 
   // The merchant's own brand colour is the only colour the client app takes
   // from configuration; everything else is the fixed monochrome palette.
@@ -63,7 +68,7 @@ export default async function ClientAppLayout({
     return (
       <div className="client-app" style={style}>
         <Onboarding merchantSlug={merchantSlug} merchantName={ctx.merchant.name} logoUrl={ctx.merchant.logoUrl} />
-        <ServiceWorker scope={`${base}/`} />
+        <ServiceWorker scope={scope} />
       </div>
     );
   }
@@ -88,7 +93,7 @@ export default async function ClientAppLayout({
       >
         {children}
       </ClientAppShell>
-      <ServiceWorker scope={`${base}/`} />
+      <ServiceWorker scope={scope} />
       <InstallPrompt base={base} merchantSlug={merchantSlug} merchantName={ctx.merchant.name} />
     </div>
   );
