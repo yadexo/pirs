@@ -15,6 +15,14 @@ import { notifyClientQuietly, vapidConfigured, vapidPublicKey } from "@/lib/web-
  * sends, so there is nothing to forge.
  */
 
+/**
+ * Testing notifications means sending several in a row — on a locked phone,
+ * then an unlocked one, then after reinstalling. An hour's wait between
+ * batches made that painful, so the window is short and the burst small.
+ */
+const TESTS_PER_WINDOW = 5;
+const TEST_WINDOW_MS = 2 * 60 * 1000;
+
 /** Long enough to lock the phone, short enough to still be waiting for it. */
 const TEST_DELAY_MS = 3000;
 
@@ -50,9 +58,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, removed: count });
   }
 
-  const limit = await rateLimit(`push:${input.action}:${user.id}`, input.action === "test" ? 5 : 20, 60 * 60 * 1000);
+  const test = input.action === "test";
+  // The window is part of the key, so changing it starts a fresh count rather
+  // than leaving anyone held by a bucket that an older, longer window opened.
+  const key = test ? `push:test:${TEST_WINDOW_MS}:${user.id}` : `push:${input.action}:${user.id}`;
+  const limit = await rateLimit(key, test ? TESTS_PER_WINDOW : 20, test ? TEST_WINDOW_MS : 60 * 60 * 1000);
   if (!limit.ok) {
-    return NextResponse.json({ error: "That's a lot of tries in one hour. Give it a minute." }, { status: 429 });
+    return NextResponse.json(
+      {
+        error: test
+          ? `That's ${TESTS_PER_WINDOW} tests in ${TEST_WINDOW_MS / 60000} minutes. Wait a couple of minutes and try again.`
+          : "That's a lot of tries in one hour. Give it a minute.",
+      },
+      { status: 429 },
+    );
   }
 
   if (input.action === "test") {
