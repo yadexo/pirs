@@ -4,14 +4,14 @@ import { S3StorageProvider } from "@/lib/providers/storage";
 
 /**
  * Round-trips a real upload through an S3-compatible server. Runs when
- * S3_TEST_ENDPOINT is set — locally: `docker compose --profile s3 up -d minio`
- * then S3_TEST_ENDPOINT=http://localhost:9000.
+ * S3_TEST_ENDPOINT is set — locally: `docker compose --profile s3 up -d s3`
+ * then S3_TEST_ENDPOINT=http://localhost:4566.
  */
 const endpoint = process.env.S3_TEST_ENDPOINT;
 const env = {
   S3_BUCKET: "deza-test-uploads",
-  S3_ACCESS_KEY_ID: process.env.S3_TEST_ACCESS_KEY_ID ?? "minio_user",
-  S3_SECRET_ACCESS_KEY: process.env.S3_TEST_SECRET_ACCESS_KEY ?? "minio_password",
+  S3_ACCESS_KEY_ID: process.env.S3_TEST_ACCESS_KEY_ID ?? "test",
+  S3_SECRET_ACCESS_KEY: process.env.S3_TEST_SECRET_ACCESS_KEY ?? "test",
   S3_REGION: "us-east-1",
   S3_ENDPOINT: endpoint,
   S3_PUBLIC_URL: `${endpoint}/deza-test-uploads`,

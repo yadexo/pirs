@@ -42,12 +42,19 @@ jobs:
 
       - run: npm ci
 
-      - name: Start MinIO
+      # S3-compatible storage for the upload tests. LocalStack, not MinIO:
+      # MinIO withdrew its community images, so quay.io/minio/minio and
+      # Docker Hub's minio/minio both refuse an anonymous pull now.
+      - name: Start object storage
         run: |
-          docker run -d --name ci-minio -p 9001:9000 \
-            -e MINIO_ROOT_USER=minio_user -e MINIO_ROOT_PASSWORD=minio_password \
-            quay.io/minio/minio:latest server /data
-          for i in $(seq 1 30); do curl -sf http://localhost:9001/minio/health/live && break; sleep 2; done
+          docker run -d --name ci-s3 -p 4566:4566 -e SERVICES=s3 localstack/localstack:4
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:4566/_localstack/health > /dev/null && exit 0
+            sleep 2
+          done
+          echo "Object storage did not come up:"
+          docker logs ci-s3 | tail -40
+          exit 1
 
       - name: Prepare test database
         run: |
@@ -61,7 +68,9 @@ jobs:
       - name: Test
         run: npm test
         env:
-          S3_TEST_ENDPOINT: http://localhost:9001
+          S3_TEST_ENDPOINT: http://localhost:4566
+          S3_TEST_ACCESS_KEY_ID: test
+          S3_TEST_SECRET_ACCESS_KEY: test
 
       - name: Build
         run: npm run build
