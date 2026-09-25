@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireCustomerContext } from "@/lib/rbac";
 import { rawDb } from "@/lib/db";
 import { rateLimit } from "@/lib/rate-limit";
-import { notifyClientQuietly, sendToClient, vapidConfigured, vapidPublicKey } from "@/lib/web-push";
+import { notifyClientQuietly, vapidConfigured, vapidPublicKey } from "@/lib/web-push";
 
 /**
  * The client app's own push endpoint: subscribe, unsubscribe, send yourself a
@@ -14,6 +14,9 @@ import { notifyClientQuietly, sendToClient, vapidConfigured, vapidPublicKey } fr
  * with the session's own user and tenant, never with anything the browser
  * sends, so there is nothing to forge.
  */
+
+/** Long enough to lock the phone, short enough to still be waiting for it. */
+const TEST_DELAY_MS = 3000;
 
 const subscribe = z.object({
   action: z.literal("subscribe"),
@@ -53,15 +56,29 @@ export async function POST(req: Request) {
   }
 
   if (input.action === "test") {
-    const result = await sendToClient(user.id, {
-      title: "Notifications are on",
-      body: "This is what a message from your clinic will look like.",
-      tag: "test",
-    });
-    if (result.sent === 0) {
-      return NextResponse.json({ error: "No device could be reached. Turn notifications off and on again." }, { status: 502 });
+    const devices = await rawDb.pushSubscription.count({ where: { userId: user.id } });
+    if (devices === 0) {
+      return NextResponse.json({ error: "This device isn't subscribed. Turn notifications off and on again." }, { status: 409 });
     }
-    return NextResponse.json({ ok: true, ...result });
+
+    // The point of the delay is to test a locked phone, so it has to happen
+    // here: once the screen locks, the app's own JavaScript is paused and a
+    // timer in the browser would never fire. `after` keeps this function
+    // running once the response has already gone out.
+    after(async () => {
+      await new Promise((resolve) => setTimeout(resolve, TEST_DELAY_MS));
+      await notifyClientQuietly(user.id, {
+        title: "Notifications are on",
+        body: "This is what a message from your clinic will look like.",
+        tag: "test",
+      });
+    });
+
+    return NextResponse.json({
+      ok: true,
+      delaySeconds: TEST_DELAY_MS / 1000,
+      message: `Notification coming in ${TEST_DELAY_MS / 1000} seconds — lock your phone now.`,
+    });
   }
 
   // The endpoint identifies the device, so re-subscribing the same one moves

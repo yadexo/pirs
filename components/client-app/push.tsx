@@ -34,14 +34,14 @@ function supported(): boolean {
   return typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
 
-async function post(action: string, extra: Record<string, unknown> = {}): Promise<{ ok: boolean; error?: string }> {
+async function post(action: string, extra: Record<string, unknown> = {}): Promise<{ ok: boolean; error?: string; message?: string }> {
   const res = await fetch("/api/push", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action, ...extra }),
   });
-  const data = (await res.json().catch(() => ({}))) as { error?: string };
-  return { ok: res.ok, error: data.error };
+  const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+  return { ok: res.ok, error: data.error, message: data.message };
 }
 
 export function usePush() {
@@ -142,7 +142,7 @@ export function usePush() {
     setBusy(true);
     setMessage(null);
     const res = await post("test");
-    setMessage(res.ok ? "Sent — it should arrive in a second." : (res.error ?? "That didn't send."));
+    setMessage(res.ok ? (res.message ?? "Sent — it should arrive in a second.") : (res.error ?? "That didn't send."));
     setBusy(false);
   }, []);
 
