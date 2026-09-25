@@ -20,11 +20,11 @@ export function ServiceWorker({ scope }: { scope: string }) {
 
 type BeforeInstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 
-function isStandalone() {
+export function isStandalone() {
   return window.matchMedia("(display-mode: standalone)").matches || (navigator as { standalone?: boolean }).standalone === true;
 }
 
-function isIos() {
+export function isIos() {
   const ua = navigator.userAgent;
   return /iPhone|iPad|iPod/.test(ua) || (ua.includes("Macintosh") && navigator.maxTouchPoints > 1);
 }

@@ -108,6 +108,7 @@ model Tenant {
 
   @@index([status])
   activityEvents        ActivityEvent[]
+  pushSubscriptions     PushSubscription[]
 }
 
 model TenantBranding {
@@ -260,6 +261,7 @@ model User {
   customerProfile CustomerProfile?
   auditLogs       AuditLog[]
   passwordResets  PasswordResetToken[]
+  pushSubscriptions PushSubscription[]
   impersonationSessions ImpersonationSession[]
 
   @@unique([tenantId, email])
@@ -274,6 +276,30 @@ model PasswordResetToken {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime @default(now())
+}
+
+/// A browser or installed app that has agreed to receive notifications.
+/// One client can have several: a phone, a tablet, a laptop. The endpoint is
+/// the push service's own address for that device, so it identifies the row.
+model PushSubscription {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  endpoint   String   @unique
+  /// The browser's own public key and auth secret for encrypting a payload.
+  p256dh     String
+  auth       String
+  userAgent  String?
+
+  createdAt  DateTime @default(now())
+  /// Last time a push service accepted a message for this device.
+  lastUsedAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([userId])
 }
 
 model Permission {

@@ -1,5 +1,5 @@
 /*
- * Service worker for the clients' installable apps (/app/...).
+ * Service worker for the clients' installable apps.
  *
  * Privacy first: pages and data belong to a signed-in client, so they are
  * never cached — a shared or lost phone offline shows a neutral page, not
@@ -47,7 +47,13 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
-/* Web Push. Payload: { title, body, url, tag?, icon? } — url must be on this site. */
+/*
+ * Web Push. Payload: { title, body, url?, tag?, icon? }.
+ *
+ * A push must always show something. iOS revokes the permission from an app
+ * that receives a push and shows nothing, so every branch below ends in a
+ * notification — including the one where the payload is unreadable.
+ */
 self.addEventListener("push", (event) => {
   let data = {};
   try {
@@ -55,27 +61,46 @@ self.addEventListener("push", (event) => {
   } catch {
     data = { body: event.data ? event.data.text() : "" };
   }
-  const title = data.title || "New message";
+  const title = data.title || "Your clinic";
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || "",
       tag: data.tag,
+      // The sender passes the clinic's own icon; without one the platform
+      // shows its default rather than a broken image.
       icon: data.icon,
       badge: data.icon,
-      data: { url: data.url || "/app" },
+      data: { url: data.url || "/" },
     }),
   );
 });
 
+/**
+ * Opening a notification returns to the app the client already has open when
+ * there is one, rather than stacking up windows. Only same-origin URLs are
+ * followed: the payload is data from the network, so a link anywhere else is
+ * ignored rather than opened.
+ */
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const target = new URL(event.notification.data && event.notification.data.url ? event.notification.data.url : "/app", self.location.origin);
+  const raw = event.notification.data && event.notification.data.url;
+  let target;
+  try {
+    target = new URL(raw || "/", self.location.origin);
+  } catch {
+    target = new URL("/", self.location.origin);
+  }
   if (target.origin !== self.location.origin) return;
+
   event.waitUntil(
     (async () => {
       const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      // The clinic's own section of the site: "/riverside" from
+      // "/riverside/shop", so a window already inside that clinic is reused.
+      const clinic = "/" + target.pathname.split("/").filter(Boolean)[0];
       for (const w of windows) {
-        if (new URL(w.url).pathname.startsWith(target.pathname.split("/").slice(0, 3).join("/")) && "focus" in w) {
+        const here = new URL(w.url);
+        if (here.origin === self.location.origin && (here.pathname === clinic || here.pathname.startsWith(clinic + "/")) && "focus" in w) {
           await w.navigate(target.href).catch(() => {});
           return w.focus();
         }

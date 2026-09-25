@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useBasePath } from "./base-path";
 import { Gloss, Icon, Sheet, money } from "@/components/client-app/ui";
+import { NotificationCard } from "@/components/client-app/push";
 import type { ClientSummary, HomeData } from "@/lib/client-app-data";
 
 export function HomeView({
@@ -32,6 +33,8 @@ export function HomeView({
         </div>
         <div className="hero-fade" />
       </Gloss>
+
+      <NotificationCard clinicName={merchantName} />
 
       {/* 2. Wallet strip, overlapping the hero seam */}
       <button className="wallet" onClick={() => router.push(`${base}/rewards`)} aria-label="Open rewards and wallet">

@@ -1247,3 +1247,72 @@
   padding: 0 16px;
   font-size: 14px;
 }
+
+/* Notifications: the Home card and the Profile → Settings switch. */
+.ca-pushcard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px var(--pad-x) 0;
+  padding: 14px 12px 14px 16px;
+  background: var(--bg-surface);
+  border-radius: var(--r-tile);
+  box-shadow: var(--shadow-card);
+}
+.ca-pushcard-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink-strong);
+}
+.ca-pushcard-body {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+.ca-pushsettings {
+  padding: 14px 0;
+}
+.ca-pushsettings .row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ca-pushtest {
+  margin-top: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ca-switch {
+  flex: 0 0 auto;
+  width: 51px;
+  height: 31px;
+  border-radius: 999px;
+  background: var(--pill-bg);
+  position: relative;
+  transition: background 0.18s ease;
+}
+.ca-switch.on {
+  background: var(--black);
+}
+.ca-switch .knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+  transition: transform 0.18s ease;
+}
+.ca-switch.on .knob {
+  transform: translateX(20px);
+}
+.ca-switch:disabled {
+  opacity: 0.6;
+}

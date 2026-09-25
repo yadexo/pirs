@@ -35,6 +35,7 @@ import {
 import type { ActionResult } from "@/lib/merchant-action";
 import { WEEKDAYS, WEEKDAY_LABEL, isOpeningHours, type OpeningHours } from "@/lib/opening-hours";
 import type { SettingsData } from "./load";
+import { BroadcastForm } from "./broadcast";
 
 type Data<S extends SettingsData["section"]> = Extract<SettingsData, { section: S }>;
 type SaveFn = (merchantId: string, fd: FormData) => Promise<ActionResult>;
@@ -786,17 +787,20 @@ export function NotificationsSection({ merchantId, data, canEdit }: { merchantId
   const s = data.settings;
   const on = (v: boolean | undefined) => v ?? true;
   return (
-    <SettingsForm merchantId={merchantId} save={saveNotificationSettingsAction} canEdit={canEdit}>
-      {() => (
-        <FormSection title="Send clients a message when">
-          <p className="text-[12px] text-ink-muted">Each client&apos;s own notification preferences are always respected.</p>
-          <CheckboxField name="notifyBookingConfirmations" label="A booking is confirmed, changed or cancelled" defaultChecked={on(s?.notifyBookingConfirmations)} />
-          <CheckboxField name="notifyAppointmentReminders" label="An appointment is coming up" defaultChecked={on(s?.notifyAppointmentReminders)} />
-          <CheckboxField name="notifyPointsEarned" label="They earn points or unlock a reward" defaultChecked={on(s?.notifyPointsEarned)} />
-          <CheckboxField name="notifyMembershipBilling" label="A membership renews or a payment fails" defaultChecked={on(s?.notifyMembershipBilling)} />
-        </FormSection>
-      )}
-    </SettingsForm>
+    <>
+      {canEdit && <BroadcastForm merchantId={merchantId} devices={data.subscribedDevices} products={data.products} />}
+      <SettingsForm merchantId={merchantId} save={saveNotificationSettingsAction} canEdit={canEdit}>
+        {() => (
+          <FormSection title="Send clients a message when">
+            <p className="text-[12px] text-ink-muted">Each client&apos;s own notification preferences are always respected.</p>
+            <CheckboxField name="notifyBookingConfirmations" label="A booking is confirmed, changed or cancelled" defaultChecked={on(s?.notifyBookingConfirmations)} />
+            <CheckboxField name="notifyAppointmentReminders" label="An appointment is coming up" defaultChecked={on(s?.notifyAppointmentReminders)} />
+            <CheckboxField name="notifyPointsEarned" label="They earn points or unlock a reward" defaultChecked={on(s?.notifyPointsEarned)} />
+            <CheckboxField name="notifyMembershipBilling" label="A membership renews or a payment fails" defaultChecked={on(s?.notifyMembershipBilling)} />
+          </FormSection>
+        )}
+      </SettingsForm>
+    </>
   );
 }
 

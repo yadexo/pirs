@@ -73,8 +73,13 @@ export async function loadSettingsSection(db: TenantDb, merchantId: string, sect
       return plain({ section, settings });
     }
     case "notifications": {
-      const settings = await db.tenantSettings.findFirst({ where: {} });
-      return plain({ section, settings });
+      const [settings, subscribedDevices, products] = await Promise.all([
+        db.tenantSettings.findFirst({ where: {} }),
+        rawDb.pushSubscription.count({ where: { tenantId: merchantId } }),
+        // For the optional link on a broadcast: this clinic's own products.
+        db.product.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true }, take: 100 }),
+      ]);
+      return plain({ section, settings, subscribedDevices, products });
     }
     case "integrations": {
       const clinic = await rawDb.tenant.findUniqueOrThrow({

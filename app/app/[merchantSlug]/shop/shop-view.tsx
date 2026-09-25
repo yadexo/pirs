@@ -44,6 +44,7 @@ const SEGMENTS = [
 
 export function ShopView({
   merchantSlug,
+  openProductId,
   currency,
   tab,
   categoryId,
@@ -57,6 +58,8 @@ export function ShopView({
   externalBookingUrl,
 }: {
   merchantSlug: string;
+  /** A product to open straight away — a notification linking to one. */
+  openProductId?: string | null;
   currency: string;
   tab: string;
   categoryId: string | null;
@@ -91,6 +94,15 @@ export function ShopView({
   const [priceBand, setPriceBand] = React.useState<string | null>(null);
   const [duration, setDuration] = React.useState<number | null>(null);
   const [sort, setSort] = React.useState("pop");
+
+  // A notification can link to one product. Opening its sheet here means the
+  // client lands on the thing they tapped, not on the shop for them to find
+  // it again. A product that has since gone just leaves the shop open.
+  React.useEffect(() => {
+    if (!openProductId) return;
+    const item = products.find((p) => p.id === openProductId);
+    if (item) setDetail({ kind: "product", item });
+  }, [openProductId, products]);
 
   const [indicator, setIndicator] = React.useState<{ left: number; width: number }>({ left: 0, width: 0 });
   React.useLayoutEffect(() => {

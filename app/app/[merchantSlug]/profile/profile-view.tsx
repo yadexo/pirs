@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useBasePath, useFinderPath } from "../base-path";
+import { NotificationSettings } from "@/components/client-app/push";
 import { Sheet, Icon, EmptyState, money, useToast } from "@/components/client-app/ui";
 import { signOutOfClinicAction } from "@/lib/actions/session";
 import {
@@ -667,6 +668,7 @@ function NotificationsSheet({
         </button>
       }
     >
+      <NotificationSettings />
       {rows.map(([key, label]) => (
         <button key={key} className={`optrow ${state[key] ? "on" : ""}`} onClick={() => setState((s) => ({ ...s, [key]: !s[key] }))}>
           <span className="rad" />

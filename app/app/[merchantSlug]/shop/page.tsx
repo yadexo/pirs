@@ -6,7 +6,7 @@ export default async function ShopPage({
   searchParams,
 }: {
   params: Promise<{ merchantSlug: string }>;
-  searchParams: Promise<{ tab?: string; category?: string }>;
+  searchParams: Promise<{ tab?: string; category?: string; product?: string }>;
 }) {
   const { merchantSlug } = await params;
   const sp = await searchParams;
@@ -42,6 +42,7 @@ export default async function ShopPage({
   return (
     <ShopView
       merchantSlug={merchantSlug}
+      openProductId={sp.product ?? null}
       currency={ctx.merchant.currency}
       tab={tab}
       categoryId={sp.category ?? null}

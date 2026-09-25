@@ -51,6 +51,7 @@ const TENANT_SCOPED_MODELS = new Set([
   "Conversation",
   "Message",
   "Notification",
+  "PushSubscription",
   "NotificationCampaign",
   "ActivityEvent",
   "NotificationDelivery",

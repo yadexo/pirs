@@ -5,6 +5,7 @@ import { getTenantDb } from "@/lib/tenant-db";
 import { completePaidOrder, releaseFailedOrder } from "@/lib/order-completion";
 import { disconnectClinicAccount, syncClinicFromAccount } from "@/lib/stripe-connect";
 import { domainsApi, registerApplePayDomains } from "@/lib/apple-pay-domains";
+import { notifyOrderPaid, notifyRefundProcessed } from "@/lib/client-notifications";
 import { stripe } from "@/lib/stripe-payments";
 
 /**
@@ -88,7 +89,12 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
         where: { id: payment.id },
         data: { status: "SUCCEEDED", failureReason: null, method },
       });
-      if (payment.orderId) await completePaidOrder(getTenantDb(payment.tenantId), payment.orderId);
+      if (payment.orderId) {
+        await completePaidOrder(getTenantDb(payment.tenantId), payment.orderId);
+        // After the order is settled, and unable to affect it: a failed
+        // notification must not make Stripe retry a payment already applied.
+        await notifyOrderPaid(payment.orderId, payment.amountCents);
+      }
       return;
     }
     case "payment_intent.payment_failed": {
@@ -128,6 +134,7 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
           where: { id: payment.orderId, status: { in: ["PAID", "PARTIALLY_REFUNDED", "DISPUTED"] } },
           data: { status: fully ? "REFUNDED" : "PARTIALLY_REFUNDED" },
         });
+        await notifyRefundProcessed(payment.orderId, refundedCents, fully);
       }
       return;
     }
