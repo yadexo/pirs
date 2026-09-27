@@ -109,6 +109,7 @@ model Tenant {
   @@index([status])
   activityEvents        ActivityEvent[]
   pushSubscriptions     PushSubscription[]
+  redeemableItems       RedeemableItem[]
 }
 
 model TenantBranding {
@@ -262,6 +263,7 @@ model User {
   auditLogs       AuditLog[]
   passwordResets  PasswordResetToken[]
   pushSubscriptions PushSubscription[]
+  redemptionsPerformed RedeemableItem[] @relation("RedeemedBy")
   impersonationSessions ImpersonationSession[]
 
   @@unique([tenantId, email])
@@ -488,6 +490,7 @@ model CustomerProfile {
   @@index([tenantId])
   @@index([tenantId, lastName, firstName])
   activityEvents  ActivityEvent[]
+  redeemableItems   RedeemableItem[]
 }
 
 model CustomerTag {
@@ -1308,6 +1311,7 @@ model Order {
   updatedAt               DateTime       @updatedAt
 
   items                  OrderItem[]
+  redeemableItems        RedeemableItem[]
   payments                Payment[]
   appointments             Appointment[]
 
@@ -1336,6 +1340,8 @@ model OrderItem {
   totalCents       Int
   taxCents         Int              @default(0)
 
+  redeemableItems  RedeemableItem[]
+
   @@index([orderId])
 }
 
@@ -1352,6 +1358,71 @@ enum PaymentStatus {
   CANCELLED
   /// Charged back by the client's bank.
   DISPUTED
+}
+
+/// How an item was handed over, for a clinic owner reading the history back.
+enum RedemptionMethod {
+  QR
+  BACKUP_CODE
+  MANUAL
+}
+
+enum RedeemableStatus {
+  AVAILABLE
+  REDEEMED
+  /// Refunded before it was used.
+  VOIDED
+  EXPIRED
+}
+
+/// One paid-for thing the client can collect at the clinic: a product to
+/// pick up, a treatment to have. One row per unit, so buying two creates two
+/// codes and using one leaves the other.
+///
+/// `token` is what the QR carries and nothing else — no order id, no name —
+/// so a photographed code says nothing about the person holding it. `code` is
+/// the same item in eight characters a receptionist can type.
+model RedeemableItem {
+  id                String            @id @default(cuid())
+  tenantId          String
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId String
+  customerProfile   CustomerProfile   @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  orderId           String
+  order             Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItemId       String
+  orderItem         OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  /// Which unit of that order line this is: 0 and 1 for a quantity of two.
+  /// With the unique below, creating the items twice cannot duplicate them.
+  unitIndex         Int
+  itemType          CatalogItemType
+  /// The name as it was sold, so a later rename doesn't rewrite history.
+  name              String
+
+  token             String            @unique
+  code              String
+  status            RedeemableStatus  @default(AVAILABLE)
+  expiresAt         DateTime?
+
+  redeemedAt        DateTime?
+  redeemedById      String?
+  redeemedBy        User?             @relation("RedeemedBy", fields: [redeemedById], references: [id], onDelete: SetNull)
+  redemptionMethod  RedemptionMethod?
+  /// Why it was handed over without a code, when staff say.
+  redemptionNote    String?
+  /// Refunded after it had already been used — the clinic decides what to do.
+  refundedAfterUse  Boolean           @default(false)
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@unique([orderItemId, unitIndex])
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+  @@index([customerProfileId, status])
+  @@index([orderId])
+  @@index([tenantId, redeemedAt])
 }
 
 model Payment {

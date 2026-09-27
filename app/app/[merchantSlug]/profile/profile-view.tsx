@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useBasePath, useFinderPath } from "../base-path";
 import { NotificationSettings } from "@/components/client-app/push";
+import { MyItems, type ClientItem } from "./my-items";
 import { Sheet, Icon, EmptyState, money, useToast } from "@/components/client-app/ui";
 import { signOutOfClinicAction } from "@/lib/actions/session";
 import {
@@ -45,6 +46,7 @@ export interface BillingRow {
 
 const SEGMENTS = [
   { key: "treatments", label: "Treatments" },
+  { key: "items", label: "My items" },
   { key: "membership", label: "Membership" },
   { key: "settings", label: "Settings" },
 ];
@@ -68,6 +70,7 @@ export function ProfileView({
   supportUrl,
   tab,
   summary,
+  items,
   appointments,
   orders,
   billing,
@@ -79,6 +82,8 @@ export function ProfileView({
   supportUrl: string | null;
   tab: string;
   summary: ClientSummary;
+  /** Paid-for things still to collect, and the ones already used. */
+  items: ClientItem[];
   appointments: ApptRow[];
   orders: OrderRow[];
   billing: BillingRow[];
@@ -285,6 +290,8 @@ export function ProfileView({
           )}
         </div>
       )}
+
+      {tab === "items" && <MyItems items={items} />}
 
       {/* -------------------------------------------------------- settings */}
       {tab === "settings" && (

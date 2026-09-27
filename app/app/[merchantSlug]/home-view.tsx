@@ -9,11 +9,14 @@ import type { ClientSummary, HomeData } from "@/lib/client-app-data";
 
 export function HomeView({
   merchantName,
+  itemsToRedeem,
   currency,
   summary,
   home,
 }: {
   merchantName: string;
+  /** Items bought and not yet collected. */
+  itemsToRedeem: number;
   currency: string;
   summary: ClientSummary;
   home: HomeData;
@@ -33,6 +36,21 @@ export function HomeView({
         </div>
         <div className="hero-fade" />
       </Gloss>
+
+      {itemsToRedeem > 0 && (
+        <button className="ca-itemscard" onClick={() => router.push(`${base}/profile?tab=items`)}>
+          <span className="ca-itemqr" aria-hidden="true">
+            <Icon name="qr" size={22} />
+          </span>
+          <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+            <span className="ca-itemname">
+              You have {itemsToRedeem} {itemsToRedeem === 1 ? "item" : "items"} to redeem
+            </span>
+            <span className="ca-itemmeta">Show the code at the clinic to collect.</span>
+          </span>
+          <Icon name="chevR" size={20} />
+        </button>
+      )}
 
       <NotificationCard clinicName={merchantName} />
 

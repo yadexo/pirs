@@ -1,5 +1,5 @@
 import { getClientAppContext } from "@/lib/client-app-context";
-import { getClientSummary } from "@/lib/client-app-data";
+import { getClientSummary, getRedeemableItems } from "@/lib/client-app-data";
 import { ProfileView } from "./profile-view";
 
 export default async function ProfilePage({
@@ -14,9 +14,9 @@ export default async function ProfilePage({
   const ctx = await getClientAppContext(merchantSlug);
   if (!ctx.customerProfileId) return null;
 
-  const tab = sp.tab === "membership" || sp.tab === "settings" ? sp.tab : "treatments";
+  const tab = sp.tab === "membership" || sp.tab === "settings" || sp.tab === "items" ? sp.tab : "treatments";
 
-  const [summary, orders, appointments, billing] = await Promise.all([
+  const [summary, orders, appointments, items, billing] = await Promise.all([
     getClientSummary(ctx.db, ctx.customerProfileId),
     ctx.db.order.findMany({
       where: { customerProfileId: ctx.customerProfileId, status: "PAID" },
@@ -30,6 +30,7 @@ export default async function ProfilePage({
       take: 20,
       include: { service: { select: { id: true, name: true, durationMinutes: true } }, location: { select: { name: true } } },
     }),
+    getRedeemableItems(ctx.db, ctx.customerProfileId),
     ctx.db.membershipBillingEvent.findMany({
       where: { customerMembership: { customerProfileId: ctx.customerProfileId } },
       orderBy: { occurredAt: "desc" },
@@ -48,6 +49,7 @@ export default async function ProfilePage({
       supportUrl={ctx.merchant.supportUrl}
       tab={tab}
       summary={summary}
+      items={items}
       appVersion="1.0.0"
       appointments={appointments.map((a) => ({
         id: a.id,

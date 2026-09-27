@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { Panel, Pagination, Pill, Drawer } from "@/components/ui/primitives";
+import { ClientItems } from "./client-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatMoney } from "@/lib/utils";
 
@@ -136,13 +137,13 @@ export function ClientsTable({
         )}
       </Panel>
 
-      <ClientDrawer client={selected} onClose={() => setSelected(null)} />
+      <ClientDrawer merchantId={merchantId} client={selected} onClose={() => setSelected(null)} />
     </>
   );
 }
 
-function ClientDrawer({ client, onClose }: { client: ClientRow | null; onClose: () => void }) {
-  const [tab, setTab] = React.useState<"profile" | "messages">("profile");
+function ClientDrawer({ merchantId, client, onClose }: { merchantId: string; client: ClientRow | null; onClose: () => void }) {
+  const [tab, setTab] = React.useState<"profile" | "items" | "messages">("profile");
 
   React.useEffect(() => {
     if (client) setTab("profile");
@@ -153,7 +154,7 @@ function ClientDrawer({ client, onClose }: { client: ClientRow | null; onClose: 
       {client && (
         <>
           <div className="mb-4 flex gap-4 border-b border-border">
-            {(["profile", "messages"] as const).map((t) => (
+            {(["profile", "items", "messages"] as const).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -177,6 +178,8 @@ function ClientDrawer({ client, onClose }: { client: ClientRow | null; onClose: 
               <Row label="Account credit" value={formatMoney(client.creditCents)} />
               <Row label="Membership" value={client.isMember ? "Active" : "None"} />
             </dl>
+          ) : tab === "items" ? (
+            <ClientItems merchantId={merchantId} customerProfileId={client.id} />
           ) : (
             <p className="py-8 text-center text-[12px] text-ink-muted">No messages yet</p>
           )}

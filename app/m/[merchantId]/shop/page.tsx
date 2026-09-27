@@ -9,6 +9,13 @@ import { formatMoney } from "@/lib/utils";
 import { TypeFilter } from "./type-filter";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
 
+/** Plain words for how an item left the clinic. */
+const REDEMPTION_LABEL: Record<string, string> = {
+  QR: "Scanned",
+  BACKUP_CODE: "Typed code",
+  MANUAL: "By staff",
+};
+
 export default async function ShopSummaryPage({
   params,
   searchParams,
@@ -20,7 +27,7 @@ export default async function ShopSummaryPage({
   const { type = "all" } = await searchParams;
   const ctx = await requireMerchantContext(merchantId);
 
-  const [branding, salesAgg, orderCount, rewardsUnlocked, rewardsRedeemedAgg, orders] = await Promise.all([
+  const [branding, salesAgg, orderCount, rewardsUnlocked, rewardsRedeemedAgg, orders, redemptions] = await Promise.all([
     ctx.db.tenantBranding.findFirst({ where: {}, select: { currency: true } }),
     ctx.db.order.aggregate({ where: { status: "PAID" }, _sum: { totalCents: true } }),
     ctx.db.order.count({ where: { status: "PAID" } }),
@@ -30,6 +37,23 @@ export default async function ShopSummaryPage({
       orderBy: { placedAt: "desc" },
       take: 50,
       include: { customerProfile: { select: { firstName: true, lastName: true } }, items: { select: { id: true } } },
+    }),
+    // Who collected what, and how — a manual redemption with no code shown
+    // is the one an owner might want to ask about.
+    ctx.db.redeemableItem.findMany({
+      where: { status: "REDEEMED" },
+      orderBy: { redeemedAt: "desc" },
+      take: 25,
+      select: {
+        id: true,
+        name: true,
+        redeemedAt: true,
+        redemptionMethod: true,
+        redemptionNote: true,
+        refundedAfterUse: true,
+        customerProfile: { select: { firstName: true, lastName: true } },
+        redeemedBy: { select: { email: true, staffProfile: { select: { firstName: true, lastName: true } } } },
+      },
     }),
   ]);
 
@@ -131,6 +155,55 @@ export default async function ShopSummaryPage({
                       </td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      <div className="mt-4">
+        <Panel>
+          <PanelHeader title="Recent redemptions" />
+          {redemptions.length === 0 ? (
+            <EmptyState title="Nothing redeemed yet" />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px]">
+                <thead>
+                  <tr className="border-b border-border text-left text-[10px] uppercase tracking-wide text-ink-faint">
+                    <th className="px-5 py-2.5 font-medium">When</th>
+                    <th className="px-5 py-2.5 font-medium">Item</th>
+                    <th className="px-5 py-2.5 font-medium">Client</th>
+                    <th className="px-5 py-2.5 font-medium">By</th>
+                    <th className="px-5 py-2.5 font-medium">How</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {redemptions.map((r) => {
+                    const staff = r.redeemedBy?.staffProfile;
+                    return (
+                      <tr key={r.id} className="border-b border-border text-[12px] last:border-b-0 hover:bg-app">
+                        <td className="px-5 py-3 text-ink-muted">
+                          {r.redeemedAt ? r.redeemedAt.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "-"}
+                        </td>
+                        <td className="px-5 py-3 font-medium">
+                          {r.name}
+                          {r.refundedAfterUse && <span className="ml-2 text-[11px] text-[var(--accent-red)]">refunded after use</span>}
+                        </td>
+                        <td className="px-5 py-3">
+                          {r.customerProfile.firstName} {r.customerProfile.lastName}
+                        </td>
+                        <td className="px-5 py-3 text-ink-muted">
+                          {staff ? `${staff.firstName} ${staff.lastName}`.trim() : (r.redeemedBy?.email ?? "-")}
+                        </td>
+                        <td className="px-5 py-3">
+                          <Pill tone={r.redemptionMethod === "MANUAL" ? "amber" : "neutral"}>{REDEMPTION_LABEL[r.redemptionMethod ?? "QR"]}</Pill>
+                          {r.redemptionNote && <p className="mt-1 text-[11px] text-ink-muted">{r.redemptionNote}</p>}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

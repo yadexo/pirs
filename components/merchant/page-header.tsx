@@ -1,9 +1,14 @@
 import * as React from "react";
 import { ScanQrButton } from "./scan-qr";
+import { RedeemButton } from "./redeem";
 
 /**
  * The top bar shared by every sub-account page: page title on the left,
- * merchant identity + Scan QR on the right.
+ * merchant identity, Redeem and Scan QR on the right.
+ *
+ * Redeem lives here rather than in the sidebar on purpose — the sidebar is a
+ * fixed six items, and this is something staff do from whatever page they
+ * happen to be on.
  */
 export function MerchantPageHeader({
   title,
@@ -24,6 +29,7 @@ export function MerchantPageHeader({
         <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-soft text-[11px] font-semibold text-primary">
           {merchantName.charAt(0).toUpperCase()}
         </span>
+        <RedeemButton />
         <ScanQrButton />
       </div>
     </header>

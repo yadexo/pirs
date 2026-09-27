@@ -6,6 +6,7 @@ import { completePaidOrder, releaseFailedOrder } from "@/lib/order-completion";
 import { disconnectClinicAccount, syncClinicFromAccount } from "@/lib/stripe-connect";
 import { domainsApi, registerApplePayDomains } from "@/lib/apple-pay-domains";
 import { notifyOrderPaid, notifyRefundProcessed } from "@/lib/client-notifications";
+import { createItemsForOrder, voidItemsForOrder } from "@/lib/redeemable";
 import { stripe } from "@/lib/stripe-payments";
 
 /**
@@ -91,6 +92,9 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       });
       if (payment.orderId) {
         await completePaidOrder(getTenantDb(payment.tenantId), payment.orderId);
+        // Paid for means collectable: one code per unit bought. Safe to
+        // repeat, because Stripe can deliver the same event twice.
+        await createItemsForOrder(payment.orderId);
         // After the order is settled, and unable to affect it: a failed
         // notification must not make Stripe retry a payment already applied.
         await notifyOrderPaid(payment.orderId, payment.amountCents);
@@ -134,6 +138,8 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
           where: { id: payment.orderId, status: { in: ["PAID", "PARTIALLY_REFUNDED", "DISPUTED"] } },
           data: { status: fully ? "REFUNDED" : "PARTIALLY_REFUNDED" },
         });
+        // Unused items stop working; used ones are flagged, not hidden.
+        await voidItemsForOrder(payment.orderId);
         await notifyRefundProcessed(payment.orderId, refundedCents, fully);
       }
       return;

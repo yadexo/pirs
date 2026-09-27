@@ -77,6 +77,16 @@ export async function notifyOrderPaid(orderId: string, amountCents: number): Pro
   });
 }
 
+/** One of the client's items has just been collected at the clinic. */
+export async function notifyItemRedeemed(customerUserId: string, clinicName: string, slug: string, itemName: string): Promise<void> {
+  await notifyClientQuietly(customerUserId, {
+    title: clinicName,
+    body: `${itemName} has been redeemed. Enjoy!`,
+    url: clinicPath(slug, "/profile?tab=items"),
+    icon: clinicPath(slug, "/app-icon/192.png"),
+  });
+}
+
 /** Money is on its way back to the client. */
 export async function notifyRefundProcessed(orderId: string, amountCents: number, fully: boolean): Promise<void> {
   const to = await recipientForOrder(orderId);

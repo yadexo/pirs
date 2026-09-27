@@ -1316,3 +1316,74 @@
 .ca-switch:disabled {
   opacity: 0.6;
 }
+
+/* My items: the list, the Home card, and the full-screen code. */
+.ca-itemrow,
+.ca-itemscard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 14px;
+  background: var(--bg-surface);
+  border-radius: var(--r-tile);
+  box-shadow: var(--shadow-card);
+  text-align: left;
+}
+.ca-itemscard {
+  margin: 16px var(--pad-x) 0;
+  width: calc(100% - 2 * var(--pad-x));
+}
+.ca-itemrow.done {
+  opacity: 0.55;
+  box-shadow: none;
+  background: var(--pill-bg);
+}
+.ca-itemqr {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--black);
+  color: var(--on-black);
+}
+.ca-itemname {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ca-itemmeta {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.ca-itemhead {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ca-itemqrbox {
+  max-width: 280px;
+  margin: 0 auto;
+  padding: 16px;
+  background: #fff;
+  border-radius: var(--r-tile);
+  box-shadow: var(--shadow-card);
+}
+.ca-itemcode {
+  margin: 18px 0 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--ink-strong);
+}

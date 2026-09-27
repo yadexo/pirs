@@ -24,6 +24,41 @@ export interface ClientSummary {
   marketingConsent: boolean;
 }
 
+export interface RedeemableItemRow {
+  id: string;
+  name: string;
+  status: "AVAILABLE" | "REDEEMED" | "VOIDED" | "EXPIRED";
+  code: string;
+  token: string;
+  purchasedAt: string;
+  redeemedAt: string | null;
+  expiresAt: string | null;
+}
+
+/**
+ * What this client has bought and can still collect, available first.
+ * The token comes with it because the app draws the QR from it; the route
+ * is the client's own, so it only ever carries their own codes.
+ */
+export async function getRedeemableItems(db: TenantDb, customerProfileId: string): Promise<RedeemableItemRow[]> {
+  const rows = await db.redeemableItem.findMany({
+    where: { customerProfileId },
+    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    take: 60,
+    select: { id: true, name: true, status: true, code: true, token: true, createdAt: true, redeemedAt: true, expiresAt: true },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    status: r.status,
+    code: r.code,
+    token: r.token,
+    purchasedAt: r.createdAt.toISOString(),
+    redeemedAt: r.redeemedAt?.toISOString() ?? null,
+    expiresAt: r.expiresAt?.toISOString() ?? null,
+  }));
+}
+
 export async function getClientSummary(db: TenantDb, customerProfileId: string): Promise<ClientSummary | null> {
   const profile = await db.customerProfile.findFirst({
     where: { id: customerProfileId },
