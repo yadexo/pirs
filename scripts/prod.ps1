@@ -13,12 +13,13 @@ to delete and nothing that could be committed by accident.
   npm run prod:migrate                        # apply pending migrations
   npm run prod:stripe -- --clinic testclinic  # why can this clinic not take payments?
   npm run prod:apple-pay                      # register Apple Pay domains for live clinics
+  npm run prod:items -- --dry-run             # redeemable items for orders paid before the feature
   npm run prod:admin -- --email you@you.com   # create the first platform admin
   npm run prod:reset-admin -- --email you@you.com
   npm run prod:client -- --clinic testclinic --email client@you.com
 
 .PARAMETER Task
-status | migrate | stripe | apple-pay | admin | reset-admin | client
+status | migrate | stripe | apple-pay | items | admin | reset-admin | client
 
 .PARAMETER Url
 The connection string, for automation. Prefer the prompt: an argument is saved
@@ -30,7 +31,7 @@ Skip the confirmation. Intended for scripts, not for day-to-day use.
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("status", "migrate", "stripe", "apple-pay", "admin", "reset-admin", "client")]
+  [ValidateSet("status", "migrate", "stripe", "apple-pay", "items", "admin", "reset-admin", "client")]
   [string]$Task = "status",
 
   [string]$Url,
@@ -67,6 +68,7 @@ $commands = @{
   "migrate"      = @("npx", "prisma", "migrate", "deploy")
   "stripe"       = @("npx", "tsx", "prisma/stripe-account-status.ts")
   "apple-pay"    = @("npx", "tsx", "prisma/register-apple-pay-domains.ts")
+  "items"        = @("npx", "tsx", "prisma/create-redeemable-items.ts")
   "admin"        = @("npx", "tsx", "prisma/create-platform-admin.ts")
   "reset-admin"  = @("npx", "tsx", "prisma/reset-platform-admin-password.ts")
   "client"       = @("npx", "tsx", "prisma/create-client-login.ts")
