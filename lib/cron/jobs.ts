@@ -4,6 +4,7 @@ import { sweepExpiredRateLimits } from "@/lib/rate-limit";
 import { IMPERSONATION_MAX_MS } from "@/lib/impersonation-policy";
 import { getTenantDb } from "@/lib/tenant-db";
 import { releaseFailedOrder } from "@/lib/order-completion";
+import { runMarketing } from "@/lib/cron/marketing";
 
 /** How long an unpaid order may hold stock and redeemed points. */
 const ABANDONED_ORDER_MS = 60 * 60 * 1000;
@@ -66,5 +67,13 @@ export const CRON_JOBS: Record<string, () => Promise<CronResult>> = {
     });
 
     return { rateLimits, resetTokens, impersonationsClosed: stale.length, abandonedOrders: abandoned.length, stripeEvents };
+  },
+
+  /**
+   * Every few minutes: scheduled campaigns and today's birthdays. Held back
+   * during the quiet hours, and safe to run twice — see lib/cron/marketing.ts.
+   */
+  async marketing() {
+    return runMarketing();
   },
 };

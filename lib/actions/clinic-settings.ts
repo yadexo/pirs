@@ -588,6 +588,11 @@ export async function saveNotificationSettingsAction(merchantId: string, fd: For
       notifyBookingConfirmations: formBool(fd, "notifyBookingConfirmations"),
       notifyAppointmentReminders: formBool(fd, "notifyAppointmentReminders"),
       notifyPointsEarned: formBool(fd, "notifyPointsEarned"),
+      birthdayMessageEnabled: formBool(fd, "birthdayMessageEnabled"),
+      birthdayMessage: formText(fd, "birthdayMessage") ?? null,
+      // A percentage of zero means a greeting with no present attached.
+      birthdayDiscountPercent: Math.min(100, Math.max(0, Number(formText(fd, "birthdayDiscountPercent") ?? 0) || 0)),
+      birthdayDiscountDays: Math.min(365, Math.max(1, Number(formText(fd, "birthdayDiscountDays") ?? 14) || 14)),
       notifyMembershipBilling: formBool(fd, "notifyMembershipBilling"),
     };
     await upsertSettings(merchantId, data);

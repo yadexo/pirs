@@ -1,4 +1,5 @@
 import { getClientAppContext } from "@/lib/client-app-context";
+import { discountedUnitPrice, shopDiscountsFor } from "@/lib/discounts";
 import { ShopView } from "./shop-view";
 
 export default async function ShopPage({
@@ -14,6 +15,9 @@ export default async function ShopPage({
   if (!ctx.customerProfileId) return null;
 
   const tab = sp.tab === "memberships" || sp.tab === "treatments" ? sp.tab : "browse";
+
+  // This client's own automatic discounts, including any personal one.
+  const discounts = await shopDiscountsFor(ctx.merchant.id, ctx.customerProfileId);
 
   const [categories, products, services, plans, membership, programme, settings] = await Promise.all([
     ctx.db.productCategory.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
@@ -55,26 +59,44 @@ export default async function ShopPage({
         buttonLabel: settings?.shopBannerButtonLabel ?? null,
       }}
       externalBookingUrl={settings?.bookingMode === "EXTERNAL" ? settings.externalBookingUrl : null}
-      products={products.map((p) => ({
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        priceCents: p.priceCents,
-        images: Array.isArray(p.images) ? (p.images as string[]) : [],
-        soldOut: p.inventoryQuantity <= 0,
-        categoryId: p.categoryId,
-      }))}
-      services={services.map((s) => ({
+      products={products.map((p) => {
+        // The struck-through price comes from the same rules checkout uses, so
+        // the shop cannot promise a discount the till won't give.
+        const offer = discountedUnitPrice(
+          { kind: "PRODUCT", id: p.id, categoryId: p.categoryId, unitPriceCents: p.priceCents, quantity: 1 },
+          discounts,
+        );
+        return {
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          priceCents: p.priceCents,
+          offerPriceCents: offer.promotionTitle ? offer.priceCents : null,
+          offerTitle: offer.promotionTitle,
+          images: Array.isArray(p.images) ? (p.images as string[]) : [],
+          soldOut: p.inventoryQuantity <= 0,
+          categoryId: p.categoryId,
+        };
+      })}
+      services={services.map((s) => {
+        const offer = discountedUnitPrice(
+          { kind: "SERVICE", id: s.id, categoryId: s.categoryId, unitPriceCents: s.priceCents, quantity: 1 },
+          discounts,
+        );
+        return {
         id: s.id,
         name: s.name,
         description: s.description,
         priceCents: s.priceCents,
+        offerPriceCents: offer.promotionTitle ? offer.priceCents : null,
+        offerTitle: offer.promotionTitle,
         durationMinutes: s.durationMinutes,
         images: s.imageUrl ? [s.imageUrl] : [],
         // Only bookable when the clinic has assigned a practitioner to it.
         bookable: s.staff.length > 0,
         categoryName: s.category.name,
-      }))}
+        };
+      })}
       plans={plans.map((m) => ({
         id: m.id,
         name: m.name,

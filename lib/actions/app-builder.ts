@@ -141,8 +141,8 @@ export async function getAppBuilderOptionsAction(merchantId: string, kind: ItemK
   return runAction(async () => {
     const { db } = await requireMerchantAction(merchantId, NEEDS[kind]);
     const [serviceCategories, productCategories, services, products, tags, staff] = await Promise.all([
-      db.serviceCategory.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { name: true } }),
-      db.productCategory.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { name: true } }),
+      db.serviceCategory.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+      db.productCategory.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
       db.service.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
       db.product.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
       db.catalogTag.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, icon: true, description: true } }),
@@ -153,8 +153,12 @@ export async function getAppBuilderOptionsAction(merchantId: string, kind: ItemK
       }),
     ]);
     return {
+      // Names for the pickers that group by category; ids as well, because a
+      // discount can cover a whole category.
       serviceCategories: serviceCategories.map((c) => c.name),
       productCategories: productCategories.map((c) => c.name),
+      serviceCategoryOptions: serviceCategories,
+      productCategoryOptions: productCategories,
       services,
       products,
       tags,
@@ -182,7 +186,12 @@ export async function getAppBuilderItemAction(merchantId: string, kind: ItemKind
         item = await db.package.findFirst({ where: { id }, include: { items: { select: { serviceId: true } } } });
         break;
       case "promotion":
-        item = await db.promotion.findFirst({ where: { id } });
+        // With its scope, so editing an offer doesn't silently widen it back
+        // to the whole shop.
+        item = await db.promotion.findFirst({
+          where: { id },
+          include: { eligibility: { select: { productId: true, serviceId: true, productCategoryId: true, serviceCategoryId: true } } },
+        });
         break;
       case "membershipPlan": {
         const plan = await db.membershipPlan.findFirst({ where: { id }, include: { benefits: { select: { description: true } } } });
@@ -591,6 +600,15 @@ const promotionSchema = z
     customerSegment: z.enum(["ALL", "NEW", "MEMBERS", "NON_MEMBERS", "TAGGED"]),
     segmentTagId: z.string().optional(),
     active: z.boolean(),
+    /** Applies itself in the client app, with no code to type. */
+    autoApply: z.boolean(),
+    /** Typed in currency units, stored in cents like every other amount. */
+    minOrder: z.preprocess(toNumber, z.number().min(0).optional()),
+    /** Blank means the whole shop; otherwise the ids it is limited to. */
+    productIds: z.array(z.string()).default([]),
+    serviceIds: z.array(z.string()).default([]),
+    productCategoryIds: z.array(z.string()).default([]),
+    serviceCategoryIds: z.array(z.string()).default([]),
   })
   .superRefine((p, ctx) => {
     if (p.endAt <= p.startAt) ctx.addIssue({ code: "custom", path: ["endAt"], message: "End must be after the start" });
@@ -619,13 +637,21 @@ export async function savePromotionAction(merchantId: string, id: string | null,
       customerSegment: formText(fd, "customerSegment") ?? "ALL",
       segmentTagId: formText(fd, "segmentTagId"),
       active: formBool(fd, "active"),
+      autoApply: formBool(fd, "autoApply"),
+      minOrder: formText(fd, "minOrder"),
+      productIds: fd.getAll("productIds").map(String).filter(Boolean),
+      serviceIds: fd.getAll("serviceIds").map(String).filter(Boolean),
+      productCategoryIds: fd.getAll("productCategoryIds").map(String).filter(Boolean),
+      serviceCategoryIds: fd.getAll("serviceCategoryIds").map(String).filter(Boolean),
     });
 
     const tagged = data.customerSegment === "TAGGED";
     if (tagged && !(await ctx.db.customerTag.findFirst({ where: { id: data.segmentTagId } }))) throw fieldError("segmentTagId", "Choose a tag");
 
+    // The scope is stored as eligibility rows, not on the promotion itself.
+    const { productIds, serviceIds, productCategoryIds, serviceCategoryIds, minOrder, ...promotionFields } = data;
     const values = {
-      ...data,
+      ...promotionFields,
       // Fixed amounts are typed in currency units and stored in cents.
       discountValue: data.discountType === "FIXED_AMOUNT" ? Math.round(data.discountValue * 100) : data.discountValue,
       description: data.description ?? null,
@@ -634,7 +660,24 @@ export async function savePromotionAction(merchantId: string, id: string | null,
       usageLimit: data.usageLimit ?? null,
       perCustomerLimit: data.perCustomerLimit ?? null,
       segmentTagId: tagged ? (data.segmentTagId ?? null) : null,
+      minOrderCents: minOrder ? Math.round(minOrder * 100) : null,
     };
+
+    // Everything named has to belong to this clinic, so a stray id in the form
+    // cannot discount someone else's catalogue.
+    const scope = { productIds, serviceIds, productCategoryIds, serviceCategoryIds };
+    const [products, services, productCategories, serviceCategories] = await Promise.all([
+      scope.productIds.length ? ctx.db.product.findMany({ where: { id: { in: scope.productIds } }, select: { id: true } }) : [],
+      scope.serviceIds.length ? ctx.db.service.findMany({ where: { id: { in: scope.serviceIds } }, select: { id: true } }) : [],
+      scope.productCategoryIds.length ? ctx.db.productCategory.findMany({ where: { id: { in: scope.productCategoryIds } }, select: { id: true } }) : [],
+      scope.serviceCategoryIds.length ? ctx.db.serviceCategory.findMany({ where: { id: { in: scope.serviceCategoryIds } }, select: { id: true } }) : [],
+    ]);
+    const eligibilityRows = [
+      ...products.map((p) => ({ productId: p.id })),
+      ...services.map((s) => ({ serviceId: s.id })),
+      ...productCategories.map((c) => ({ productCategoryId: c.id })),
+      ...serviceCategories.map((c) => ({ serviceCategoryId: c.id })),
+    ];
 
     let savedId: string;
     try {
@@ -644,6 +687,11 @@ export async function savePromotionAction(merchantId: string, id: string | null,
         savedId = id;
       } else {
         savedId = (await ctx.db.promotion.create({ data: values as never })).id;
+      }
+      // Replaced wholesale: the form is the whole truth about the scope.
+      await rawDb.promotionEligibility.deleteMany({ where: { promotionId: savedId } });
+      if (eligibilityRows.length > 0) {
+        await rawDb.promotionEligibility.createMany({ data: eligibilityRows.map((row) => ({ ...row, promotionId: savedId })) });
       }
     } catch (err) {
       rethrowUnique(err, "code", "Another offer already uses this code");

@@ -19,6 +19,9 @@ import { ProductPanelForm } from "./product-form";
 export interface FormOptions {
   serviceCategories: string[];
   productCategories: string[];
+  /** The same categories with their ids, for scoping a discount to one. */
+  serviceCategoryOptions?: { id: string; name: string }[];
+  productCategoryOptions?: { id: string; name: string }[];
   services: { id: string; name: string }[];
   products: { id: string; name: string }[];
   tags: { id: string; name: string; icon: string; description: string | null }[];
@@ -107,9 +110,49 @@ function DateTimeField({ label, name, iso, errors }: { label: string; name: stri
   );
 }
 
+/** Checkboxes that post one form field several times — the shape the action reads. */
+function MultiPick({
+  label,
+  name,
+  options,
+  selected,
+}: {
+  label: string;
+  name: string;
+  options: { id: string; name: string }[];
+  selected: string[];
+}) {
+  if (options.length === 0) return null;
+  return (
+    <fieldset>
+      <legend className="mb-1.5 text-[12px] font-medium text-ink-muted">{label}</legend>
+      <div className="flex flex-wrap gap-2">
+        {options.map((o) => (
+          <label key={o.id} className="flex items-center gap-1.5 rounded-[10px] border border-border px-2.5 py-1.5 text-[12px]">
+            <input type="checkbox" name={name} value={o.id} defaultChecked={selected.includes(o.id)} className="h-3.5 w-3.5" />
+            {o.name}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+/** The saved eligibility rows, split back into the four pickers above. */
+function scopeOf(item: Record<string, unknown>) {
+  const rows = (item.eligibility as { productId?: string | null; serviceId?: string | null; productCategoryId?: string | null; serviceCategoryId?: string | null }[]) ?? [];
+  return {
+    productIds: rows.map((r) => r.productId).filter((v): v is string => !!v),
+    serviceIds: rows.map((r) => r.serviceId).filter((v): v is string => !!v),
+    productCategoryIds: rows.map((r) => r.productCategoryId).filter((v): v is string => !!v),
+    serviceCategoryIds: rows.map((r) => r.serviceCategoryId).filter((v): v is string => !!v),
+  };
+}
+
 export function PromotionForm({ merchantId, currency, item, options, errors }: ItemFormProps) {
   const [discountType, setDiscountType] = React.useState(str(item.discountType) || "PERCENT");
   const [segment, setSegment] = React.useState(str(item.customerSegment) || "ALL");
+  const scope = scopeOf(item);
   const start = str(item.startAt) || new Date().toISOString();
   const end = str(item.endAt) || new Date(Date.now() + 30 * 864e5).toISOString();
   const storedValue = item.discountValue as number | undefined;
@@ -142,7 +185,28 @@ export function PromotionForm({ merchantId, currency, item, options, errors }: I
             <MoneyField key="amt" label="Amount" name="discountValue" currency={currency} defaultValue={valueDefault} errors={errors} required />
           )}
         </div>
-        <TextField label="Code" name="code" defaultValue={str(item.code)} errors={errors} hint="Optional. Leave empty to apply automatically." />
+        <TextField label="Code" name="code" defaultValue={str(item.code)} errors={errors} hint="Optional — for your own till. Clients in the app never type one." />
+        <CheckboxField
+          name="autoApply"
+          label="Apply automatically in the client app"
+          description="Eligible clients get it at checkout without typing anything, and see it on the price in the shop."
+          defaultChecked={isNew(item) ? true : Boolean(item.autoApply)}
+        />
+        <MoneyField
+          label="Minimum order"
+          name="minOrder"
+          currency={currency}
+          defaultValue={item.minOrderCents ? centsToInput(item.minOrderCents as number) : ""}
+          errors={errors}
+          hint="Empty = no minimum."
+        />
+      </FormSection>
+      <FormSection title="What it covers">
+        <p className="text-[12px] text-ink-muted">Choose nothing to discount the whole shop.</p>
+        <MultiPick label="Treatment categories" name="serviceCategoryIds" options={options.serviceCategoryOptions ?? []} selected={scope.serviceCategoryIds} />
+        <MultiPick label="Product categories" name="productCategoryIds" options={options.productCategoryOptions ?? []} selected={scope.productCategoryIds} />
+        <MultiPick label="Individual treatments" name="serviceIds" options={options.services} selected={scope.serviceIds} />
+        <MultiPick label="Individual products" name="productIds" options={options.products} selected={scope.productIds} />
       </FormSection>
       <FormSection title="When">
         <div className="grid grid-cols-2 gap-3">

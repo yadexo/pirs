@@ -14,6 +14,7 @@ import { recordActivity } from "@/lib/activity";
 import { clinicPaymentMode, createDirectCharge } from "@/lib/stripe-payments";
 import { completePaidOrder, releaseFailedOrder } from "@/lib/order-completion";
 import { bookingDepositCents } from "@/lib/booking-deposit";
+import { resolveDiscount } from "@/lib/discounts";
 
 /**
  * Every mutating action the patient app can perform.
@@ -383,11 +384,27 @@ export async function clientCheckoutAction(slug: string, rewardId: string | null
     loyaltyDiscountCents = rewardDiscountCents(reward, subtotalCents);
   }
 
+  // The discount is decided here, from the database, and never taken from
+  // anything the browser sent. The shop shows a price; this is what the client
+  // is actually charged, and what the PaymentIntent below is built from.
+  const applied = await resolveDiscount({
+    tenantId: user.tenantId!,
+    customerProfileId: user.customerProfileId!,
+    lines: items.map((i) => ({
+      kind: i.itemType === "PRODUCT" ? "PRODUCT" : "SERVICE",
+      id: (i.itemType === "PRODUCT" ? i.productId : i.serviceId) ?? i.id,
+      categoryId: (i.itemType === "PRODUCT" ? i.product?.categoryId : i.service?.categoryId) ?? null,
+      unitPriceCents: i.unitPriceCents,
+      quantity: i.quantity,
+    })),
+  });
+  const discountCents = applied?.discountCents ?? 0;
+
   const settings = await db.tenantSettings.findFirst({ where: {} });
   const taxRate = settings?.taxRateBasisPoints ?? 0;
-  const taxable = Math.max(subtotalCents - loyaltyDiscountCents, 0);
+  const taxable = Math.max(subtotalCents - discountCents - loyaltyDiscountCents, 0);
   const taxCents = Math.round((taxable * taxRate) / 10000);
-  const totalCents = Math.max(subtotalCents - loyaltyDiscountCents + taxCents, 0);
+  const totalCents = Math.max(subtotalCents - discountCents - loyaltyDiscountCents + taxCents, 0);
 
   const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}-${nanoid(4).toUpperCase()}`;
 
@@ -405,7 +422,8 @@ export async function clientCheckoutAction(slug: string, rewardId: string | null
       currency,
       status: "PENDING",
       subtotalCents,
-      discountCents: 0,
+      discountCents,
+      promotionId: applied?.promotionId ?? null,
       loyaltyDiscountCents,
       loyaltyPointsRedeemed: pointsRedeemed,
       taxCents,
@@ -486,7 +504,10 @@ export async function clientCheckoutAction(slug: string, rewardId: string | null
       const charge = await createDirectCharge({
         stripeAccountId: payment.stripeAccountId,
         amountCents: totalCents,
-        subtotalCents,
+        // The fee follows the money: a discounted basket earns the platform
+        // its percentage of what the client actually paid, not of the list
+        // price the clinic gave away.
+        subtotalCents: Math.max(0, subtotalCents - discountCents),
         currency,
         description: `Order ${orderNumber}`,
         metadata: { orderId: order.id, orderNumber, tenantId: user.tenantId!, customerProfileId: user.customerProfileId! },
@@ -780,24 +801,57 @@ export async function clientCancelPlanAction(slug: string): Promise<{ error: str
 // Profile & account
 // ---------------------------------------------------------------------------
 
-const profileSchema = z.object({
-  firstName: z.string().min(1, "First name is required").max(80),
-  lastName: z.string().max(80).optional(),
-  phone: z.string().max(40).optional(),
-});
+const profileSchema = z
+  .object({
+    firstName: z.string().min(1, "First name is required").max(80),
+    lastName: z.string().max(80).optional(),
+    phone: z.string().max(40).optional(),
+    // The year is optional: a clinic needs the day to send a greeting, and
+    // asking someone's age to do it is a different thing entirely.
+    birthdayDay: z.coerce.number().int().min(1).max(31).optional(),
+    birthdayMonth: z.coerce.number().int().min(1).max(12).optional(),
+    birthdayYear: z.coerce.number().int().min(1900).max(new Date().getFullYear()).optional(),
+  })
+  .superRefine((p, ctx) => {
+    const hasDay = p.birthdayDay !== undefined;
+    const hasMonth = p.birthdayMonth !== undefined;
+    if (hasDay !== hasMonth) {
+      ctx.addIssue({ code: "custom", path: ["birthdayDay"], message: "Give both a day and a month, or neither." });
+      return;
+    }
+    if (hasDay && hasMonth) {
+      // 31 February is a typo, not a birthday. Checked against a leap year so
+      // 29 February is accepted.
+      const probe = new Date(Date.UTC(2024, p.birthdayMonth! - 1, p.birthdayDay!));
+      if (probe.getUTCMonth() !== p.birthdayMonth! - 1) {
+        ctx.addIssue({ code: "custom", path: ["birthdayDay"], message: "That date doesn't exist." });
+      }
+    }
+  });
 
 export async function clientSaveProfileAction(
   slug: string,
-  input: { firstName: string; lastName?: string; phone?: string },
+  input: { firstName: string; lastName?: string; phone?: string; birthdayDay?: number; birthdayMonth?: number; birthdayYear?: number },
 ): Promise<{ error: string } | { ok: true }> {
   const { db, user } = await requireCustomerContext();
 
   const parsed = profileSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
 
+  // Stored as a date at UTC midnight; without a year, a leap-safe placeholder
+  // that keeps the day and month exactly as typed.
+  const { birthdayDay, birthdayMonth, birthdayYear } = parsed.data;
+  const dateOfBirth =
+    birthdayDay && birthdayMonth ? new Date(Date.UTC(birthdayYear ?? 1904, birthdayMonth - 1, birthdayDay)) : null;
+
   await db.customerProfile.updateMany({
     where: { id: user.customerProfileId! },
-    data: { firstName: parsed.data.firstName, lastName: parsed.data.lastName ?? "", phone: parsed.data.phone || null },
+    data: {
+      firstName: parsed.data.firstName,
+      lastName: parsed.data.lastName ?? "",
+      phone: parsed.data.phone || null,
+      dateOfBirth,
+    },
   });
 
   revalidateClient(slug);

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { Panel, Pagination, Pill, Drawer } from "@/components/ui/primitives";
 import { ClientItems } from "./client-items";
+import { PersonalDiscount } from "./personal-discount";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatMoney } from "@/lib/utils";
 
@@ -179,7 +180,10 @@ function ClientDrawer({ merchantId, client, onClose }: { merchantId: string; cli
               <Row label="Membership" value={client.isMember ? "Active" : "None"} />
             </dl>
           ) : tab === "items" ? (
-            <ClientItems merchantId={merchantId} customerProfileId={client.id} />
+            <div className="space-y-4">
+              <PersonalDiscount merchantId={merchantId} customerProfileId={client.id} clientName={client.name} />
+              <ClientItems merchantId={merchantId} customerProfileId={client.id} />
+            </div>
           ) : (
             <p className="py-8 text-center text-[12px] text-ink-muted">No messages yet</p>
           )}

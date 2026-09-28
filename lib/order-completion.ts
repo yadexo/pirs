@@ -52,6 +52,24 @@ export async function completePaidOrder(db: TenantDb, orderId: string): Promise<
     }
   }
 
+  // A discount counts as used once the money is in, not when it was applied
+  // to a basket that might never have been paid for. Guarded by the order id
+  // so settling the same order twice records one use, which is what the
+  // "once per client" limit counts.
+  if (order.promotionId && order.discountCents > 0) {
+    const already = await db.promotionRedemption.findFirst({ where: { promotionId: order.promotionId, orderId: order.id } });
+    if (!already) {
+      await db.promotionRedemption.create({
+        data: {
+          promotionId: order.promotionId,
+          customerProfileId: order.customerProfileId,
+          orderId: order.id,
+          discountAppliedCents: order.discountCents,
+        } as never,
+      });
+    }
+  }
+
   // A booking paid by deposit is confirmed by the payment.
   await db.appointment.updateMany({ where: { orderId: order.id, status: "REQUESTED" }, data: { status: "CONFIRMED" } });
 

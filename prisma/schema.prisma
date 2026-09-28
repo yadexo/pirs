@@ -110,6 +110,7 @@ model Tenant {
   activityEvents        ActivityEvent[]
   pushSubscriptions     PushSubscription[]
   redeemableItems       RedeemableItem[]
+  birthdayGreetings     BirthdayGreeting[]
 }
 
 model TenantBranding {
@@ -190,6 +191,15 @@ model TenantSettings {
   notifyAppointmentReminders    Boolean  @default(true)
   notifyPointsEarned            Boolean  @default(true)
   notifyMembershipBilling       Boolean  @default(true)
+
+  /// Birthday automation. Off until a clinic turns it on, because a message
+  /// nobody wrote is worse than no message.
+  birthdayMessageEnabled        Boolean  @default(false)
+  birthdayMessage               String?
+  /// An optional present with it: a personal discount of this many percent,
+  /// usable for this many days. Zero percent means a message only.
+  birthdayDiscountPercent       Int      @default(0)
+  birthdayDiscountDays          Int      @default(14)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -491,6 +501,9 @@ model CustomerProfile {
   @@index([tenantId, lastName, firstName])
   activityEvents  ActivityEvent[]
   redeemableItems   RedeemableItem[]
+  personalPromotions Promotion[]
+  personalCampaigns  NotificationCampaign[]
+  birthdayGreetings  BirthdayGreeting[]
 }
 
 model CustomerTag {
@@ -579,6 +592,7 @@ model ServiceCategory {
   services  Service[]
 
   @@index([tenantId])
+  promotionEligibility PromotionEligibility[]
 }
 
 model Service {
@@ -648,6 +662,7 @@ model ProductCategory {
   products  Product[]
 
   @@index([tenantId])
+  promotionEligibility PromotionEligibility[]
 }
 
 /// A label a clinic puts on the things it sells — "Popular", "No downtime" —
@@ -761,6 +776,7 @@ model Product {
 
   @@unique([tenantId, sku])
   @@index([tenantId, categoryId])
+  campaigns         NotificationCampaign[]
 }
 
 enum InventoryTransactionType {
@@ -1177,15 +1193,27 @@ model Promotion {
   segmentTagId     String?
   active           Boolean          @default(true)
 
+  /// Set for a discount meant for one client — from their own profile in
+  /// the dashboard, or given automatically on their birthday. Null means
+  /// every client of the clinic, as before.
+  customerProfileId String?
+  customerProfile   CustomerProfile? @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  /// Applies itself at checkout, with no code for the client to type.
+  autoApply        Boolean          @default(false)
+  /// Only from this basket size up, before tax.
+  minOrderCents    Int?
+
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
   eligibility      PromotionEligibility[]
   redemptions      PromotionRedemption[]
   orders           Order[]
+  campaigns        NotificationCampaign[]
 
   @@unique([tenantId, code])
   @@index([tenantId, active, startAt, endAt])
+  @@index([tenantId, customerProfileId])
 }
 
 model PromotionEligibility {
@@ -1200,6 +1228,11 @@ model PromotionEligibility {
   package          Package?  @relation(fields: [packageId], references: [id], onDelete: Cascade)
   membershipPlanId String?
   membershipPlan   MembershipPlan? @relation(fields: [membershipPlanId], references: [id], onDelete: Cascade)
+  /// A whole category, so a clinic doesn't have to list every product in it.
+  productCategoryId String?
+  productCategory   ProductCategory? @relation(fields: [productCategoryId], references: [id], onDelete: Cascade)
+  serviceCategoryId String?
+  serviceCategory   ServiceCategory? @relation(fields: [serviceCategoryId], references: [id], onDelete: Cascade)
 
   @@index([promotionId])
 }
@@ -1667,6 +1700,21 @@ model NotificationCampaign {
   scheduledAt           DateTime?
   sentAt                DateTime?
   status                NotificationCampaignStatus  @default(DRAFT)
+
+  /// The discount this is announcing, if any: the notification opens it.
+  promotionId           String?
+  promotion             Promotion?                  @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  /// A product to open instead of the shop.
+  productId             String?
+  product               Product?                    @relation(fields: [productId], references: [id], onDelete: SetNull)
+  /// Set when this is for one client rather than everyone.
+  customerProfileId     String?
+  customerProfile       CustomerProfile?            @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  /// Marketing obeys consent, quiet hours and the daily cap; a service
+  /// message (an order, a redemption) does not.
+  marketing             Boolean                     @default(true)
+  /// Devices the push service accepted this for.
+  devicesReached        Int                         @default(0)
   createdByStaffProfileId String?
   createdByStaffProfile StaffProfile?               @relation(fields: [createdByStaffProfileId], references: [id], onDelete: SetNull)
 
@@ -1677,6 +1725,7 @@ model NotificationCampaign {
   deliveries              NotificationDelivery[]
 
   @@index([tenantId, status])
+  @@index([status, scheduledAt])
 }
 
 enum NotificationDeliveryStatus {
@@ -1686,6 +1735,24 @@ enum NotificationDeliveryStatus {
   FAILED
   OPENED
   CLICKED
+}
+
+/// Proof that this client has had this year's birthday message, so a job
+/// that runs twice — or a clinic that changes the message midday — cannot
+/// send it again. The unique key is the guarantee, not the code around it.
+model BirthdayGreeting {
+  id                String          @id @default(cuid())
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId String
+  customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  /// The calendar year in the clinic's own timezone.
+  year              Int
+  promotionId       String?
+  sentAt            DateTime        @default(now())
+
+  @@unique([tenantId, customerProfileId, year])
+  @@index([tenantId, year])
 }
 
 model NotificationDelivery {

@@ -13,6 +13,9 @@ export interface ShopProduct {
   name: string;
   description: string | null;
   priceCents: number;
+  /** Set when a discount applies to this client; the old price is struck through. */
+  offerPriceCents?: number | null;
+  offerTitle?: string | null;
   images: string[];
   soldOut: boolean;
   categoryId: string | null;
@@ -232,7 +235,16 @@ export function ShopView({
                     </span>
                     <span style={{ display: "block", fontSize: 15, color: "var(--ink)", padding: "8px 12px 2px" }}>{p.name}</span>
                     <span className="tabular" style={{ display: "block", fontSize: 17, fontWeight: 700, color: "var(--ink-strong)", padding: "0 12px 12px" }}>
-                      {money(p.priceCents, currency)}
+                      {p.offerPriceCents != null ? (
+                        <>
+                          <span style={{ textDecoration: "line-through", color: "var(--muted)", fontWeight: 500, marginRight: 8 }}>
+                            {money(p.priceCents, currency)}
+                          </span>
+                          {money(p.offerPriceCents, currency)}
+                        </>
+                      ) : (
+                        money(p.priceCents, currency)
+                      )}
                     </span>
                   </button>
                 ))}

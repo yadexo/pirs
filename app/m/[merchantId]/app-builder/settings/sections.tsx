@@ -788,7 +788,9 @@ export function NotificationsSection({ merchantId, data, canEdit }: { merchantId
   const on = (v: boolean | undefined) => v ?? true;
   return (
     <>
-      {canEdit && <BroadcastForm merchantId={merchantId} devices={data.subscribedDevices} products={data.products} />}
+      {canEdit && (
+        <BroadcastForm merchantId={merchantId} devices={data.subscribedDevices} products={data.products} campaigns={data.campaigns} />
+      )}
       <SettingsForm merchantId={merchantId} save={saveNotificationSettingsAction} canEdit={canEdit}>
         {() => (
           <FormSection title="Send clients a message when">
@@ -797,6 +799,44 @@ export function NotificationsSection({ merchantId, data, canEdit }: { merchantId
             <CheckboxField name="notifyAppointmentReminders" label="An appointment is coming up" defaultChecked={on(s?.notifyAppointmentReminders)} />
             <CheckboxField name="notifyPointsEarned" label="They earn points or unlock a reward" defaultChecked={on(s?.notifyPointsEarned)} />
             <CheckboxField name="notifyMembershipBilling" label="A membership renews or a payment fails" defaultChecked={on(s?.notifyMembershipBilling)} />
+          </FormSection>
+        )}
+      </SettingsForm>
+      <SettingsForm merchantId={merchantId} save={saveNotificationSettingsAction} canEdit={canEdit}>
+        {(errors) => (
+          <FormSection title="Birthdays">
+            <p className="text-[12px] text-ink-muted">
+              Sent at 09:00 on the day, once a year, to clients who gave a birthday and have offers switched on.
+            </p>
+            <CheckboxField name="birthdayMessageEnabled" label="Wish clients a happy birthday" defaultChecked={s?.birthdayMessageEnabled ?? false} />
+            <TextAreaField
+              label="Message"
+              name="birthdayMessage"
+              rows={2}
+              maxLength={200}
+              defaultValue={s?.birthdayMessage ?? ""}
+              placeholder="Happy birthday from all of us at the clinic!"
+              errors={errors}
+            />
+            <TextField
+              label="Discount with it (%)"
+              name="birthdayDiscountPercent"
+              type="number"
+              min={0}
+              max={100}
+              defaultValue={String(s?.birthdayDiscountPercent ?? 0)}
+              hint="0 for a message with no discount."
+              errors={errors}
+            />
+            <TextField
+              label="Valid for (days)"
+              name="birthdayDiscountDays"
+              type="number"
+              min={1}
+              max={365}
+              defaultValue={String(s?.birthdayDiscountDays ?? 14)}
+              errors={errors}
+            />
           </FormSection>
         )}
       </SettingsForm>

@@ -11,6 +11,10 @@ export interface ClientSummary {
   firstName: string;
   lastName: string;
   phone: string | null;
+  /** Day and month of a birthday the client gave; the year is theirs to skip. */
+  birthdayDay: number | null;
+  birthdayMonth: number | null;
+  birthdayYear: number | null;
   joinedDaysAgo: number;
   loyaltyPoints: number;
   cashBalanceCents: number;
@@ -79,6 +83,12 @@ export async function getClientSummary(db: TenantDb, customerProfileId: string):
     firstName: profile.firstName,
     lastName: profile.lastName,
     phone: profile.phone,
+    // Read back in UTC, the way it was written, so a timezone can't shift
+    // someone's birthday to the day before.
+    birthdayDay: profile.dateOfBirth?.getUTCDate() ?? null,
+    birthdayMonth: profile.dateOfBirth ? profile.dateOfBirth.getUTCMonth() + 1 : null,
+    // 1904 is the placeholder used when the client gave no year.
+    birthdayYear: profile.dateOfBirth && profile.dateOfBirth.getUTCFullYear() !== 1904 ? profile.dateOfBirth.getUTCFullYear() : null,
     joinedDaysAgo,
     loyaltyPoints: profile.loyaltyPointsBalance,
     cashBalanceCents: profile.accountCreditBalanceCents,

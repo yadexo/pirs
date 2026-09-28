@@ -44,6 +44,8 @@ export interface BillingRow {
   occurredAt: string;
 }
 
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
 const SEGMENTS = [
   { key: "treatments", label: "Treatments" },
   { key: "items", label: "My items" },
@@ -567,6 +569,9 @@ function PersonalSheet({
   const [first, setFirst] = React.useState(summary.firstName);
   const [last, setLast] = React.useState(summary.lastName);
   const [phone, setPhone] = React.useState(summary.phone ?? "");
+  const [bDay, setBDay] = React.useState(summary.birthdayDay ? String(summary.birthdayDay) : "");
+  const [bMonth, setBMonth] = React.useState(summary.birthdayMonth ? String(summary.birthdayMonth) : "");
+  const [bYear, setBYear] = React.useState(summary.birthdayYear ? String(summary.birthdayYear) : "");
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -575,6 +580,9 @@ function PersonalSheet({
       setFirst(summary.firstName);
       setLast(summary.lastName);
       setPhone(summary.phone ?? "");
+      setBDay(summary.birthdayDay ? String(summary.birthdayDay) : "");
+      setBMonth(summary.birthdayMonth ? String(summary.birthdayMonth) : "");
+      setBYear(summary.birthdayYear ? String(summary.birthdayYear) : "");
       setError(null);
     }
   }, [open, summary]);
@@ -590,7 +598,14 @@ function PersonalSheet({
           disabled={pending}
           onClick={async () => {
             setPending(true);
-            const res = await clientSaveProfileAction(merchantSlug, { firstName: first, lastName: last, phone });
+            const res = await clientSaveProfileAction(merchantSlug, {
+              firstName: first,
+              lastName: last,
+              phone,
+              birthdayDay: bDay ? Number(bDay) : undefined,
+              birthdayMonth: bMonth ? Number(bMonth) : undefined,
+              birthdayYear: bYear ? Number(bYear) : undefined,
+            });
             setPending(false);
             if ("error" in res) setError(res.error);
             else onSaved();
@@ -611,6 +626,40 @@ function PersonalSheet({
       <div className="frm">
         <label htmlFor="pf-phone">Phone</label>
         <input id="pf-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+      </div>
+      <div className="frm">
+        <label htmlFor="pf-bday">Birthday</label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            id="pf-bday"
+            inputMode="numeric"
+            placeholder="Day"
+            maxLength={2}
+            value={bDay}
+            onChange={(e) => setBDay(e.target.value.replace(/\D/g, ""))}
+            style={{ flex: 1 }}
+          />
+          <select value={bMonth} onChange={(e) => setBMonth(e.target.value)} style={{ flex: 2 }} aria-label="Birthday month">
+            <option value="">Month</option>
+            {MONTHS.map((name, i) => (
+              <option key={name} value={i + 1}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <input
+            inputMode="numeric"
+            placeholder="Year"
+            maxLength={4}
+            value={bYear}
+            onChange={(e) => setBYear(e.target.value.replace(/\D/g, ""))}
+            aria-label="Birthday year, optional"
+            style={{ flex: 1.2 }}
+          />
+        </div>
+        <p style={{ color: "var(--muted)", fontSize: 13, margin: "6px 0 0" }}>
+          The year is optional — the clinic only needs the day to wish you a happy birthday.
+        </p>
       </div>
       {error && <p style={{ color: "var(--danger)", fontSize: 14 }}>{error}</p>}
     </Sheet>

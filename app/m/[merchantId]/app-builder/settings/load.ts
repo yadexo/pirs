@@ -73,13 +73,38 @@ export async function loadSettingsSection(db: TenantDb, merchantId: string, sect
       return plain({ section, settings });
     }
     case "notifications": {
-      const [settings, subscribedDevices, products] = await Promise.all([
+      const [settings, subscribedDevices, products, campaignRows] = await Promise.all([
         db.tenantSettings.findFirst({ where: {} }),
         rawDb.pushSubscription.count({ where: { tenantId: merchantId } }),
         // For the optional link on a broadcast: this clinic's own products.
         db.product.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true }, take: 100 }),
+        db.notificationCampaign.findMany({
+          where: { channel: "PUSH" },
+          orderBy: [{ scheduledAt: "desc" }],
+          take: 20,
+          select: {
+            id: true,
+            name: true,
+            body: true,
+            status: true,
+            scheduledAt: true,
+            sentAt: true,
+            devicesReached: true,
+            customerProfile: { select: { firstName: true, lastName: true } },
+          },
+        }),
       ]);
-      return plain({ section, settings, subscribedDevices, products });
+      const campaigns = campaignRows.map((c) => ({
+        id: c.id,
+        name: c.name,
+        body: c.body,
+        status: c.status,
+        scheduledAt: c.scheduledAt?.toISOString() ?? null,
+        sentAt: c.sentAt?.toISOString() ?? null,
+        devicesReached: c.devicesReached,
+        clientName: c.customerProfile ? `${c.customerProfile.firstName} ${c.customerProfile.lastName}`.trim() : null,
+      }));
+      return plain({ section, settings, subscribedDevices, products, campaigns });
     }
     case "integrations": {
       const clinic = await rawDb.tenant.findUniqueOrThrow({
