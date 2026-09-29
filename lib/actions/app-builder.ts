@@ -16,6 +16,9 @@ import {
 } from "@/lib/merchant-action";
 import type { TenantDb } from "@/lib/tenant-db";
 import { pricingOptionsSchema, toStoredPricingOptions, EMPTY_PRICING } from "@/lib/pricing-options";
+import { sendCampaignNow } from "@/lib/campaign-send";
+import { marketingAudience } from "@/lib/marketing";
+import { nextSendableTime } from "@/lib/marketing-window";
 
 /**
  * Every create/edit/archive behind the App Builder tabs. Each action names the
@@ -139,7 +142,8 @@ function assertFound<T>(found: T | null | undefined): T {
 
 export async function getAppBuilderOptionsAction(merchantId: string, kind: ItemKind) {
   return runAction(async () => {
-    const { db } = await requireMerchantAction(merchantId, NEEDS[kind]);
+    const ctx = await requireMerchantAction(merchantId, NEEDS[kind]);
+    const { db } = ctx;
     const [serviceCategories, productCategories, services, products, tags, staff] = await Promise.all([
       db.serviceCategory.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
       db.productCategory.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
@@ -159,6 +163,10 @@ export async function getAppBuilderOptionsAction(merchantId: string, kind: ItemK
       productCategories: productCategories.map((c) => c.name),
       serviceCategoryOptions: serviceCategories,
       productCategoryOptions: productCategories,
+      // For the notification preview, and for hiding the send controls from
+      // someone who may write offers but not send messages.
+      clinicName: (await rawDb.tenantBranding.findFirst({ where: { tenantId: merchantId }, select: { businessName: true } }))?.businessName ?? undefined,
+      canSendMessages: ctx.user.permissions === "ALL" || ctx.user.permissions.includes("messages.send"),
       services,
       products,
       tags,
@@ -190,7 +198,16 @@ export async function getAppBuilderItemAction(merchantId: string, kind: ItemKind
         // to the whole shop.
         item = await db.promotion.findFirst({
           where: { id },
-          include: { eligibility: { select: { productId: true, serviceId: true, productCategoryId: true, serviceCategoryId: true } } },
+          include: {
+            eligibility: { select: { productId: true, serviceId: true, productCategoryId: true, serviceCategoryId: true } },
+            // So the form can say whether clients have already heard about it.
+            campaigns: {
+              where: { status: { in: ["SCHEDULED", "SENT"] } },
+              orderBy: [{ sentAt: "desc" }, { scheduledAt: "desc" }],
+              take: 3,
+              select: { id: true, status: true, scheduledAt: true, sentAt: true, devicesReached: true, subject: true, body: true },
+            },
+          },
         });
         break;
       case "membershipPlan": {
@@ -609,6 +626,13 @@ const promotionSchema = z
     serviceIds: z.array(z.string()).default([]),
     productCategoryIds: z.array(z.string()).default([]),
     serviceCategoryIds: z.array(z.string()).default([]),
+    /** "none", "now" (or when the offer starts), or a time the clinic picked. */
+    notifyMode: z.enum(["none", "now", "schedule"]).default("none"),
+    notifyTitle: z.string().trim().max(60, "Keep the title under 60 characters").optional(),
+    notifyBody: z.string().trim().max(200, "Keep the message under 200 characters").optional(),
+    notifyAt: z.string().trim().max(40).optional(),
+    /** Ticked by the clinic after being told this offer was announced before. */
+    notifyAgain: z.boolean().default(false),
   })
   .superRefine((p, ctx) => {
     if (p.endAt <= p.startAt) ctx.addIssue({ code: "custom", path: ["endAt"], message: "End must be after the start" });
@@ -617,6 +641,23 @@ const promotionSchema = z
     if (p.discountType === "FIXED_AMOUNT" && !/^\d+(\.\d{1,2})?$/.test(String(p.discountValue)))
       ctx.addIssue({ code: "custom", path: ["discountValue"], message: "Enter an amount like 10 or 10.50" });
     if (p.customerSegment === "TAGGED" && !p.segmentTagId) ctx.addIssue({ code: "custom", path: ["segmentTagId"], message: "Choose a tag" });
+
+    if (p.notifyMode !== "none") {
+      if (!p.notifyTitle) ctx.addIssue({ code: "custom", path: ["notifyTitle"], message: "Give the notification a title" });
+      if (!p.notifyBody) ctx.addIssue({ code: "custom", path: ["notifyBody"], message: "Write the message" });
+    }
+    if (p.notifyMode === "schedule") {
+      const when = p.notifyAt ? new Date(p.notifyAt) : null;
+      if (!when || Number.isNaN(when.getTime())) {
+        ctx.addIssue({ code: "custom", path: ["notifyAt"], message: "Pick a date and time" });
+      } else if (when.getTime() < Date.now() - 60_000) {
+        ctx.addIssue({ code: "custom", path: ["notifyAt"], message: "That time has already passed" });
+      } else if (when.getTime() < p.startAt.getTime()) {
+        // Announcing an offer before it can be used sends clients to a shop
+        // that still shows the old price.
+        ctx.addIssue({ code: "custom", path: ["notifyAt"], message: "The offer hasn't started yet at that time" });
+      }
+    }
   });
 
 export async function savePromotionAction(merchantId: string, id: string | null, fd: FormData): Promise<ActionResult<{ id: string }>> {
@@ -643,13 +684,19 @@ export async function savePromotionAction(merchantId: string, id: string | null,
       serviceIds: fd.getAll("serviceIds").map(String).filter(Boolean),
       productCategoryIds: fd.getAll("productCategoryIds").map(String).filter(Boolean),
       serviceCategoryIds: fd.getAll("serviceCategoryIds").map(String).filter(Boolean),
+      notifyMode: formText(fd, "notifyMode") ?? "none",
+      notifyTitle: formText(fd, "notifyTitle"),
+      notifyBody: formText(fd, "notifyBody"),
+      notifyAt: formText(fd, "notifyAt"),
+      notifyAgain: formBool(fd, "notifyAgain"),
     });
 
     const tagged = data.customerSegment === "TAGGED";
     if (tagged && !(await ctx.db.customerTag.findFirst({ where: { id: data.segmentTagId } }))) throw fieldError("segmentTagId", "Choose a tag");
 
     // The scope is stored as eligibility rows, not on the promotion itself.
-    const { productIds, serviceIds, productCategoryIds, serviceCategoryIds, minOrder, ...promotionFields } = data;
+    const { productIds, serviceIds, productCategoryIds, serviceCategoryIds, minOrder, notifyMode, notifyTitle, notifyBody, notifyAt, notifyAgain, ...promotionFields } =
+      data;
     const values = {
       ...promotionFields,
       // Fixed amounts are typed in currency units and stored in cents.
@@ -697,8 +744,90 @@ export async function savePromotionAction(merchantId: string, id: string | null,
       rethrowUnique(err, "code", "Another offer already uses this code");
     }
     await ctx.audit(id ? "promotion.updated" : "promotion.created", "Promotion", savedId, { title: data.title });
+
+    // ---- telling clients about it -----------------------------------------
+    // Saving an offer and announcing one are separate jobs with separate
+    // permissions: someone who may write offers but not send messages saves
+    // the offer and is told the notification wasn't sent, rather than having
+    // the whole save refused.
+    let notified: { devices: number; scheduledFor: string | null; skippedNoPermission: boolean } | null = null;
+
+    if (notifyMode !== "none") {
+      const maySend = ctx.user.permissions === "ALL" || ctx.user.permissions.includes("messages.send");
+      if (!maySend) {
+        notified = { devices: 0, scheduledFor: null, skippedNoPermission: true };
+      } else {
+        const now = new Date();
+        const already = await rawDb.notificationCampaign.findFirst({
+          where: { tenantId: merchantId, promotionId: savedId, status: "SENT" },
+          orderBy: { sentAt: "desc" },
+          select: { sentAt: true },
+        });
+        if (already && !notifyAgain) {
+          throw new ActionError(
+            `Clients already got a notification for this offer on ${already.sentAt?.toLocaleDateString("en-US", { dateStyle: "medium" })}. Tick "send it again" to send another.`,
+          );
+        }
+
+        // A scheduled one that hasn't gone yet is replaced, not duplicated.
+        await rawDb.notificationCampaign.updateMany({
+          where: { tenantId: merchantId, promotionId: savedId, status: "SCHEDULED" },
+          data: { status: "CANCELLED" },
+        });
+
+        // "Now" means when the offer starts, if that is still to come.
+        const wanted = notifyMode === "schedule" && notifyAt ? new Date(notifyAt) : data.startAt > now ? data.startAt : now;
+        const sendAt = nextSendableTime(wanted);
+        const later = sendAt.getTime() > now.getTime() + 30_000;
+
+        // A notification about one product opens that product; anything wider
+        // opens the shop.
+        const onlyProduct = eligibilityRows.length === 1 && eligibilityRows[0] && "productId" in eligibilityRows[0] ? eligibilityRows[0].productId : null;
+
+        const campaign = await rawDb.notificationCampaign.create({
+          data: {
+            tenantId: merchantId,
+            name: data.title,
+            channel: "PUSH",
+            subject: notifyTitle ?? data.title,
+            body: notifyBody ?? data.description ?? data.title,
+            marketing: true,
+            promotionId: savedId,
+            productId: onlyProduct ?? null,
+            // A personal offer is announced to that client alone.
+            customerProfileId: (values as { customerProfileId?: string | null }).customerProfileId ?? null,
+            scheduledAt: sendAt,
+            status: later ? "SCHEDULED" : "SENDING",
+          },
+          select: { id: true },
+        });
+
+        if (later) {
+          await ctx.audit("promotion.notify_scheduled", "Promotion", savedId, { campaignId: campaign.id, when: sendAt.toISOString() });
+          notified = { devices: 0, scheduledFor: sendAt.toISOString(), skippedNoPermission: false };
+        } else {
+          const result = await sendCampaignNow(campaign.id, now);
+          await ctx.audit("promotion.notified", "Promotion", savedId, { campaignId: campaign.id, devices: result.devices });
+          notified = { devices: result.devices, scheduledFor: null, skippedNoPermission: false };
+        }
+      }
+    }
+
     await revalidateMerchant(merchantId);
-    return { id: savedId };
+    return { id: savedId, notified };
+  });
+}
+
+/**
+ * How many of this clinic's clients a notification would actually reach:
+ * their own clients, with a device, who left "offers and news" on. Shown on
+ * the offer form so a clinic knows whether it is talking to anybody.
+ */
+export async function offerAudienceCountAction(merchantId: string, customerProfileId?: string | null): Promise<ActionResult<{ clients: number }>> {
+  return runAction(async () => {
+    await requireMerchantAction(merchantId, NEEDS.promotion);
+    const audience = await marketingAudience(merchantId, customerProfileId ?? null);
+    return { clients: audience.length };
   });
 }
 

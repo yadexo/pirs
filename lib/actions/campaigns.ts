@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { rawDb } from "@/lib/db";
 import { ActionError, requireMerchantAction, runAction, type ActionResult } from "@/lib/merchant-action";
 import { rateLimit } from "@/lib/rate-limit";
-import { marketingAudience, sendMarketingCampaign } from "@/lib/marketing";
+import { sendCampaignNow } from "@/lib/campaign-send";
 import { nextSendableTime } from "@/lib/marketing-window";
 import { vapidConfigured } from "@/lib/web-push";
 
@@ -111,30 +111,7 @@ export async function saveCampaignAction(merchantId: string, input: z.input<type
       return { id: campaign.id, devices: 0, scheduledFor: when.toISOString(), heldUntil: wanted.getTime() !== when.getTime() ? when.toISOString() : null };
     }
 
-    const tenant = await rawDb.tenant.findUniqueOrThrow({ where: { id: merchantId }, select: { slug: true } });
-    // Inside the clinic's own app, so tapping it doesn't drop an installed app
-    // out of its scope.
-    const base = `${process.env.CLIENT_APP_URL ? "" : "/app"}/${encodeURIComponent(tenant.slug)}`;
-    const path = links.productId ? `/shop?product=${encodeURIComponent(links.productId)}` : "/shop";
-
-    const targets = await marketingAudience(merchantId, customerProfileId);
-    const result = await sendMarketingCampaign(merchantId, targets, {
-      tenantId: merchantId,
-      campaignId: campaign.id,
-      now,
-      exemptFromDailyCap: Boolean(customerProfileId),
-      message: {
-        title: data.title,
-        body: data.body,
-        url: `${base}${path}`,
-        icon: `${base}/app-icon/192.png`,
-      },
-    });
-
-    await rawDb.notificationCampaign.updateMany({
-      where: { id: campaign.id },
-      data: { status: "SENT", sentAt: now, devicesReached: result.devices },
-    });
+    const result = await sendCampaignNow(campaign.id, now);
     await ctx.audit("campaign.sent", "NotificationCampaign", campaign.id, { title: data.title, devices: result.devices });
     revalidatePath(`/m/${merchantId}/app-builder`);
 

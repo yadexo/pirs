@@ -130,18 +130,40 @@ async function loadItems(
     const rows = await db.promotion.findMany({
       where: q ? { title: { contains: q, mode: "insensitive" } } : {},
       orderBy: { startAt: "desc" },
+      include: {
+        // Whether clients have been told, shown on the row itself.
+        campaigns: {
+          where: { status: { in: ["SCHEDULED", "SENT"] } },
+          orderBy: [{ sentAt: "desc" }, { scheduledAt: "desc" }],
+          take: 1,
+          select: { status: true, scheduledAt: true, sentAt: true, devicesReached: true },
+        },
+      },
     });
     const now = Date.now();
-    return rows.map((r) => ({
-      kind: "promotion",
-      id: r.id,
-      name: r.title,
-      meta: [r.code ? `Code ${r.code}` : "Automatic", r.endAt.getTime() < now ? "ended" : r.startAt.getTime() > now ? "scheduled" : null]
-        .filter(Boolean)
-        .join(" · "),
-      priceCents: null,
-      active: r.active,
-    }));
+    const shortDate = (d: Date | null) => (d ? d.toLocaleDateString("en-US", { dateStyle: "medium" }) : "");
+    return rows.map((r) => {
+      const notice = r.campaigns[0];
+      const notified = !notice
+        ? "not notified"
+        : notice.status === "SCHEDULED"
+          ? `notification ${shortDate(notice.scheduledAt)}`
+          : `notified ${notice.devicesReached} ${notice.devicesReached === 1 ? "device" : "devices"}`;
+      return {
+        kind: "promotion",
+        id: r.id,
+        name: r.title,
+        meta: [
+          r.code ? `Code ${r.code}` : "Automatic",
+          r.endAt.getTime() < now ? "ended" : r.startAt.getTime() > now ? "scheduled" : null,
+          notified,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        priceCents: null,
+        active: r.active,
+      };
+    });
   }
 
   if (tab === "products") {

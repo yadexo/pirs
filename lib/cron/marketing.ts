@@ -1,7 +1,8 @@
 import "server-only";
 import { rawDb } from "@/lib/db";
 import { localDayAndMonth, localYear, nextSendableTime } from "@/lib/marketing-window";
-import { marketingAudience, sendMarketingCampaign, sendMarketingTo } from "@/lib/marketing";
+import { sendMarketingTo } from "@/lib/marketing";
+import { sendCampaignNow } from "@/lib/campaign-send";
 
 /**
  * The scheduled half of marketing: campaigns whose time has come, and today's
@@ -75,28 +76,10 @@ async function sendDueCampaigns(now: Date): Promise<{ campaigns: number; devices
     if (claimed.count === 0) continue;
 
     try {
-      const clinicName = campaign.tenant.branding?.businessName ?? campaign.tenant.name;
-      const path = campaign.productId ? `/shop?product=${encodeURIComponent(campaign.productId)}` : "/shop";
-      const targets = await marketingAudience(campaign.tenantId, campaign.customerProfileId);
-
-      const result = await sendMarketingCampaign(campaign.tenantId, targets, {
-        tenantId: campaign.tenantId,
-        campaignId: campaign.id,
-        now,
-        // A discount for one named client is about them, not a mailshot.
-        exemptFromDailyCap: Boolean(campaign.customerProfileId),
-        message: {
-          title: campaign.subject?.trim() || clinicName,
-          body: campaign.body,
-          url: clinicPath(campaign.tenant.slug, path),
-          icon: clinicPath(campaign.tenant.slug, "/app-icon/192.png"),
-        },
-      });
-
-      await rawDb.notificationCampaign.updateMany({
-        where: { id: campaign.id },
-        data: { status: "SENT", sentAt: now, devicesReached: result.devices },
-      });
+      // One sender for every path — it also drops the notification when the
+      // offer it announces has been switched off or has ended.
+      const result = await sendCampaignNow(campaign.id, now);
+      if (result.cancelled) continue;
       campaigns += 1;
       devices += result.devices;
     } catch (err) {

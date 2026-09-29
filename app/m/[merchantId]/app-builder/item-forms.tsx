@@ -14,6 +14,7 @@ import {
   type FieldErrors,
 } from "@/components/merchant/form";
 import type { ItemKind } from "@/lib/actions/app-builder";
+import { NotifyOffer, type OfferCampaign } from "./notify-offer";
 import { ProductPanelForm } from "./product-form";
 
 export interface FormOptions {
@@ -22,6 +23,10 @@ export interface FormOptions {
   /** The same categories with their ids, for scoping a discount to one. */
   serviceCategoryOptions?: { id: string; name: string }[];
   productCategoryOptions?: { id: string; name: string }[];
+  /** Shown in the notification preview, as the client would see it. */
+  clinicName?: string;
+  /** Whether this staff member may send notifications as well as write offers. */
+  canSendMessages?: boolean;
   services: { id: string; name: string }[];
   products: { id: string; name: string }[];
   tags: { id: string; name: string; icon: string; description: string | null }[];
@@ -153,6 +158,10 @@ export function PromotionForm({ merchantId, currency, item, options, errors }: I
   const [discountType, setDiscountType] = React.useState(str(item.discountType) || "PERCENT");
   const [segment, setSegment] = React.useState(str(item.customerSegment) || "ALL");
   const scope = scopeOf(item);
+  // Kept in state so the notification's title and message can follow them
+  // until the clinic edits the notification itself.
+  const [title, setTitle] = React.useState(str(item.title));
+  const [description, setDescription] = React.useState(str(item.description));
   const start = str(item.startAt) || new Date().toISOString();
   const end = str(item.endAt) || new Date(Date.now() + 30 * 864e5).toISOString();
   const storedValue = item.discountValue as number | undefined;
@@ -162,8 +171,8 @@ export function PromotionForm({ merchantId, currency, item, options, errors }: I
   return (
     <div className="space-y-5">
       <FormSection title="Offer">
-        <TextField label="Title" name="title" defaultValue={str(item.title)} errors={errors} required />
-        <TextAreaField label="Description" name="description" defaultValue={str(item.description)} errors={errors} />
+        <TextField label="Title" name="title" value={title} onChange={(e) => setTitle(e.target.value)} errors={errors} required />
+        <TextAreaField label="Description" name="description" value={description} onChange={(e) => setDescription(e.target.value)} errors={errors} />
         <ImageField label="Image" name="imageUrl" merchantId={merchantId} defaultValue={item.imageUrl as string} errors={errors} />
       </FormSection>
       <FormSection title="Discount">
@@ -245,6 +254,16 @@ export function PromotionForm({ merchantId, currency, item, options, errors }: I
         <CheckboxField name="appOnly" label="App only" description="Only redeemable through the client app." defaultChecked={Boolean(item.appOnly)} />
         <CheckboxField name="active" label="Active" description="Shown to clients between the start and end dates." defaultChecked={activeDefault(item)} />
       </FormSection>
+      <NotifyOffer
+        merchantId={merchantId}
+        offerTitle={title}
+        offerDescription={description}
+        startAt={start}
+        clinicName={options.clinicName ?? "Your clinic"}
+        campaigns={(item.campaigns as OfferCampaign[]) ?? []}
+        canSend={options.canSendMessages ?? false}
+        errors={errors}
+      />
     </div>
   );
 }
