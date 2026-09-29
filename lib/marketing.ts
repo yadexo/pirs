@@ -74,9 +74,10 @@ export async function alreadySentToday(tenantId: string, customerProfileId: stri
       channel: "PUSH",
       status: { in: ["SENT", "DELIVERED", "OPENED", "CLICKED"] },
       sentAt: { gte: start, lt: end },
-      // Only campaign-backed deliveries are marketing; service messages write
-      // no delivery row at all, so they can't use up the allowance.
-      campaignId: { not: null },
+      // Every row here is marketing: a service message goes out through
+      // notifyClientQuietly and writes nothing. Filtering on a campaign id
+      // would let a marketing send that isn't part of a campaign slip past the
+      // cap and give the client a second message the same day.
     },
   });
   return count > 0;

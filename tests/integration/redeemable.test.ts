@@ -176,8 +176,13 @@ describe("redeemable items", () => {
       reason: "not-found",
     });
 
+    // Staff signed in at one clinic are refused at another before the code is
+    // even looked at, so the answer says nothing about the item.
     const res = await lookupRedeemableAction(otherClinic, redeemQrValue(item.token));
-    expect(res).toMatchObject({ error: expect.stringMatching(/Not valid at this clinic|Please sign in|not allowed/i) });
+    expect(res).toMatchObject({ error: expect.any(String) });
+    expect("item" in res).toBe(false);
+    expect(JSON.stringify(res)).not.toContain(item.token);
+    expect(JSON.stringify(res)).not.toContain("Serum");
     expect(await rawDb.redeemableItem.findFirstOrThrow({ where: { id: item.id } })).toMatchObject({ status: "AVAILABLE" });
   });
 

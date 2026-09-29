@@ -269,11 +269,17 @@ describe("discounts and marketing", () => {
   });
 
   it("says nothing on a day that isn't the client's birthday", async () => {
-    await makeClient("notbday", { dob: new Date(Date.UTC(1990, 0, 20)) });
+    const january = await makeClient("notbday", { dob: new Date(Date.UTC(1990, 0, 20)) });
     await rawDb.tenantSettings.create({ data: { tenantId: clinic, birthdayMessageEnabled: true } });
 
-    const result = await runMarketing(daytime);
-    expect(result.birthdays).toBe(0);
+    await runMarketing(daytime);
+
+    // Asked about this client rather than counting the clinic's greetings:
+    // other tests leave clients behind whose birthday is today, and this is
+    // about the one whose birthday isn't.
+    const greeting = await rawDb.birthdayGreeting.findFirst({ where: { tenantId: clinic, customerProfileId: january.profileId } });
+    expect(greeting).toBeNull();
+    expect(sent.filter((s) => s.userId === january.userId)).toHaveLength(0);
 
     await rawDb.tenantSettings.deleteMany({ where: { tenantId: clinic } });
   });
