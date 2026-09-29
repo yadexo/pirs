@@ -17,9 +17,10 @@ to delete and nothing that could be committed by accident.
   npm run prod:admin -- --email you@you.com   # create the first platform admin
   npm run prod:reset-admin -- --email you@you.com
   npm run prod:client -- --clinic testclinic --email client@you.com
+  npm run prod:clinic-login -- --clinic testclinic   # who can open a clinic's portal
 
 .PARAMETER Task
-status | migrate | stripe | apple-pay | items | admin | reset-admin | client
+status | migrate | stripe | apple-pay | items | admin | reset-admin | client | clinic-login
 
 .PARAMETER Url
 The connection string, for automation. Prefer the prompt: an argument is saved
@@ -31,7 +32,7 @@ Skip the confirmation. Intended for scripts, not for day-to-day use.
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("status", "migrate", "stripe", "apple-pay", "items", "admin", "reset-admin", "client")]
+  [ValidateSet("status", "migrate", "stripe", "apple-pay", "items", "admin", "reset-admin", "client", "clinic-login")]
   [string]$Task = "status",
 
   [string]$Url,
@@ -72,6 +73,7 @@ $commands = @{
   "admin"        = @("npx", "tsx", "prisma/create-platform-admin.ts")
   "reset-admin"  = @("npx", "tsx", "prisma/reset-platform-admin-password.ts")
   "client"       = @("npx", "tsx", "prisma/create-client-login.ts")
+  "clinic-login" = @("npx", "tsx", "prisma/clinic-login.ts")
 }
 $command = $commands[$Task]
 $exe = $command[0]
