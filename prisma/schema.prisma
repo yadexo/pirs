@@ -192,6 +192,12 @@ model TenantSettings {
   notifyPointsEarned            Boolean  @default(true)
   notifyMembershipBilling       Boolean  @default(true)
 
+  /// When this clinic may send marketing, as minutes from local midnight in
+  /// the clinic's own timezone. 09:00 to 22:00 unless the clinic narrows it;
+  /// the platform refuses anything outside 07:00–22:00 (see lib/marketing-window.ts).
+  marketingWindowStartMinutes   Int      @default(540)
+  marketingWindowEndMinutes     Int      @default(1320)
+
   /// Birthday automation. Off until a clinic turns it on, because a message
   /// nobody wrote is worse than no message.
   birthdayMessageEnabled        Boolean  @default(false)

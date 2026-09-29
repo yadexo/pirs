@@ -1,7 +1,7 @@
 import "server-only";
 import { rawDb } from "@/lib/db";
-import { localDayAndMonth, localYear, nextSendableTime } from "@/lib/marketing-window";
-import { sendMarketingTo } from "@/lib/marketing";
+import { isWithinWindow, localDayAndMonth, localYear, windowFrom } from "@/lib/marketing-window";
+import { marketingWindowFor, sendMarketingTo } from "@/lib/marketing";
 import { sendCampaignNow } from "@/lib/campaign-send";
 
 /**
@@ -62,8 +62,9 @@ async function sendDueCampaigns(now: Date): Promise<{ campaigns: number; devices
   let held = 0;
 
   for (const campaign of due) {
-    // Marketing waits for a civil hour; a service campaign does not.
-    if (campaign.marketing && nextSendableTime(now).getTime() !== now.getTime()) {
+    // Marketing waits for the clinic's own sending window; a service
+    // campaign does not.
+    if (campaign.marketing && !isWithinWindow(now, await marketingWindowFor(campaign.tenantId))) {
       held += 1;
       continue;
     }
@@ -93,12 +94,6 @@ async function sendDueCampaigns(now: Date): Promise<{ campaigns: number; devices
 }
 
 async function sendBirthdayGreetings(now: Date): Promise<{ greetings: number; devices: number; held: number }> {
-  // Birthday messages are a morning thing; outside the window they wait.
-  if (nextSendableTime(now).getTime() !== now.getTime()) return { greetings: 0, devices: 0, held: 1 };
-
-  const { day, month } = localDayAndMonth(now);
-  const year = localYear(now);
-
   const clinics = await rawDb.tenantSettings.findMany({
     where: { birthdayMessageEnabled: true },
     select: {
@@ -106,15 +101,28 @@ async function sendBirthdayGreetings(now: Date): Promise<{ greetings: number; de
       birthdayMessage: true,
       birthdayDiscountPercent: true,
       birthdayDiscountDays: true,
-      tenant: { select: { slug: true, name: true, status: true, branding: { select: { businessName: true } } } },
+      marketingWindowStartMinutes: true,
+      marketingWindowEndMinutes: true,
+      tenant: { select: { slug: true, name: true, status: true, branding: { select: { businessName: true, timeZone: true } } } },
     },
   });
 
   let greetings = 0;
   let devices = 0;
+  let held = 0;
 
   for (const clinic of clinics) {
     if (clinic.tenant.status !== "ACTIVE") continue;
+
+    // A greeting goes out when this clinic's window opens, in this clinic's
+    // timezone — so "today" and "the morning" are both the clinic's own.
+    const window = windowFrom(clinic, clinic.tenant.branding?.timeZone);
+    if (!isWithinWindow(now, window)) {
+      held += 1;
+      continue;
+    }
+    const { day, month } = localDayAndMonth(now, window.timeZone);
+    const year = localYear(now, window.timeZone);
 
     // Postgres can't index "same day and month", so the day is matched here.
     // Clinics have thousands of clients, not millions; this stays cheap.
@@ -182,6 +190,8 @@ async function sendBirthdayGreetings(now: Date): Promise<{ greetings: number; de
         {
           tenantId: clinic.tenantId,
           now,
+          // Already read for this clinic; no need to fetch it per client.
+          window,
           // Their birthday shouldn't be swallowed by the day's general cap.
           exemptFromDailyCap: true,
           message: {
@@ -198,7 +208,7 @@ async function sendBirthdayGreetings(now: Date): Promise<{ greetings: number; de
     }
   }
 
-  return { greetings, devices, held: 0 };
+  return { greetings, devices, held };
 }
 
 /**

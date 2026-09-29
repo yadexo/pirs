@@ -149,7 +149,7 @@ export function NotifyOffer({
               min={startsLater ? localInput(start) : undefined}
               defaultValue={localInput(startsLater ? start : new Date(Date.now() + 60 * 60 * 1000))}
               errors={errors}
-              hint={startsLater ? `Not before the offer starts, ${when(startAt)}.` : "Anything between 21:00 and 09:00 is held until 09:00."}
+              hint={startsLater ? `Not before the offer starts, ${when(startAt)}.` : "Outside your sending hours it waits until they next open."}
             />
           )}
 
@@ -192,7 +192,7 @@ export function NotifyOffer({
               : audience === 0
                 ? "Nobody will get this yet: it goes only to clients with notifications on who left “offers and news” switched on."
                 : `${audience} ${audience === 1 ? "client has" : "clients have"} notifications and offers switched on.`}{" "}
-            Nothing is sent between 21:00 and 09:00, and each client hears from you at most once a day.
+            Nothing is sent outside your sending hours, and each client hears from you at most once a day.
           </p>
 
           {sent && (

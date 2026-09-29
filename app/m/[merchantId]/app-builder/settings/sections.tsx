@@ -36,6 +36,7 @@ import type { ActionResult } from "@/lib/merchant-action";
 import { WEEKDAYS, WEEKDAY_LABEL, isOpeningHours, type OpeningHours } from "@/lib/opening-hours";
 import type { SettingsData } from "./load";
 import { BroadcastForm } from "./broadcast";
+import { DEFAULT_WINDOW_END, DEFAULT_WINDOW_START, EARLIEST_MINUTES, LATEST_MINUTES, formatWindowTime, windowChoices } from "@/lib/marketing-window";
 
 type Data<S extends SettingsData["section"]> = Extract<SettingsData, { section: S }>;
 type SaveFn = (merchantId: string, fd: FormData) => Promise<ActionResult>;
@@ -799,6 +800,36 @@ export function NotificationsSection({ merchantId, data, canEdit }: { merchantId
             <CheckboxField name="notifyAppointmentReminders" label="An appointment is coming up" defaultChecked={on(s?.notifyAppointmentReminders)} />
             <CheckboxField name="notifyPointsEarned" label="They earn points or unlock a reward" defaultChecked={on(s?.notifyPointsEarned)} />
             <CheckboxField name="notifyMembershipBilling" label="A membership renews or a payment fails" defaultChecked={on(s?.notifyMembershipBilling)} />
+          </FormSection>
+        )}
+      </SettingsForm>
+      <SettingsForm merchantId={merchantId} save={saveNotificationSettingsAction} canEdit={canEdit}>
+        {(errors) => (
+          <FormSection title="When marketing may be sent">
+            <p className="text-[12px] text-ink-muted">
+              Offers, campaigns and birthday messages are only sent inside these hours, in your clinic&apos;s timezone. Order and payment
+              notifications are unaffected — clients are waiting for those.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <SelectField
+                label="From"
+                name="marketingWindowStartMinutes"
+                defaultValue={String(s?.marketingWindowStartMinutes ?? DEFAULT_WINDOW_START)}
+                options={windowChoices().map((c) => ({ value: String(c.value), label: c.label }))}
+                errors={errors}
+              />
+              <SelectField
+                label="Until"
+                name="marketingWindowEndMinutes"
+                defaultValue={String(s?.marketingWindowEndMinutes ?? DEFAULT_WINDOW_END)}
+                options={windowChoices().map((c) => ({ value: String(c.value), label: c.label }))}
+                errors={errors}
+              />
+            </div>
+            <p className="text-[12px] text-ink-muted">
+              Between {formatWindowTime(EARLIEST_MINUTES)} and {formatWindowTime(LATEST_MINUTES)}, at least an hour wide. Anything due outside
+              your window waits until it next opens.
+            </p>
           </FormSection>
         )}
       </SettingsForm>

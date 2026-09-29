@@ -1,20 +1,43 @@
 /**
- * When a marketing notification may go out.
+ * When a marketing notification may be sent.
  *
- * Two rules, both about the person receiving it rather than the clinic
- * sending it: nothing lands on a phone in the middle of the night, and one
- * clinic gets one promotional message per client per day. Service messages —
- * an order paid, an item redeemed — obey neither, because the client caused
- * them by doing something.
+ * Each clinic keeps its own sending window — by default 09:00 to 22:00 in its
+ * own timezone. The platform holds the outer edges: nothing before 07:00,
+ * nothing after 22:00, and a window has to be at least an hour wide, so a
+ * clinic cannot narrow it into something that never opens or widen it into
+ * someone's evening.
  *
- * Pure and timezone-explicit, so it can be tested at any hour: every function
- * takes the moment to judge and none of them reads the clock.
+ * Service notifications — an order, a refund, a redemption — ignore all of
+ * this. The client caused them and is waiting for them.
+ *
+ * Pure and timezone-explicit: every function takes the moment to judge and
+ * the window to judge it against, and none of them reads the clock.
  */
 
-/** Quiet from 21:00 up to 09:00, in the clinic's working timezone. */
-export const QUIET_START_HOUR = 21;
-export const QUIET_END_HOUR = 9;
+/** The outer limits, which no clinic may cross. */
+export const EARLIEST_MINUTES = 7 * 60; // 07:00
+export const LATEST_MINUTES = 22 * 60; // 22:00
+export const MIN_WINDOW_MINUTES = 60;
+/** What a clinic gets until it says otherwise. */
+export const DEFAULT_WINDOW_START = 9 * 60; // 09:00
+export const DEFAULT_WINDOW_END = 22 * 60; // 22:00
+/** Steps the settings form offers, and the only ones accepted. */
+export const WINDOW_STEP_MINUTES = 15;
+
 export const MARKETING_TIMEZONE = "Europe/Amsterdam";
+
+export interface SendingWindow {
+  /** Minutes from local midnight. */
+  startMinutes: number;
+  endMinutes: number;
+  timeZone: string;
+}
+
+export const DEFAULT_WINDOW: SendingWindow = {
+  startMinutes: DEFAULT_WINDOW_START,
+  endMinutes: DEFAULT_WINDOW_END,
+  timeZone: MARKETING_TIMEZONE,
+};
 
 /** The wall-clock parts of an instant in a timezone, without any date maths. */
 function parts(at: Date, timeZone: string): { year: number; month: number; day: number; hour: number; minute: number } {
@@ -39,38 +62,110 @@ function parts(at: Date, timeZone: string): { year: number; month: number; day: 
   };
 }
 
-/** True when a marketing message would arrive during the quiet hours. */
-export function isQuietHour(at: Date, timeZone: string = MARKETING_TIMEZONE): boolean {
-  const { hour } = parts(at, timeZone);
-  return hour >= QUIET_START_HOUR || hour < QUIET_END_HOUR;
+/** Minutes since local midnight, in the given timezone. */
+export function minutesOfDay(at: Date, timeZone: string): number {
+  const { hour, minute } = parts(at, timeZone);
+  return hour * 60 + minute;
+}
+
+// ---------------------------------------------------------------------------
+// Validating a clinic's choice
+// ---------------------------------------------------------------------------
+
+export type WindowProblem =
+  | { ok: true }
+  | { ok: false; field: "start" | "end"; message: string };
+
+/**
+ * Whether a clinic may have this window. The messages are what the clinic
+ * reads, so they say the limit rather than naming the rule.
+ */
+export function checkWindow(startMinutes: number, endMinutes: number): WindowProblem {
+  const asTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+
+  for (const [value, field] of [
+    [startMinutes, "start"],
+    [endMinutes, "end"],
+  ] as const) {
+    if (!Number.isInteger(value) || value % WINDOW_STEP_MINUTES !== 0) {
+      return { ok: false, field, message: `Use quarter hours, like ${asTime(DEFAULT_WINDOW_START)}.` };
+    }
+  }
+  if (startMinutes < EARLIEST_MINUTES) {
+    return { ok: false, field: "start", message: `Not before ${asTime(EARLIEST_MINUTES)} — clients are asleep.` };
+  }
+  if (endMinutes > LATEST_MINUTES) {
+    return { ok: false, field: "end", message: `Not after ${asTime(LATEST_MINUTES)} — clients are asleep.` };
+  }
+  if (startMinutes >= endMinutes) {
+    return { ok: false, field: "end", message: "The end has to be after the start." };
+  }
+  if (endMinutes - startMinutes < MIN_WINDOW_MINUTES) {
+    return { ok: false, field: "end", message: "Leave at least an hour, or there may be no time to send." };
+  }
+  return { ok: true };
+}
+
+/** A stored window, corrected to something sane if the row predates the rules. */
+export function windowFrom(settings: { marketingWindowStartMinutes?: number | null; marketingWindowEndMinutes?: number | null } | null, timeZone?: string | null): SendingWindow {
+  const start = settings?.marketingWindowStartMinutes ?? DEFAULT_WINDOW_START;
+  const end = settings?.marketingWindowEndMinutes ?? DEFAULT_WINDOW_END;
+  const valid = checkWindow(start, end).ok;
+  return {
+    startMinutes: valid ? start : DEFAULT_WINDOW_START,
+    endMinutes: valid ? end : DEFAULT_WINDOW_END,
+    timeZone: timeZone || MARKETING_TIMEZONE,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Judging a moment
+// ---------------------------------------------------------------------------
+
+/** True when a marketing message sent now would arrive inside the window. */
+export function isWithinWindow(at: Date, window: SendingWindow = DEFAULT_WINDOW): boolean {
+  const minutes = minutesOfDay(at, window.timeZone);
+  return minutes >= window.startMinutes && minutes < window.endMinutes;
+}
+
+/** True when it would arrive outside it — the old name, kept for readability. */
+export function isQuietHour(at: Date, window: SendingWindow = DEFAULT_WINDOW): boolean {
+  return !isWithinWindow(at, window);
 }
 
 /**
  * The instant a message due at `at` should actually be sent: itself when the
- * hour is decent, otherwise 09:00 on the next morning it reaches.
+ * window is open, otherwise the moment it next opens.
  *
  * Found by stepping forward rather than by arithmetic on the offset, because
- * the offset is the thing that moves: on the night the clocks change, 09:00
- * the next day is not a fixed number of hours after 21:00.
+ * the offset is the thing that moves: on the night the clocks change, the
+ * next 09:00 is not a fixed number of hours away.
  */
-export function nextSendableTime(at: Date, timeZone: string = MARKETING_TIMEZONE): Date {
-  if (!isQuietHour(at, timeZone)) return at;
+export function nextSendableTime(at: Date, window: SendingWindow = DEFAULT_WINDOW): Date {
+  if (isWithinWindow(at, window)) return at;
 
-  const step = 15 * 60 * 1000;
+  const step = WINDOW_STEP_MINUTES * 60 * 1000;
   let cursor = new Date(at.getTime());
-  for (let i = 0; i < 4 * 26; i++) {
+  // A day and a half of quarter hours is more than enough to reach the next
+  // opening, whatever the window and whatever the clocks did overnight.
+  for (let i = 0; i < 4 * 36; i++) {
     cursor = new Date(cursor.getTime() + step);
-    if (!isQuietHour(cursor, timeZone)) {
-      // Trim back to the top of the hour we just stepped into, so the message
-      // goes at 09:00 rather than a few minutes past it.
-      const { minute } = parts(cursor, timeZone);
-      return new Date(cursor.getTime() - minute * 60 * 1000);
+    if (isWithinWindow(cursor, window)) {
+      // Trim back to the exact minute the window opens, so a message goes at
+      // 09:00 rather than a few minutes past it.
+      const minutes = minutesOfDay(cursor, window.timeZone);
+      const overshoot = minutes - window.startMinutes;
+      return overshoot > 0 && overshoot < WINDOW_STEP_MINUTES ? new Date(cursor.getTime() - overshoot * 60 * 1000) : cursor;
     }
   }
   return cursor;
 }
 
-/** The calendar day in the clinic's timezone, as "2026-09-28". */
+// ---------------------------------------------------------------------------
+// Calendar helpers
+// ---------------------------------------------------------------------------
+
+/** The calendar day in a timezone, as "2026-09-28". */
 export function localDayKey(at: Date, timeZone: string = MARKETING_TIMEZONE): string {
   const { year, month, day } = parts(at, timeZone);
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -97,4 +192,18 @@ export function localDayRange(at: Date, timeZone: string = MARKETING_TIMEZONE): 
   const start = new Date(at.getTime() - (hour * 60 + minute) * 60 * 1000);
   start.setUTCSeconds(0, 0);
   return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
+}
+
+/** "09:00" for 540 — used by the settings form and in messages to clinics. */
+export function formatWindowTime(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+/** Every time a clinic may pick, in quarter hours across the allowed range. */
+export function windowChoices(): { value: number; label: string }[] {
+  const out: { value: number; label: string }[] = [];
+  for (let m = EARLIEST_MINUTES; m <= LATEST_MINUTES; m += WINDOW_STEP_MINUTES) {
+    out.push({ value: m, label: formatWindowTime(m) });
+  }
+  return out;
 }

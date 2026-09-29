@@ -17,7 +17,7 @@ import {
 import type { TenantDb } from "@/lib/tenant-db";
 import { pricingOptionsSchema, toStoredPricingOptions, EMPTY_PRICING } from "@/lib/pricing-options";
 import { sendCampaignNow } from "@/lib/campaign-send";
-import { marketingAudience } from "@/lib/marketing";
+import { marketingAudience, marketingWindowFor } from "@/lib/marketing";
 import { nextSendableTime } from "@/lib/marketing-window";
 
 /**
@@ -777,7 +777,7 @@ export async function savePromotionAction(merchantId: string, id: string | null,
 
         // "Now" means when the offer starts, if that is still to come.
         const wanted = notifyMode === "schedule" && notifyAt ? new Date(notifyAt) : data.startAt > now ? data.startAt : now;
-        const sendAt = nextSendableTime(wanted);
+        const sendAt = nextSendableTime(wanted, await marketingWindowFor(merchantId));
         const later = sendAt.getTime() > now.getTime() + 30_000;
 
         // A notification about one product opens that product; anything wider

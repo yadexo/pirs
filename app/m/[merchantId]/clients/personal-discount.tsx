@@ -89,7 +89,7 @@ export function PersonalDiscount({ merchantId, customerProfileId, clientName }: 
         Give discount
       </Button>
       <p className="text-[11px] text-ink-muted">
-        Applied automatically at their next checkout. Only sent if they have offers switched on, and never between 21:00 and 09:00.
+        Applied automatically at their next checkout. Only sent if they have offers switched on, and only inside your sending hours.
       </p>
     </div>
   );

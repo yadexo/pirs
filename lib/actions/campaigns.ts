@@ -6,6 +6,7 @@ import { rawDb } from "@/lib/db";
 import { ActionError, requireMerchantAction, runAction, type ActionResult } from "@/lib/merchant-action";
 import { rateLimit } from "@/lib/rate-limit";
 import { sendCampaignNow } from "@/lib/campaign-send";
+import { marketingWindowFor } from "@/lib/marketing";
 import { nextSendableTime } from "@/lib/marketing-window";
 import { vapidConfigured } from "@/lib/web-push";
 
@@ -85,7 +86,7 @@ export async function saveCampaignAction(merchantId: string, input: z.input<type
     const wanted = data.scheduledAt ? new Date(data.scheduledAt) : now;
     // Quiet hours move a send rather than refusing it, so a clinic scheduling
     // something for 22:00 gets it at 09:00 instead of silence.
-    const when = nextSendableTime(wanted);
+    const when = nextSendableTime(wanted, await marketingWindowFor(merchantId));
     const later = when.getTime() > now.getTime() + 30_000;
 
     const campaign = await rawDb.notificationCampaign.create({

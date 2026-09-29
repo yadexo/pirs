@@ -80,7 +80,7 @@ export function BroadcastForm({
     if (result.scheduledFor) {
       toast.success(
         result.heldUntil
-          ? `Scheduled for ${when(result.heldUntil)} — messages aren't sent between 21:00 and 09:00.`
+          ? `Scheduled for ${when(result.heldUntil)} — your sending hours had closed.`
           : `Scheduled for ${when(result.scheduledFor)}.`,
       );
     } else {
@@ -136,7 +136,7 @@ export function BroadcastForm({
               name="scheduledAt"
               type="datetime-local"
               errors={errors}
-              hint="Anything between 21:00 and 09:00 is held until 09:00."
+              hint="Outside your sending hours it waits until they next open."
               required
             />
           )}
@@ -148,7 +148,7 @@ export function BroadcastForm({
             </Button>
           </div>
           <p className="text-[12px] text-ink-muted">
-            Up to 5 an hour, and each client gets at most one of these a day from you.
+            Up to 5 an hour, each client gets at most one a day from you, and nothing goes out outside your sending hours.
           </p>
         </FormSection>
       </form>

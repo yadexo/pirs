@@ -9,6 +9,7 @@ import { getEmailProvider } from "@/lib/providers/notifications";
 import { isPermissionKey } from "@/lib/permissions";
 import { WEEKDAYS, type OpeningHours } from "@/lib/opening-hours";
 import { appUrl } from "@/lib/app-url";
+import { checkWindow, DEFAULT_WINDOW_END, DEFAULT_WINDOW_START } from "@/lib/marketing-window";
 
 /**
  * App Builder → Settings. Each section saves through one action here, named
@@ -581,6 +582,23 @@ export async function saveBookingSettingsAction(merchantId: string, fd: FormData
 // Notifications
 // ---------------------------------------------------------------------------
 
+/**
+ * The clinic's own sending window, checked against the platform's limits.
+ *
+ * The limits exist for the clients, not the clinic, so they are enforced here
+ * rather than only in the form: 07:00 at the earliest, 22:00 at the latest,
+ * and an hour wide at least.
+ */
+function marketingWindow(fd: FormData): { marketingWindowStartMinutes: number; marketingWindowEndMinutes: number } {
+  const start = Number(formText(fd, "marketingWindowStartMinutes") ?? DEFAULT_WINDOW_START);
+  const end = Number(formText(fd, "marketingWindowEndMinutes") ?? DEFAULT_WINDOW_END);
+  const problem = checkWindow(start, end);
+  if (!problem.ok) {
+    throw fieldError(problem.field === "start" ? "marketingWindowStartMinutes" : "marketingWindowEndMinutes", problem.message);
+  }
+  return { marketingWindowStartMinutes: start, marketingWindowEndMinutes: end };
+}
+
 export async function saveNotificationSettingsAction(merchantId: string, fd: FormData): Promise<ActionResult> {
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
@@ -588,6 +606,7 @@ export async function saveNotificationSettingsAction(merchantId: string, fd: For
       notifyBookingConfirmations: formBool(fd, "notifyBookingConfirmations"),
       notifyAppointmentReminders: formBool(fd, "notifyAppointmentReminders"),
       notifyPointsEarned: formBool(fd, "notifyPointsEarned"),
+      ...marketingWindow(fd),
       birthdayMessageEnabled: formBool(fd, "birthdayMessageEnabled"),
       birthdayMessage: formText(fd, "birthdayMessage") ?? null,
       // A percentage of zero means a greeting with no present attached.

@@ -1,6 +1,6 @@
 import "server-only";
 import { rawDb } from "@/lib/db";
-import { localDayRange, nextSendableTime } from "@/lib/marketing-window";
+import { isWithinWindow, localDayRange, windowFrom, type SendingWindow } from "@/lib/marketing-window";
 import { notifyClientQuietly, sendToClient, type PushMessage } from "@/lib/web-push";
 
 /**
@@ -36,11 +36,32 @@ interface SendOptions {
   message: PushMessage;
   now?: Date;
   /**
+   * The clinic's own sending window. Passed in by callers that already have
+   * it — a campaign to 400 clients shouldn't read the same row 400 times —
+   * and looked up here when they don't.
+   */
+  window?: SendingWindow;
+  /**
    * Birthdays and personal discounts are addressed to one client about their
    * own thing, so they don't spend the daily allowance for the clinic's
    * general marketing. Consent and quiet hours still apply.
    */
   exemptFromDailyCap?: boolean;
+}
+
+/**
+ * The clinic's sending window: its own hours, in its own timezone, corrected
+ * to the default if the stored pair doesn't pass the platform's limits.
+ */
+export async function marketingWindowFor(tenantId: string): Promise<SendingWindow> {
+  const [settings, branding] = await Promise.all([
+    rawDb.tenantSettings.findFirst({
+      where: { tenantId },
+      select: { marketingWindowStartMinutes: true, marketingWindowEndMinutes: true },
+    }),
+    rawDb.tenantBranding.findFirst({ where: { tenantId }, select: { timeZone: true } }),
+  ]);
+  return windowFrom(settings, branding?.timeZone);
 }
 
 /** Has this clinic already sent this client something promotional today? */
@@ -74,9 +95,10 @@ export async function sendMarketingTo(target: MarketingTarget, options: SendOpti
   // clinic scheduled.
   if (!target.marketingConsent) return { sent: 0, skipped: "no-consent" };
 
-  // Quiet hours are checked at the moment of sending, not when scheduled — a
+  // The window is checked at the moment of sending, not when scheduled — a
   // job that runs late must not deliver at 23:00 because 20:55 was fine.
-  if (nextSendableTime(now).getTime() !== now.getTime()) return { sent: 0, skipped: "quiet-hours" };
+  const window = options.window ?? (await marketingWindowFor(options.tenantId));
+  if (!isWithinWindow(now, window)) return { sent: 0, skipped: "quiet-hours" };
 
   if (!options.exemptFromDailyCap && (await alreadySentToday(options.tenantId, target.customerProfileId, now))) {
     return { sent: 0, skipped: "already-today" };
@@ -130,8 +152,11 @@ export async function sendMarketingCampaign(
   let devices = 0;
   let clients = 0;
 
+  // Read once for the whole audience rather than per client.
+  const window = options.window ?? (await marketingWindowFor(tenantId));
+
   for (const target of targets) {
-    const outcome = await sendMarketingTo(target, { ...options, tenantId });
+    const outcome = await sendMarketingTo(target, { ...options, tenantId, window });
     if (outcome.skipped) skipped[outcome.skipped] += 1;
     else {
       devices += outcome.sent;

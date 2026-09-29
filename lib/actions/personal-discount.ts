@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { rawDb } from "@/lib/db";
 import { ActionError, requireMerchantAction, runAction, type ActionResult } from "@/lib/merchant-action";
-import { marketingAudience, sendMarketingCampaign } from "@/lib/marketing";
+import { marketingAudience, marketingWindowFor, sendMarketingCampaign } from "@/lib/marketing";
 import { nextSendableTime } from "@/lib/marketing-window";
 import { vapidConfigured } from "@/lib/web-push";
 
@@ -68,7 +68,7 @@ export async function givePersonalDiscountAction(merchantId: string, input: z.in
 
     // Held rather than dropped when it is the middle of the night: the cron
     // job picks the campaign up at nine.
-    const sendAt = nextSendableTime(now);
+    const sendAt = nextSendableTime(now, await marketingWindowFor(merchantId));
     const tenant = await rawDb.tenant.findUniqueOrThrow({
       where: { id: merchantId },
       select: { slug: true, name: true, branding: { select: { businessName: true } } },
