@@ -189,6 +189,41 @@ describe("discounts and marketing", () => {
     expect(campaign).toMatchObject({ status: "SENT", devicesReached: 1 });
   });
 
+  it("judges an already-scheduled campaign against the window as it is at send time", async () => {
+    // Scheduled while the clinic sent until 22:00, and due at 19:00 local.
+    await rawDb.notificationCampaign.create({
+      data: {
+        tenantId: clinic,
+        name: "Evening offer",
+        channel: "PUSH",
+        body: "Tonight only",
+        scheduledAt: new Date("2026-07-01T17:00:00Z"), // 19:00 Amsterdam
+        status: "SCHEDULED",
+      },
+    });
+
+    // The clinic then decides it stops at 18:00.
+    await rawDb.tenantSettings.create({
+      data: { tenantId: clinic, marketingWindowStartMinutes: 9 * 60, marketingWindowEndMinutes: 18 * 60 },
+    });
+
+    const evening = new Date("2026-07-01T17:30:00Z"); // 19:30 local, past the new close
+    const held = await runMarketing(evening);
+    expect(held.campaigns).toBe(0);
+    expect(held.heldForQuietHours).toBeGreaterThan(0);
+    expect(sent).toHaveLength(0);
+    expect(await rawDb.notificationCampaign.findFirstOrThrow({ where: { tenantId: clinic } })).toMatchObject({ status: "SCHEDULED" });
+
+    // Widen it again, same instant: the campaign that was already scheduled
+    // now goes, because the window is read when sending, not when scheduling.
+    await rawDb.tenantSettings.updateMany({ where: { tenantId: clinic }, data: { marketingWindowEndMinutes: 22 * 60 } });
+    const later = await runMarketing(evening);
+    expect(later.campaigns).toBe(1);
+    expect(sent).toHaveLength(1);
+
+    await rawDb.tenantSettings.deleteMany({ where: { tenantId: clinic } });
+  });
+
   it("holds a campaign that comes due at night until the morning", async () => {
     await rawDb.notificationCampaign.create({
       data: { tenantId: clinic, name: "Late", channel: "PUSH", body: "Late night", scheduledAt: night, status: "SCHEDULED" },
