@@ -192,8 +192,13 @@ export function NotifyOffer({
               : audience === 0
                 ? "Nobody will get this yet: it goes only to clients with notifications on who left “offers and news” switched on."
                 : `${audience} ${audience === 1 ? "client has" : "clients have"} notifications and offers switched on.`}{" "}
-            Nothing is sent outside your sending hours, and each client hears from you at most once a day.
+            Nothing is sent outside your sending hours, and your daily limit per client applies unless you tick the box above.
           </p>
+
+          <label className="flex items-center gap-2 text-[12px]">
+            <input type="checkbox" name="notifyIgnoreDailyLimit" className="h-3.5 w-3.5" />
+            Also send to clients who already got a notification today
+          </label>
 
           {sent && (
             <label className="flex items-center gap-2 text-[12px]">

@@ -589,14 +589,20 @@ export async function saveBookingSettingsAction(merchantId: string, fd: FormData
  * rather than only in the form: 07:00 at the earliest, 22:00 at the latest,
  * and an hour wide at least.
  */
-function marketingWindow(fd: FormData): { marketingWindowStartMinutes: number; marketingWindowEndMinutes: number } {
+function marketingWindow(fd: FormData): { marketingWindowStartMinutes: number; marketingWindowEndMinutes: number; marketingDailyLimit: number } {
   const start = Number(formText(fd, "marketingWindowStartMinutes") ?? DEFAULT_WINDOW_START);
   const end = Number(formText(fd, "marketingWindowEndMinutes") ?? DEFAULT_WINDOW_END);
   const problem = checkWindow(start, end);
   if (!problem.ok) {
     throw fieldError(problem.field === "start" ? "marketingWindowStartMinutes" : "marketingWindowEndMinutes", problem.message);
   }
-  return { marketingWindowStartMinutes: start, marketingWindowEndMinutes: end };
+  // 0 means no limit; anything else must be one of the offered steps, so a
+  // hand-crafted form cannot set 50 a day.
+  const limitRaw = Number(formText(fd, "marketingDailyLimit") ?? 1);
+  const allowed = [0, 1, 2, 3, 5];
+  const marketingDailyLimit = allowed.includes(limitRaw) ? limitRaw : 1;
+
+  return { marketingWindowStartMinutes: start, marketingWindowEndMinutes: end, marketingDailyLimit };
 }
 
 export async function saveNotificationSettingsAction(merchantId: string, fd: FormData): Promise<ActionResult> {

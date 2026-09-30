@@ -197,6 +197,10 @@ model TenantSettings {
   /// the platform refuses anything outside 07:00–22:00 (see lib/marketing-window.ts).
   marketingWindowStartMinutes   Int      @default(540)
   marketingWindowEndMinutes     Int      @default(1320)
+  /// How many marketing notifications one client may get from this clinic in
+  /// a day. Zero means no limit — which is the clinic's choice to make, and
+  /// its clients' choice to switch notifications off over.
+  marketingDailyLimit           Int      @default(1)
 
   /// Birthday automation. Off until a clinic turns it on, because a message
   /// nobody wrote is worse than no message.
@@ -1719,6 +1723,10 @@ model NotificationCampaign {
   /// Marketing obeys consent, quiet hours and the daily cap; a service
   /// message (an order, a redemption) does not.
   marketing             Boolean                     @default(true)
+  /// Set for the one message a clinic decides is worth reaching clients who
+  /// have already heard from them today. Consent and the sending hours still
+  /// apply — this only lifts the daily limit.
+  ignoreDailyLimit      Boolean                     @default(false)
   /// Devices the push service accepted this for.
   devicesReached        Int                         @default(0)
   /// Why the rest were left out, counted per reason. A clinic looking at

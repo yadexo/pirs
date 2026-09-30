@@ -34,6 +34,8 @@ const schema = z
     scheduledAt: z.string().trim().max(40).optional(),
     /** Set to send to one client instead of everyone. */
     customerProfileId: z.string().trim().max(60).optional(),
+    /** Reaches clients who have already had their allowance today. */
+    ignoreDailyLimit: z.boolean().default(false),
   });
 
 /** Checks a product or promotion belongs to this clinic before linking to it. */
@@ -95,6 +97,7 @@ export async function saveCampaignAction(merchantId: string, input: z.input<type
         subject: data.title,
         body: data.body,
         marketing: true,
+        ignoreDailyLimit: data.ignoreDailyLimit,
         customerProfileId,
         productId: links.productId,
         promotionId: links.promotionId,

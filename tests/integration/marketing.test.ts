@@ -17,7 +17,7 @@ vi.mock("@/lib/web-push", async (importOriginal) => {
   };
 });
 
-const { sendMarketingTo, alreadySentToday, marketingAudience } = await import("@/lib/marketing");
+const { sendMarketingTo, sentTodayCount, marketingAudience } = await import("@/lib/marketing");
 const { runMarketing } = await import("@/lib/cron/marketing");
 const { resolveDiscount, candidatesFor } = await import("@/lib/discounts");
 
@@ -140,6 +140,90 @@ describe("discounts and marketing", () => {
     expect(sent.map((s) => s.title)).toEqual(["One"]);
   });
 
+  it("sends as many a day as the clinic allows, and stops there", async () => {
+    await rawDb.tenantSettings.create({ data: { tenantId: clinic, marketingDailyLimit: 3 } });
+    const target = { customerProfileId: client.profileId, userId: client.userId, marketingConsent: true };
+
+    for (const n of [1, 2, 3]) {
+      expect(await sendMarketingTo(target, { tenantId: clinic, now: daytime, message: { title: `#${n}`, body: "x" } })).toMatchObject({ sent: 1 });
+    }
+    expect(await sendMarketingTo(target, { tenantId: clinic, now: daytime, message: { title: "#4", body: "x" } })).toMatchObject({
+      sent: 0,
+      skipped: "already-today",
+    });
+    expect(sent.map((s) => s.title)).toEqual(["#1", "#2", "#3"]);
+
+    await rawDb.tenantSettings.deleteMany({ where: { tenantId: clinic } });
+  });
+
+  it("never stops anyone when the clinic set no limit", async () => {
+    await rawDb.tenantSettings.create({ data: { tenantId: clinic, marketingDailyLimit: 0 } });
+    const target = { customerProfileId: client.profileId, userId: client.userId, marketingConsent: true };
+
+    for (const n of [1, 2, 3, 4, 5, 6]) {
+      expect(await sendMarketingTo(target, { tenantId: clinic, now: daytime, message: { title: `#${n}`, body: "x" } })).toMatchObject({ sent: 1 });
+    }
+    expect(sent).toHaveLength(6);
+
+    await rawDb.tenantSettings.deleteMany({ where: { tenantId: clinic } });
+  });
+
+  it("lets one marked notification past the limit, without touching consent", async () => {
+    await rawDb.notificationCampaign.create({
+      data: {
+        tenantId: clinic,
+        name: "Everyone, please",
+        channel: "PUSH",
+        subject: "Everyone",
+        body: "Even if you've heard from us",
+        ignoreDailyLimit: true,
+        scheduledAt: new Date(daytime.getTime() - 60_000),
+        status: "SCHEDULED",
+      },
+    });
+
+    // The client has already had today's one.
+    await sendMarketingTo(
+      { customerProfileId: client.profileId, userId: client.userId, marketingConsent: true },
+      { tenantId: clinic, now: daytime, message: { title: "Earlier", body: "x" } },
+    );
+    expect(sent).toHaveLength(1);
+
+    const result = await runMarketing(daytime);
+    expect(result.campaigns).toBe(1);
+    expect(sent.map((s) => s.title)).toEqual(["Earlier", "Everyone"]);
+
+    // The client who never wanted offers is still left alone.
+    expect(sent.some((s) => s.userId === quiet.userId)).toBe(false);
+  });
+
+  it("lets a discount meant for one client past the limit", async () => {
+    // The shape a personal discount creates: a campaign addressed to one
+    // client. It goes through the same sender whether it is sent at once or
+    // picked up later by the job.
+    await rawDb.notificationCampaign.create({
+      data: {
+        tenantId: clinic,
+        name: "Just for you",
+        channel: "PUSH",
+        subject: "Your clinic",
+        body: "10% off for you",
+        customerProfileId: client.profileId,
+        scheduledAt: new Date(daytime.getTime() - 60_000),
+        status: "SCHEDULED",
+      },
+    });
+
+    await sendMarketingTo(
+      { customerProfileId: client.profileId, userId: client.userId, marketingConsent: true },
+      { tenantId: clinic, now: daytime, message: { title: "Earlier", body: "x" } },
+    );
+
+    const result = await runMarketing(daytime);
+    expect(result.campaigns).toBe(1);
+    expect(sent.map((s) => s.title)).toEqual(["Earlier", "Your clinic"]);
+  });
+
   it("lets a birthday through on a day the client already had an offer", async () => {
     const target = { customerProfileId: client.profileId, userId: client.userId, marketingConsent: true };
     await sendMarketingTo(target, { tenantId: clinic, now: daytime, message: { title: "Offer", body: "a" } });
@@ -159,8 +243,8 @@ describe("discounts and marketing", () => {
       { customerProfileId: client.profileId, userId: client.userId, marketingConsent: true },
       { tenantId: clinic, now: daytime, message: { title: "Ours", body: "a" } },
     );
-    expect(await alreadySentToday(clinic, client.profileId, daytime)).toBe(true);
-    expect(await alreadySentToday(otherClinic, client.profileId, daytime)).toBe(false);
+    expect(await sentTodayCount(clinic, client.profileId, daytime)).toBe(1);
+    expect(await sentTodayCount(otherClinic, client.profileId, daytime)).toBe(0);
   });
 
   // ------------------------------------------------------------ campaigns --

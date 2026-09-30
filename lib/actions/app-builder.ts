@@ -633,6 +633,8 @@ const promotionSchema = z
     notifyAt: z.string().trim().max(40).optional(),
     /** Ticked by the clinic after being told this offer was announced before. */
     notifyAgain: z.boolean().default(false),
+    /** Reaches clients who have already had their allowance today. */
+    notifyIgnoreDailyLimit: z.boolean().default(false),
   })
   .superRefine((p, ctx) => {
     // The dates themselves are checked in the action, where the clinic's
@@ -682,6 +684,7 @@ export async function savePromotionAction(merchantId: string, id: string | null,
       notifyBody: formText(fd, "notifyBody"),
       notifyAt: formText(fd, "notifyAt"),
       notifyAgain: formBool(fd, "notifyAgain"),
+      notifyIgnoreDailyLimit: formBool(fd, "notifyIgnoreDailyLimit"),
     });
 
     const tagged = data.customerSegment === "TAGGED";
@@ -731,6 +734,7 @@ export async function savePromotionAction(merchantId: string, id: string | null,
       notifyTitle,
       notifyBody,
       notifyAgain,
+      notifyIgnoreDailyLimit,
     } = data;
 
     // Written out rather than spread: the form carries three fields that are
@@ -842,6 +846,7 @@ export async function savePromotionAction(merchantId: string, id: string | null,
             productId: onlyProduct ?? null,
             // A personal offer is announced to that client alone.
             customerProfileId: (values as { customerProfileId?: string | null }).customerProfileId ?? null,
+            ignoreDailyLimit: notifyIgnoreDailyLimit,
             scheduledAt: sendAt,
             status: later ? "SCHEDULED" : "SENDING",
           },

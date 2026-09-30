@@ -36,6 +36,7 @@ import type { ActionResult } from "@/lib/merchant-action";
 import { WEEKDAYS, WEEKDAY_LABEL, isOpeningHours, type OpeningHours } from "@/lib/opening-hours";
 import type { SettingsData } from "./load";
 import { BroadcastForm } from "./broadcast";
+import { DailyLimitField } from "./daily-limit";
 import { DEFAULT_WINDOW_END, DEFAULT_WINDOW_START, EARLIEST_MINUTES, LATEST_MINUTES, formatWindowTime, windowChoices } from "@/lib/marketing-window";
 
 type Data<S extends SettingsData["section"]> = Extract<SettingsData, { section: S }>;
@@ -830,6 +831,7 @@ export function NotificationsSection({ merchantId, data, canEdit }: { merchantId
               Between {formatWindowTime(EARLIEST_MINUTES)} and {formatWindowTime(LATEST_MINUTES)}, at least an hour wide. Anything due outside
               your window waits until it next opens.
             </p>
+            <DailyLimitField defaultValue={s?.marketingDailyLimit ?? 1} errors={errors} />
           </FormSection>
         )}
       </SettingsForm>

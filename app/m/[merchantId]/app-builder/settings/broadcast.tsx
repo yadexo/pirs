@@ -69,6 +69,7 @@ export function BroadcastForm({
       title: String(fd.get("title") ?? ""),
       body: String(fd.get("body") ?? ""),
       productId: String(fd.get("productId") ?? "") || undefined,
+      ignoreDailyLimit: fd.get("ignoreDailyLimit") === "on",
       scheduledAt: later ? String(fd.get("scheduledAt") ?? "") || undefined : undefined,
     }).catch((err) => ({ error: describeActionFailure(err) }) as const);
     setSending(false);
@@ -129,6 +130,10 @@ export function BroadcastForm({
           )}
 
           <label className="flex items-center gap-2 text-[13px]">
+            <input type="checkbox" name="ignoreDailyLimit" className="h-4 w-4" />
+            Also send to clients who already got a notification today
+          </label>
+          <label className="flex items-center gap-2 text-[13px]">
             <input type="checkbox" checked={later} onChange={(e) => setLater(e.target.checked)} className="h-4 w-4" />
             Send later
           </label>
@@ -150,7 +155,8 @@ export function BroadcastForm({
             </Button>
           </div>
           <p className="text-[12px] text-ink-muted">
-            Up to 5 an hour, each client gets at most one a day from you, and nothing goes out outside your sending hours.
+            Up to 5 an hour, and nothing goes out outside your sending hours. Your daily limit per client is set under
+            &ldquo;When marketing may be sent&rdquo;.
           </p>
         </FormSection>
       </form>

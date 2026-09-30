@@ -41,31 +41,55 @@ interface SendOptions {
    * and looked up here when they don't.
    */
   window?: SendingWindow;
+  /** The clinic's own limit, read once per audience. Zero means no limit. */
+  dailyLimit?: number;
   /**
    * Birthdays and personal discounts are addressed to one client about their
    * own thing, so they don't spend the daily allowance for the clinic's
-   * general marketing. Consent and quiet hours still apply.
+   * general marketing — and neither does a message the clinic has
+   * deliberately marked as reaching everyone. Consent and the sending hours
+   * still apply either way.
    */
   exemptFromDailyCap?: boolean;
 }
 
+export interface MarketingRules {
+  window: SendingWindow;
+  /** Messages per client per day. Zero means the clinic set no limit. */
+  dailyLimit: number;
+}
+
 /**
- * The clinic's sending window: its own hours, in its own timezone, corrected
- * to the default if the stored pair doesn't pass the platform's limits.
+ * How this clinic may send: its hours, in its timezone, and how often one
+ * client may hear from it in a day. Read at send time, never cached across
+ * a run, so changing either takes effect on the next message.
  */
-export async function marketingWindowFor(tenantId: string): Promise<SendingWindow> {
+export async function marketingRulesFor(tenantId: string): Promise<MarketingRules> {
   const [settings, branding] = await Promise.all([
     rawDb.tenantSettings.findFirst({
       where: { tenantId },
-      select: { marketingWindowStartMinutes: true, marketingWindowEndMinutes: true },
+      select: { marketingWindowStartMinutes: true, marketingWindowEndMinutes: true, marketingDailyLimit: true },
     }),
     rawDb.tenantBranding.findFirst({ where: { tenantId }, select: { timeZone: true } }),
   ]);
-  return windowFrom(settings, branding?.timeZone);
+  return {
+    window: windowFrom(settings, branding?.timeZone),
+    // A negative number in the column would mean "never send", which no
+    // clinic can choose; treat it as the default rather than silence.
+    dailyLimit: settings && settings.marketingDailyLimit >= 0 ? settings.marketingDailyLimit : 1,
+  };
 }
 
-/** Has this clinic already sent this client something promotional today? */
-export async function alreadySentToday(tenantId: string, customerProfileId: string, now: Date): Promise<boolean> {
+/** Just the hours, for the callers that only schedule. */
+export async function marketingWindowFor(tenantId: string): Promise<SendingWindow> {
+  return (await marketingRulesFor(tenantId)).window;
+}
+
+/**
+ * How many marketing messages this clinic has already sent this client today,
+ * counted in the clinic's own day.
+ */
+export async function sentTodayCount(tenantId: string, customerProfileId: string, now: Date): Promise<number> {
   const { start, end } = localDayRange(now);
   const count = await rawDb.notificationDelivery.count({
     where: {
@@ -80,7 +104,12 @@ export async function alreadySentToday(tenantId: string, customerProfileId: stri
       // cap and give the client a second message the same day.
     },
   });
-  return count > 0;
+  return count;
+}
+
+/** Whether this client has had all the clinic allows today. Zero = no limit. */
+export function overDailyLimit(sentToday: number, dailyLimit: number): boolean {
+  return dailyLimit > 0 && sentToday >= dailyLimit;
 }
 
 /**
@@ -98,11 +127,14 @@ export async function sendMarketingTo(target: MarketingTarget, options: SendOpti
 
   // The window is checked at the moment of sending, not when scheduled — a
   // job that runs late must not deliver at 23:00 because 20:55 was fine.
-  const window = options.window ?? (await marketingWindowFor(options.tenantId));
-  if (!isWithinWindow(now, window)) return { sent: 0, skipped: "quiet-hours" };
+  const rules = options.window && options.dailyLimit !== undefined
+    ? { window: options.window, dailyLimit: options.dailyLimit }
+    : await marketingRulesFor(options.tenantId);
+  if (!isWithinWindow(now, rules.window)) return { sent: 0, skipped: "quiet-hours" };
 
-  if (!options.exemptFromDailyCap && (await alreadySentToday(options.tenantId, target.customerProfileId, now))) {
-    return { sent: 0, skipped: "already-today" };
+  if (!options.exemptFromDailyCap) {
+    const sentToday = await sentTodayCount(options.tenantId, target.customerProfileId, now);
+    if (overDailyLimit(sentToday, rules.dailyLimit)) return { sent: 0, skipped: "already-today" };
   }
 
   const result = await sendToClient(target.userId, options.message);
@@ -154,10 +186,10 @@ export async function sendMarketingCampaign(
   let clients = 0;
 
   // Read once for the whole audience rather than per client.
-  const window = options.window ?? (await marketingWindowFor(tenantId));
+  const rules = await marketingRulesFor(tenantId);
 
   for (const target of targets) {
-    const outcome = await sendMarketingTo(target, { ...options, tenantId, window });
+    const outcome = await sendMarketingTo(target, { ...options, tenantId, window: rules.window, dailyLimit: rules.dailyLimit });
     if (outcome.skipped) skipped[outcome.skipped] += 1;
     else {
       devices += outcome.sent;

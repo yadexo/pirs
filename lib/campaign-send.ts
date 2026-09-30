@@ -69,6 +69,7 @@ export async function sendCampaignNow(campaignId: string, now: Date = new Date()
       subject: true,
       body: true,
       customerProfileId: true,
+      ignoreDailyLimit: true,
       productId: true,
       promotion: { select: { active: true, endAt: true } },
       tenant: { select: { slug: true, name: true, branding: { select: { businessName: true } } } },
@@ -97,7 +98,10 @@ export async function sendCampaignNow(campaignId: string, now: Date = new Date()
     now,
     // A notification addressed to one client about their own offer is not a
     // mailshot, so it doesn't spend the clinic's daily allowance for them.
-    exemptFromDailyCap: Boolean(campaign.customerProfileId),
+    // A message addressed to one client is about their own thing, and a
+    // clinic can mark one message as worth reaching everyone. Either way the
+    // client's consent and the sending hours still decide.
+    exemptFromDailyCap: Boolean(campaign.customerProfileId) || campaign.ignoreDailyLimit,
     message: {
       title: campaign.subject?.trim() || clinicName,
       body: campaign.body,
