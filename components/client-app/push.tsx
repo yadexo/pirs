@@ -168,7 +168,7 @@ export function NotificationCard({ clinicName }: { clinicName: string }) {
             ? `Add ${clinicName} to your Home Screen first — iPhone only allows notifications inside an installed app.`
             : state === "denied"
               ? DENIED_HELP
-              : `${clinicName} can tell you when an order is paid, a refund lands, or something new arrives.`}
+              : `Order and appointment updates, plus offers and news from ${clinicName}. You can turn offers off any time in Settings.`}
         </p>
         {message && <p className="ca-pushcard-body">{message}</p>}
       </div>
@@ -190,7 +190,7 @@ export function NotificationSettings() {
 
   const explanation =
     state === "on"
-      ? "On for this device."
+      ? "On for this device: order and appointment updates, plus offers and news. Turning offers off below keeps the rest."
       : state === "install-first"
         ? "Add this app to your Home Screen to get notifications on iPhone."
         : state === "denied"

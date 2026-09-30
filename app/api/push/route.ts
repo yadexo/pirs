@@ -1,9 +1,9 @@
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireCustomerContext } from "@/lib/rbac";
 import { rawDb } from "@/lib/db";
 import { rateLimit } from "@/lib/rate-limit";
-import { notifyClientQuietly, vapidConfigured, vapidPublicKey } from "@/lib/web-push";
+import { notifyClientQuietly, sendToClient, vapidConfigured, vapidPublicKey } from "@/lib/web-push";
 
 /**
  * The client app's own push endpoint: subscribe, unsubscribe, send yourself a
@@ -22,9 +22,6 @@ import { notifyClientQuietly, vapidConfigured, vapidPublicKey } from "@/lib/web-
  */
 const TESTS_PER_WINDOW = 5;
 const TEST_WINDOW_MS = 2 * 60 * 1000;
-
-/** Long enough to lock the phone, short enough to still be waiting for it. */
-const TEST_DELAY_MS = 3000;
 
 const subscribe = z.object({
   action: z.literal("subscribe"),
@@ -80,24 +77,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "This device isn't subscribed. Turn notifications off and on again." }, { status: 409 });
     }
 
-    // The point of the delay is to test a locked phone, so it has to happen
-    // here: once the screen locks, the app's own JavaScript is paused and a
-    // timer in the browser would never fire. `after` keeps this function
-    // running once the response has already gone out.
-    after(async () => {
-      await new Promise((resolve) => setTimeout(resolve, TEST_DELAY_MS));
-      await notifyClientQuietly(user.id, {
-        title: "Notifications are on",
-        body: "This is what a message from your clinic will look like.",
-        tag: "test",
-      });
+    // Sent before replying, so the answer reports what actually happened —
+    // and so tapping the button feels like pressing a button. It used to
+    // wait three seconds, for testing a locked phone, which made every
+    // other kind of test feel broken.
+    const result = await sendToClient(user.id, {
+      title: "Notifications are on",
+      body: "This is what a message from your clinic will look like.",
+      tag: "test",
     });
+    if (result.sent === 0) {
+      return NextResponse.json({ error: "No device could be reached. Turn notifications off and on again." }, { status: 502 });
+    }
 
-    return NextResponse.json({
-      ok: true,
-      delaySeconds: TEST_DELAY_MS / 1000,
-      message: `Notification coming in ${TEST_DELAY_MS / 1000} seconds — lock your phone now.`,
-    });
+    return NextResponse.json({ ok: true, message: `Sent to ${result.sent} ${result.sent === 1 ? "device" : "devices"}.`, ...result });
   }
 
   // The endpoint identifies the device, so re-subscribing the same one moves
@@ -122,6 +115,23 @@ export async function POST(req: Request) {
       lastUsedAt: new Date(),
     },
   });
+
+  // Turning notifications on means saying yes to what the app said it would
+  // send: the order and appointment updates, and the clinic's offers. But a
+  // client who has ever switched offers off themselves keeps that choice —
+  // `marketingConsentChosenAt` is set only by their own decisions, so this
+  // can never undo one, however many times they toggle notifications.
+  await rawDb.customerProfile.updateMany({
+    where: { id: user.customerProfileId!, marketingConsentChosenAt: null },
+    data: {
+      pushConsent: true,
+      marketingConsent: true,
+      marketingConsentChosenAt: new Date(),
+      marketingConsentSource: "push-opt-in",
+    },
+  });
+  // Push itself is on either way: it is what they just agreed to.
+  await rawDb.customerProfile.updateMany({ where: { id: user.customerProfileId! }, data: { pushConsent: true } });
 
   // Confirms on the device itself that it works — and iOS wants the first
   // notification soon after permission is granted.

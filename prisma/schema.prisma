@@ -477,6 +477,11 @@ model CustomerProfile {
   preferredLocationId String?
 
   marketingConsent Boolean @default(false)
+  /// When the client last decided about offers themselves, and where. Set only
+  /// by the client's own actions, never by us — turning notifications on opts
+  /// a new client into offers, but it must never undo a "no" they once gave.
+  marketingConsentChosenAt DateTime?
+  marketingConsentSource   String?
   emailConsent     Boolean @default(true)
   smsConsent       Boolean @default(false)
   pushConsent      Boolean @default(false)

@@ -1,6 +1,6 @@
 import "server-only";
 import { rawDb } from "@/lib/db";
-import { formatWindowTime, isWithinWindow, localDayAndMonth, localYear, windowFrom } from "@/lib/marketing-window";
+import { birthdayMinutes, formatWindowTime, isWithinWindow, localDayAndMonth, localYear, minutesOfDay, windowFrom } from "@/lib/marketing-window";
 import { marketingWindowFor, sendMarketingTo } from "@/lib/marketing";
 import { sendCampaignNow } from "@/lib/campaign-send";
 
@@ -121,10 +121,12 @@ async function sendBirthdayGreetings(now: Date): Promise<{ greetings: number; de
   for (const clinic of clinics) {
     if (clinic.tenant.status !== "ACTIVE") continue;
 
-    // A greeting goes out when this clinic's window opens, in this clinic's
-    // timezone — so "today" and "the morning" are both the clinic's own.
+    // A greeting goes out in the morning, in this clinic's timezone — nine
+    // o'clock, or when the clinic's window opens if that is later. A clinic
+    // that switched on 24/7 for its offers does not thereby wish anyone a
+    // happy birthday at midnight.
     const window = windowFrom(clinic, clinic.tenant.branding?.timeZone);
-    if (!isWithinWindow(now, window)) {
+    if (!isWithinWindow(now, window) || minutesOfDay(now, window.timeZone) < birthdayMinutes(window)) {
       held += 1;
       continue;
     }

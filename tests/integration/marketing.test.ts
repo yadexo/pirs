@@ -117,6 +117,36 @@ describe("discounts and marketing", () => {
     expect(audience.map((a) => a.customerProfileId)).not.toContain(quiet.profileId);
   });
 
+  // ------------------------------------------------------- opting in ------
+
+  it("turns offers on for a client who has never decided, and records it", async () => {
+    const fresh = await makeClient("fresh", { consent: false });
+    // What the subscribe route does: opt them in only while they have made no
+    // choice of their own.
+    const optIn = async (profileId: string) =>
+      rawDb.customerProfile.updateMany({
+        where: { id: profileId, marketingConsentChosenAt: null },
+        data: { pushConsent: true, marketingConsent: true, marketingConsentChosenAt: daytime, marketingConsentSource: "push-opt-in" },
+      });
+
+    expect((await optIn(fresh.profileId)).count).toBe(1);
+    const after = await rawDb.customerProfile.findFirstOrThrow({ where: { id: fresh.profileId } });
+    expect(after).toMatchObject({ marketingConsent: true, pushConsent: true, marketingConsentSource: "push-opt-in" });
+    expect(after.marketingConsentChosenAt).not.toBeNull();
+
+    // Now they turn offers off themselves...
+    await rawDb.customerProfile.updateMany({
+      where: { id: fresh.profileId },
+      data: { marketingConsent: false, marketingConsentChosenAt: daytime, marketingConsentSource: "preferences" },
+    });
+    // ...and turning notifications on again must not undo that.
+    expect((await optIn(fresh.profileId)).count).toBe(0);
+    expect(await rawDb.customerProfile.findFirstOrThrow({ where: { id: fresh.profileId } })).toMatchObject({
+      marketingConsent: false,
+      marketingConsentSource: "preferences",
+    });
+  });
+
   // ---------------------------------------------------------- quiet hours --
 
   it("holds a message that would land at 23:00", async () => {

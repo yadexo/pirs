@@ -863,7 +863,16 @@ export async function clientSaveConsentAction(
   consent: { emailConsent: boolean; smsConsent: boolean; pushConsent: boolean; marketingConsent: boolean },
 ): Promise<{ ok: true }> {
   const { db, user } = await requireCustomerContext();
-  await db.customerProfile.updateMany({ where: { id: user.customerProfileId! }, data: consent });
+  await db.customerProfile.updateMany({
+    where: { id: user.customerProfileId! },
+    data: {
+      ...consent,
+      // Their own decision, recorded as such: from here on, turning
+      // notifications on again must not quietly opt them back into offers.
+      marketingConsentChosenAt: new Date(),
+      marketingConsentSource: "preferences",
+    },
+  });
   revalidateClient(slug);
   return { ok: true };
 }

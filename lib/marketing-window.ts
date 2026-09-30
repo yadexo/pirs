@@ -14,10 +14,13 @@
  * the window to judge it against, and none of them reads the clock.
  */
 
-/** The outer limits, which no clinic may cross. */
-export const EARLIEST_MINUTES = 7 * 60; // 07:00
-export const LATEST_MINUTES = 22 * 60; // 22:00
-export const MIN_WINDOW_MINUTES = 60;
+/** A day, in minutes. 1440 as an end means midnight, i.e. round the clock. */
+export const DAY_MINUTES = 24 * 60;
+/** Hours a client is likely to be asleep — a warning, not a rule. */
+export const NIGHT_BEFORE_MINUTES = 8 * 60; // 08:00
+export const NIGHT_AFTER_MINUTES = 22 * 60; // 22:00
+/** Birthday greetings aim for this, or the window's start if that is later. */
+export const BIRTHDAY_MINUTES = 9 * 60; // 09:00
 /** What a clinic gets until it says otherwise. */
 export const DEFAULT_WINDOW_START = 9 * 60; // 09:00
 export const DEFAULT_WINDOW_END = 22 * 60; // 22:00
@@ -77,33 +80,48 @@ export type WindowProblem =
   | { ok: false; field: "start" | "end"; message: string };
 
 /**
- * Whether a clinic may have this window. The messages are what the clinic
- * reads, so they say the limit rather than naming the rule.
+ * Whether a clinic may have this window.
+ *
+ * The platform no longer picks the hours — a clinic may send round the
+ * clock if it wants to. All that is left is arithmetic: quarter hours, in
+ * a day, ending after they start. Whether late-night notifications are a
+ * good idea is a judgement, and the form says so rather than refusing.
  */
 export function checkWindow(startMinutes: number, endMinutes: number): WindowProblem {
-  const asTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-
-  for (const [value, field] of [
-    [startMinutes, "start"],
-    [endMinutes, "end"],
+  for (const [value, field, max] of [
+    [startMinutes, "start", DAY_MINUTES - WINDOW_STEP_MINUTES],
+    [endMinutes, "end", DAY_MINUTES],
   ] as const) {
-    if (!Number.isInteger(value) || value % WINDOW_STEP_MINUTES !== 0) {
-      return { ok: false, field, message: `Use quarter hours, like ${asTime(DEFAULT_WINDOW_START)}.` };
+    if (!Number.isInteger(value) || value % WINDOW_STEP_MINUTES !== 0 || value < 0 || value > max) {
+      return { ok: false, field, message: "Pick a time from the list." };
     }
-  }
-  if (startMinutes < EARLIEST_MINUTES) {
-    return { ok: false, field: "start", message: `Not before ${asTime(EARLIEST_MINUTES)} — clients are asleep.` };
-  }
-  if (endMinutes > LATEST_MINUTES) {
-    return { ok: false, field: "end", message: `Not after ${asTime(LATEST_MINUTES)} — clients are asleep.` };
   }
   if (startMinutes >= endMinutes) {
     return { ok: false, field: "end", message: "The end has to be after the start." };
   }
-  if (endMinutes - startMinutes < MIN_WINDOW_MINUTES) {
-    return { ok: false, field: "end", message: "Leave at least an hour, or there may be no time to send." };
-  }
   return { ok: true };
+}
+
+/** Round the clock: what the "send any time" checkbox stores. */
+export function isAllDay(window: SendingWindow): boolean {
+  return window.startMinutes === 0 && window.endMinutes >= DAY_MINUTES;
+}
+
+/**
+ * Whether this window reaches into the hours people are asleep. Drives a
+ * warning on the form; nothing refuses to send.
+ */
+export function includesNight(startMinutes: number, endMinutes: number): boolean {
+  return startMinutes < NIGHT_BEFORE_MINUTES || endMinutes > NIGHT_AFTER_MINUTES;
+}
+
+/**
+ * When a birthday greeting should go: nine in the morning, or the window's
+ * start if the clinic does not open until later. Never at midnight because
+ * a clinic switched on 24/7 for its offers.
+ */
+export function birthdayMinutes(window: SendingWindow): number {
+  return Math.max(BIRTHDAY_MINUTES, window.startMinutes);
 }
 
 /** A stored window, corrected to something sane if the row predates the rules. */
@@ -243,10 +261,14 @@ export function formatWindowTime(minutes: number): string {
 }
 
 /** Every time a clinic may pick, in quarter hours across the allowed range. */
-export function windowChoices(): { value: number; label: string }[] {
+export function windowChoices(kind: "start" | "end" = "start"): { value: number; label: string }[] {
   const out: { value: number; label: string }[] = [];
-  for (let m = EARLIEST_MINUTES; m <= LATEST_MINUTES; m += WINDOW_STEP_MINUTES) {
-    out.push({ value: m, label: formatWindowTime(m) });
+  const first = kind === "start" ? 0 : WINDOW_STEP_MINUTES;
+  const last = kind === "start" ? DAY_MINUTES - WINDOW_STEP_MINUTES : DAY_MINUTES;
+  for (let m = first; m <= last; m += WINDOW_STEP_MINUTES) {
+    // 1440 is midnight at the far end of the day, written as 24:00 so it
+    // reads as "until the end of the day" rather than "until it began".
+    out.push({ value: m, label: m === DAY_MINUTES ? "24:00" : formatWindowTime(m) });
   }
   return out;
 }

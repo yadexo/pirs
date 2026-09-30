@@ -37,7 +37,8 @@ import { WEEKDAYS, WEEKDAY_LABEL, isOpeningHours, type OpeningHours } from "@/li
 import type { SettingsData } from "./load";
 import { BroadcastForm } from "./broadcast";
 import { DailyLimitField } from "./daily-limit";
-import { DEFAULT_WINDOW_END, DEFAULT_WINDOW_START, EARLIEST_MINUTES, LATEST_MINUTES, formatWindowTime, windowChoices } from "@/lib/marketing-window";
+import { DEFAULT_WINDOW_END, DEFAULT_WINDOW_START } from "@/lib/marketing-window";
+import { SendingWindowFields } from "./sending-window";
 
 type Data<S extends SettingsData["section"]> = Extract<SettingsData, { section: S }>;
 type SaveFn = (merchantId: string, fd: FormData) => Promise<ActionResult>;
@@ -811,26 +812,11 @@ export function NotificationsSection({ merchantId, data, canEdit }: { merchantId
               Offers, campaigns and birthday messages are only sent inside these hours, in your clinic&apos;s timezone. Order and payment
               notifications are unaffected — clients are waiting for those.
             </p>
-            <div className="grid grid-cols-2 gap-3">
-              <SelectField
-                label="From"
-                name="marketingWindowStartMinutes"
-                defaultValue={String(s?.marketingWindowStartMinutes ?? DEFAULT_WINDOW_START)}
-                options={windowChoices().map((c) => ({ value: String(c.value), label: c.label }))}
-                errors={errors}
-              />
-              <SelectField
-                label="Until"
-                name="marketingWindowEndMinutes"
-                defaultValue={String(s?.marketingWindowEndMinutes ?? DEFAULT_WINDOW_END)}
-                options={windowChoices().map((c) => ({ value: String(c.value), label: c.label }))}
-                errors={errors}
-              />
-            </div>
-            <p className="text-[12px] text-ink-muted">
-              Between {formatWindowTime(EARLIEST_MINUTES)} and {formatWindowTime(LATEST_MINUTES)}, at least an hour wide. Anything due outside
-              your window waits until it next opens.
-            </p>
+            <SendingWindowFields
+              startMinutes={s?.marketingWindowStartMinutes ?? DEFAULT_WINDOW_START}
+              endMinutes={s?.marketingWindowEndMinutes ?? DEFAULT_WINDOW_END}
+              errors={errors}
+            />
             <DailyLimitField defaultValue={s?.marketingDailyLimit ?? 1} errors={errors} />
           </FormSection>
         )}

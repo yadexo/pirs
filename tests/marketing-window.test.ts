@@ -3,8 +3,12 @@ import {
   DEFAULT_WINDOW,
   DEFAULT_WINDOW_END,
   DEFAULT_WINDOW_START,
+  DAY_MINUTES,
+  birthdayMinutes,
   checkWindow,
   formatWindowTime,
+  includesNight,
+  isAllDay,
   isWithinWindow,
   localDayAndMonth,
   localDayKey,
@@ -112,30 +116,62 @@ describe("what a clinic may choose", () => {
     expect(checkWindow(7 * 60, 22 * 60)).toEqual({ ok: true });
   });
 
-  it("refuses anything before 07:00 or after 22:00", () => {
-    expect(checkWindow(6 * 60, 18 * 60)).toMatchObject({ ok: false, field: "start" });
-    expect(checkWindow(9 * 60, 23 * 60)).toMatchObject({ ok: false, field: "end" });
+  it("accepts the night, and the whole day, because that is the clinic's call", () => {
+    expect(checkWindow(0, DAY_MINUTES)).toEqual({ ok: true }); // 24/7
+    expect(checkWindow(6 * 60, 23 * 60)).toEqual({ ok: true });
+    expect(checkWindow(22 * 60, DAY_MINUTES)).toEqual({ ok: true });
+    // A quarter of an hour is a real window, even if it is a small one.
+    expect(checkWindow(9 * 60, 9 * 60 + 15)).toEqual({ ok: true });
   });
 
-  it("refuses a window that ends before it starts", () => {
+  it("still refuses a window that ends before it starts", () => {
     expect(checkWindow(18 * 60, 9 * 60)).toMatchObject({ ok: false, field: "end" });
     expect(checkWindow(9 * 60, 9 * 60)).toMatchObject({ ok: false, field: "end" });
   });
 
-  it("refuses a window too narrow to be usable", () => {
-    expect(checkWindow(9 * 60, 9 * 60 + 45)).toMatchObject({ ok: false, field: "end" });
-    expect(checkWindow(9 * 60, 10 * 60)).toEqual({ ok: true });
-  });
-
-  it("refuses times that aren't quarter hours", () => {
+  it("refuses times that are not on the quarter hour, or off the clock", () => {
     expect(checkWindow(9 * 60 + 7, 18 * 60)).toMatchObject({ ok: false, field: "start" });
+    expect(checkWindow(-15, 18 * 60)).toMatchObject({ ok: false, field: "start" });
+    expect(checkWindow(9 * 60, DAY_MINUTES + 15)).toMatchObject({ ok: false, field: "end" });
+    // Midnight is an end, not a start: a window has to have somewhere to go.
+    expect(checkWindow(DAY_MINUTES, DAY_MINUTES)).toMatchObject({ ok: false, field: "start" });
   });
 
-  it("offers quarter hours across the allowed range", () => {
-    const choices = windowChoices();
-    expect(choices[0]).toEqual({ value: 7 * 60, label: "07:00" });
-    expect(choices[choices.length - 1]).toEqual({ value: 22 * 60, label: "22:00" });
-    expect(choices).toHaveLength((22 - 7) * 4 + 1);
+  it("offers every quarter hour, with 24:00 only as an end", () => {
+    const starts = windowChoices("start");
+    const ends = windowChoices("end");
+    expect(starts[0]).toEqual({ value: 0, label: "00:00" });
+    expect(starts[starts.length - 1]).toEqual({ value: DAY_MINUTES - 15, label: "23:45" });
+    expect(ends[0]).toEqual({ value: 15, label: "00:15" });
+    expect(ends[ends.length - 1]).toEqual({ value: DAY_MINUTES, label: "24:00" });
+    expect(starts).toHaveLength(96);
+    expect(ends).toHaveLength(96);
+  });
+
+  it("sends round the clock when the window is the whole day", () => {
+    const allDay: SendingWindow = { startMinutes: 0, endMinutes: DAY_MINUTES, timeZone: "Europe/Amsterdam" };
+    expect(isAllDay(allDay)).toBe(true);
+    expect(isAllDay(window(9, 22))).toBe(false);
+    for (const hour of [0, 3, 7, 13, 21, 23]) {
+      const at = utc(`2026-07-01T${String((hour + 22) % 24).padStart(2, "0")}:00:00Z`);
+      expect(isWithinWindow(at, allDay)).toBe(true);
+      expect(nextSendableTime(at, allDay)).toEqual(at);
+    }
+  });
+
+  it("warns about night hours without refusing them", () => {
+    expect(includesNight(9 * 60, 22 * 60)).toBe(false);
+    expect(includesNight(8 * 60, 22 * 60)).toBe(false);
+    expect(includesNight(7 * 60, 22 * 60)).toBe(true);
+    expect(includesNight(9 * 60, 22 * 60 + 15)).toBe(true);
+    expect(includesNight(0, DAY_MINUTES)).toBe(true);
+  });
+
+  it("sends birthday greetings at nine, or later if the clinic opens later", () => {
+    // 24/7 must not mean happy birthday at midnight.
+    expect(birthdayMinutes({ startMinutes: 0, endMinutes: DAY_MINUTES, timeZone: "UTC" })).toBe(9 * 60);
+    expect(birthdayMinutes(window(7, 20))).toBe(9 * 60);
+    expect(birthdayMinutes(window(11, 20))).toBe(11 * 60);
   });
 });
 
@@ -152,8 +188,18 @@ describe("reading a clinic's stored window", () => {
     expect(windowFrom(null, null)).toEqual(DEFAULT_WINDOW);
   });
 
-  it("ignores a stored pair that breaks the rules rather than sending at 03:00", () => {
-    expect(windowFrom({ marketingWindowStartMinutes: 2 * 60, marketingWindowEndMinutes: 23 * 60 }, "Europe/Amsterdam")).toEqual(DEFAULT_WINDOW);
+  it("keeps an early or late window, because that is now the clinic's to choose", () => {
+    expect(windowFrom({ marketingWindowStartMinutes: 2 * 60, marketingWindowEndMinutes: 23 * 60 }, "Europe/Amsterdam")).toEqual({
+      startMinutes: 2 * 60,
+      endMinutes: 23 * 60,
+      timeZone: "Europe/Amsterdam",
+    });
+  });
+
+  it("ignores a stored pair that could never send at all", () => {
+    // End before start: nothing would ever go out. The default is safer than
+    // silence, and no form can produce this.
+    expect(windowFrom({ marketingWindowStartMinutes: 20 * 60, marketingWindowEndMinutes: 8 * 60 }, "Europe/Amsterdam")).toEqual(DEFAULT_WINDOW);
   });
 });
 
