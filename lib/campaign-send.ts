@@ -18,6 +18,20 @@ export interface CampaignSendOutcome {
   cancelled: "offer-inactive" | "offer-ended" | null;
 }
 
+/**
+ * Why the clients who didn't get it didn't get it, in the clinic's words.
+ * "0 devices" on its own is the kind of answer that costs someone an evening.
+ */
+export function describeOutcome(counts: { "no-consent": number; "already-today": number; "quiet-hours": number; "no-devices": number }): string | null {
+  const parts: string[] = [];
+  const clients = (n: number) => `${n} ${n === 1 ? "client" : "clients"}`;
+  if (counts["no-consent"] > 0) parts.push(`${clients(counts["no-consent"])}: offers and promotions off`);
+  if (counts["already-today"] > 0) parts.push(`${clients(counts["already-today"])}: daily limit reached`);
+  if (counts["quiet-hours"] > 0) parts.push(`${clients(counts["quiet-hours"])}: outside your sending hours`);
+  if (counts["no-devices"] > 0) parts.push(`${clients(counts["no-devices"])}: no notifications turned on`);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 /** The link a notification opens: the offer's product, or the shop. */
 export function campaignPath(productId: string | null): string {
   return productId ? `/shop?product=${encodeURIComponent(productId)}` : "/shop";
@@ -63,7 +77,13 @@ export async function sendCampaignNow(campaignId: string, now: Date = new Date()
 
   const worth = promotionStillWorthAnnouncing(campaign.promotion, now);
   if (!worth.ok) {
-    await rawDb.notificationCampaign.updateMany({ where: { id: campaign.id }, data: { status: "CANCELLED" } });
+    await rawDb.notificationCampaign.updateMany({
+      where: { id: campaign.id },
+      data: {
+        status: "CANCELLED",
+        outcomeNote: worth.reason === "offer-ended" ? "Cancelled: the offer had ended by send time" : "Cancelled: the offer was not active at send time",
+      },
+    });
     return { devices: 0, clients: 0, cancelled: worth.reason };
   }
 
@@ -88,7 +108,18 @@ export async function sendCampaignNow(campaignId: string, now: Date = new Date()
 
   await rawDb.notificationCampaign.updateMany({
     where: { id: campaign.id },
-    data: { status: "SENT", sentAt: now, devicesReached: result.devices },
+    data: {
+      status: "SENT",
+      sentAt: now,
+      devicesReached: result.devices,
+      // Kept per reason, so the dashboard can say why rather than showing a
+      // bare zero.
+      skippedNoConsent: result.skipped["no-consent"],
+      skippedDailyCap: result.skipped["already-today"],
+      skippedOutsideHours: result.skipped["quiet-hours"],
+      skippedNoDevices: result.skipped["no-devices"],
+      outcomeNote: describeOutcome(result.skipped),
+    },
   });
 
   return { devices: result.devices, clients: result.clients, cancelled: null };

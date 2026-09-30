@@ -136,7 +136,7 @@ async function loadItems(
           where: { status: { in: ["SCHEDULED", "SENT"] } },
           orderBy: [{ sentAt: "desc" }, { scheduledAt: "desc" }],
           take: 1,
-          select: { status: true, scheduledAt: true, sentAt: true, devicesReached: true },
+          select: { status: true, scheduledAt: true, sentAt: true, devicesReached: true, outcomeNote: true },
         },
       },
     });
@@ -149,6 +149,8 @@ async function loadItems(
         : notice.status === "SCHEDULED"
           ? `notification ${shortDate(notice.scheduledAt)}`
           : `notified ${notice.devicesReached} ${notice.devicesReached === 1 ? "device" : "devices"}`;
+      // Why the others missed out, so a bare zero is never the whole story.
+      const why = notice?.outcomeNote ?? null;
       return {
         kind: "promotion",
         id: r.id,
@@ -157,6 +159,7 @@ async function loadItems(
           r.code ? `Code ${r.code}` : "Automatic",
           r.endAt.getTime() < now ? "ended" : r.startAt.getTime() > now ? "scheduled" : null,
           notified,
+          why,
         ]
           .filter(Boolean)
           .join(" · "),

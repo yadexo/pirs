@@ -104,14 +104,26 @@ export function PackageForm({ merchantId, currency, item, options, errors }: Ite
  * instant to the timezone of the person choosing it — otherwise the server
  * would read "09:00" in whatever timezone it happens to run in.
  */
-function DateTimeField({ label, name, iso, errors }: { label: string; name: string; iso: string | undefined; errors: FieldErrors }) {
+/**
+ * A wall-clock picker that posts exactly what the clinic typed.
+ *
+ * It used to convert to an instant here, in the browser, which quietly used
+ * the staff member's own timezone. The server reads it in the clinic's
+ * timezone instead, so a clinic manager abroad still sets the clinic's hours.
+ */
+function DateTimeField({ label, name, iso, errors, disabled }: { label: string; name: string; iso: string | undefined; errors: FieldErrors; disabled?: boolean }) {
   const [local, setLocal] = React.useState(toLocalInput(iso));
-  const instant = local ? new Date(local) : null;
   return (
-    <>
-      <TextField label={label} name={`${name}Local`} type="datetime-local" value={local} onChange={(e) => setLocal(e.target.value)} errors={errors && { [`${name}Local`]: errors[name] ?? "" }} required />
-      <input type="hidden" name={name} value={instant && !Number.isNaN(instant.getTime()) ? instant.toISOString() : ""} />
-    </>
+    <TextField
+      label={label}
+      name={`${name}Local`}
+      type="datetime-local"
+      value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      errors={errors && { [`${name}Local`]: errors[`${name}Local`] ?? errors[name] ?? "" }}
+      disabled={disabled}
+      required={!disabled}
+    />
   );
 }
 
@@ -162,6 +174,8 @@ export function PromotionForm({ merchantId, currency, item, options, errors }: I
   // until the clinic edits the notification itself.
   const [title, setTitle] = React.useState(str(item.title));
   const [description, setDescription] = React.useState(str(item.description));
+  // A new offer starts when it is saved; an existing one keeps its date.
+  const [startNow, setStartNow] = React.useState(isNew(item));
   const start = str(item.startAt) || new Date().toISOString();
   const end = str(item.endAt) || new Date(Date.now() + 30 * 864e5).toISOString();
   const storedValue = item.discountValue as number | undefined;
@@ -218,10 +232,18 @@ export function PromotionForm({ merchantId, currency, item, options, errors }: I
         <MultiPick label="Individual products" name="productIds" options={options.products} selected={scope.productIds} />
       </FormSection>
       <FormSection title="When">
+        <CheckboxField
+          name="startNow"
+          label="Start immediately"
+          description="The offer starts the moment you save, so filling in this form doesn't leave it starting in the past."
+          checked={startNow}
+          onChange={setStartNow}
+        />
         <div className="grid grid-cols-2 gap-3">
-          <DateTimeField label="Starts" name="startAt" iso={start} errors={errors} />
+          {!startNow && <DateTimeField label="Starts" name="startAt" iso={start} errors={errors} />}
           <DateTimeField label="Ends" name="endAt" iso={end} errors={errors} />
         </div>
+        <p className="text-[12px] text-ink-muted">Times are your clinic&apos;s own, whatever timezone you happen to be in.</p>
       </FormSection>
       <FormSection title="Who and how often">
         <SelectField

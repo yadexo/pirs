@@ -7,7 +7,7 @@ import { ActionError, requireMerchantAction, runAction, type ActionResult } from
 import { rateLimit } from "@/lib/rate-limit";
 import { sendCampaignNow } from "@/lib/campaign-send";
 import { marketingWindowFor } from "@/lib/marketing";
-import { nextSendableTime } from "@/lib/marketing-window";
+import { instantFromLocal, nextSendableTime } from "@/lib/marketing-window";
 import { vapidConfigured } from "@/lib/web-push";
 
 /**
@@ -34,17 +34,6 @@ const schema = z
     scheduledAt: z.string().trim().max(40).optional(),
     /** Set to send to one client instead of everyone. */
     customerProfileId: z.string().trim().max(60).optional(),
-  })
-  .superRefine((v, ctx) => {
-    if (!v.scheduledAt) return;
-    const when = new Date(v.scheduledAt);
-    if (Number.isNaN(when.getTime())) {
-      ctx.addIssue({ code: "custom", path: ["scheduledAt"], message: "That isn't a date and time." });
-      return;
-    }
-    if (when.getTime() < Date.now() - 60_000) {
-      ctx.addIssue({ code: "custom", path: ["scheduledAt"], message: "That time has already passed." });
-    }
   });
 
 /** Checks a product or promotion belongs to this clinic before linking to it. */
@@ -83,10 +72,19 @@ export async function saveCampaignAction(merchantId: string, input: z.input<type
     if (!limit.ok) throw new ActionError(`That's ${CAMPAIGNS_PER_HOUR} messages this hour, which is the limit. Try again later.`);
 
     const now = new Date();
-    const wanted = data.scheduledAt ? new Date(data.scheduledAt) : now;
+    const window = await marketingWindowFor(merchantId);
+    // A wall clock typed by the clinic means the clinic's own time — not
+    // the server's, which in production is UTC.
+    let wanted = now;
+    if (data.scheduledAt) {
+      const picked = instantFromLocal(data.scheduledAt, window.timeZone);
+      if (!picked) throw new ActionError("That isn't a date and time.");
+      if (picked.getTime() < now.getTime() - 60_000) throw new ActionError("That time has already passed.");
+      wanted = picked;
+    }
     // Quiet hours move a send rather than refusing it, so a clinic scheduling
     // something for 22:00 gets it at 09:00 instead of silence.
-    const when = nextSendableTime(wanted, await marketingWindowFor(merchantId));
+    const when = nextSendableTime(wanted, window);
     const later = when.getTime() > now.getTime() + 30_000;
 
     const campaign = await rawDb.notificationCampaign.create({

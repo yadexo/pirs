@@ -90,6 +90,7 @@ export async function loadSettingsSection(db: TenantDb, merchantId: string, sect
             scheduledAt: true,
             sentAt: true,
             devicesReached: true,
+            outcomeNote: true,
             customerProfile: { select: { firstName: true, lastName: true } },
           },
         }),
@@ -102,6 +103,7 @@ export async function loadSettingsSection(db: TenantDb, merchantId: string, sect
         scheduledAt: c.scheduledAt?.toISOString() ?? null,
         sentAt: c.sentAt?.toISOString() ?? null,
         devicesReached: c.devicesReached,
+        outcomeNote: c.outcomeNote,
         clientName: c.customerProfile ? `${c.customerProfile.firstName} ${c.customerProfile.lastName}`.trim() : null,
       }));
       return plain({ section, settings, subscribedDevices, products, campaigns });

@@ -1721,6 +1721,16 @@ model NotificationCampaign {
   marketing             Boolean                     @default(true)
   /// Devices the push service accepted this for.
   devicesReached        Int                         @default(0)
+  /// Why the rest were left out, counted per reason. A clinic looking at
+  /// "0 devices" should be able to see whether nobody wanted offers, or
+  /// everybody had already heard from them today.
+  skippedNoConsent      Int                         @default(0)
+  skippedDailyCap       Int                         @default(0)
+  skippedOutsideHours   Int                         @default(0)
+  skippedNoDevices      Int                         @default(0)
+  /// One line for anything that isn't a per-client skip: held for the hours,
+  /// or cancelled because the offer was over by the time it ran.
+  outcomeNote           String?
   createdByStaffProfileId String?
   createdByStaffProfile StaffProfile?               @relation(fields: [createdByStaffProfileId], references: [id], onDelete: SetNull)
 

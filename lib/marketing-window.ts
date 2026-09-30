@@ -194,6 +194,49 @@ export function localDayRange(at: Date, timeZone: string = MARKETING_TIMEZONE): 
   return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
 }
 
+/**
+ * The instant meant by a wall-clock time in a timezone — "2026-09-30T15:30"
+ * in Europe/Amsterdam, not on whatever machine happens to run this.
+ *
+ * `new Date("2026-09-30T15:30")` reads that string in the *server's* zone,
+ * which on Vercel is UTC. A clinic scheduling something for half past three
+ * would have it sent at half past five their time. So the offset is worked
+ * out from the timezone itself, and checked a second time because the offset
+ * can differ either side of the moment in question — which is exactly what
+ * happens on the two nights a year the clocks change.
+ *
+ * Returns null for anything that isn't a wall-clock string.
+ */
+export function instantFromLocal(wallClock: string, timeZone: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(wallClock.trim());
+  if (!m) return null;
+  const [, year, month, day, hour, minute] = m.map(Number) as [number, number, number, number, number, number];
+
+  // Start from the same wall clock read as UTC, then subtract the zone's
+  // offset at that moment. One correction is enough for every hour except the
+  // ones the clocks skip, so it is applied twice and the second is trusted.
+  const naive = Date.UTC(year, month - 1, day, hour, minute);
+  let guess = new Date(naive - offsetAt(new Date(naive), timeZone));
+  guess = new Date(naive - offsetAt(guess, timeZone));
+  return Number.isNaN(guess.getTime()) ? null : guess;
+}
+
+/** How far ahead of UTC a zone is at an instant, in milliseconds. */
+function offsetAt(at: Date, timeZone: string): number {
+  const p = parts(at, timeZone);
+  const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute);
+  // Seconds and milliseconds are not part of a wall-clock input.
+  const rounded = Math.floor(at.getTime() / 60000) * 60000;
+  return asUtc - rounded;
+}
+
+/** The wall-clock string for an instant in a timezone, for a datetime-local input. */
+export function localInputValue(at: Date, timeZone: string): string {
+  const p = parts(at, timeZone);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
+}
+
 /** "09:00" for 540 — used by the settings form and in messages to clinics. */
 export function formatWindowTime(minutes: number): string {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;

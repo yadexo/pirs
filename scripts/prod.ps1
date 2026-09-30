@@ -18,9 +18,10 @@ to delete and nothing that could be committed by accident.
   npm run prod:reset-admin -- --email you@you.com
   npm run prod:client -- --clinic testclinic --email client@you.com
   npm run prod:clinic-login -- --clinic testclinic   # who can open a clinic's portal
+  npm run prod:push-debug -- --clinic testclinic     # why notifications did or didn't arrive
 
 .PARAMETER Task
-status | migrate | stripe | apple-pay | items | admin | reset-admin | client | clinic-login
+status | migrate | stripe | apple-pay | items | admin | reset-admin | client | clinic-login | push-debug
 
 .PARAMETER Url
 The connection string, for automation. Prefer the prompt: an argument is saved
@@ -32,7 +33,7 @@ Skip the confirmation. Intended for scripts, not for day-to-day use.
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("status", "migrate", "stripe", "apple-pay", "items", "admin", "reset-admin", "client", "clinic-login")]
+  [ValidateSet("status", "migrate", "stripe", "apple-pay", "items", "admin", "reset-admin", "client", "clinic-login", "push-debug")]
   [string]$Task = "status",
 
   [string]$Url,
@@ -74,6 +75,7 @@ $commands = @{
   "reset-admin"  = @("npx", "tsx", "prisma/reset-platform-admin-password.ts")
   "client"       = @("npx", "tsx", "prisma/create-client-login.ts")
   "clinic-login" = @("npx", "tsx", "prisma/clinic-login.ts")
+  "push-debug"   = @("npx", "tsx", "prisma/push-debug.ts")
 }
 $command = $commands[$Task]
 $exe = $command[0]

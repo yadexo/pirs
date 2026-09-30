@@ -30,6 +30,7 @@
     "prod:reset-admin": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 reset-admin",
     "prod:client": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 client",
     "prod:clinic-login": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 clinic-login",
+    "prod:push-debug": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 push-debug",
     "prisma:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
     "serve": "node scripts/serve.mjs"

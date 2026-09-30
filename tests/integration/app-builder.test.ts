@@ -181,15 +181,29 @@ describe("App Builder actions", () => {
 
     it("stores offers correctly and keeps codes unique per clinic only", async () => {
       signIn("owner");
+      // The form posts wall-clock times; the action reads them in the
+      // clinic's timezone rather than the server's.
       const offer = (over: Record<string, string>) =>
-        fd({ title: "Spring", startAt: "2026-10-01T09:00", endAt: "2026-10-31T18:00", discountType: "FIXED_AMOUNT", discountValue: "12.50", code: "spring", active: true, ...over });
+        fd({
+          title: "Spring",
+          startAtLocal: "2026-10-01T09:00",
+          endAtLocal: "2026-10-31T18:00",
+          discountType: "FIXED_AMOUNT",
+          discountValue: "12.50",
+          code: "spring",
+          active: true,
+          ...over,
+        });
 
       const res = await A.savePromotionAction(clinic, null, offer({}));
       const saved = await rawDb.promotion.findUnique({ where: { id: (res as { id: string }).id } });
       expect(saved).toMatchObject({ code: "SPRING", discountValue: 1250 });
+      // 09:00 in Amsterdam in October is 07:00 UTC — not 09:00 UTC, which is
+      // what reading it on the server's clock used to give.
+      expect(saved!.startAt.toISOString()).toBe("2026-10-01T07:00:00.000Z");
 
       expect((await A.savePromotionAction(clinic, null, offer({ title: "Again" })) as { fieldErrors: Record<string, string> }).fieldErrors.code).toMatch(/already uses/);
-      expect((await A.savePromotionAction(clinic, null, offer({ endAt: "2026-09-01T00:00" })) as { fieldErrors: Record<string, string> }).fieldErrors.endAt).toBeDefined();
+      expect((await A.savePromotionAction(clinic, null, offer({ endAtLocal: "2026-09-01T00:00" })) as { fieldErrors: Record<string, string> }).fieldErrors.endAtLocal).toBeDefined();
       expect((await A.savePromotionAction(clinic, null, offer({ discountType: "PERCENT", discountValue: "150", code: "X" })) as { fieldErrors: Record<string, string> }).fieldErrors.discountValue).toBeDefined();
 
       signIn("rival-owner");

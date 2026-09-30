@@ -1,6 +1,6 @@
 import "server-only";
 import { rawDb } from "@/lib/db";
-import { isWithinWindow, localDayAndMonth, localYear, windowFrom } from "@/lib/marketing-window";
+import { formatWindowTime, isWithinWindow, localDayAndMonth, localYear, windowFrom } from "@/lib/marketing-window";
 import { marketingWindowFor, sendMarketingTo } from "@/lib/marketing";
 import { sendCampaignNow } from "@/lib/campaign-send";
 
@@ -65,6 +65,13 @@ async function sendDueCampaigns(now: Date): Promise<{ campaigns: number; devices
     // Marketing waits for the clinic's own sending window; a service
     // campaign does not.
     if (campaign.marketing && !isWithinWindow(now, await marketingWindowFor(campaign.tenantId))) {
+      const window = await marketingWindowFor(campaign.tenantId);
+      // Say so on the campaign itself: a clinic watching a scheduled message
+      // sit there deserves to know it is waiting, not broken.
+      await rawDb.notificationCampaign.updateMany({
+        where: { id: campaign.id, status: "SCHEDULED" },
+        data: { outcomeNote: `Waiting until ${formatWindowTime(window.startMinutes)} — outside your sending hours` },
+      });
       held += 1;
       continue;
     }

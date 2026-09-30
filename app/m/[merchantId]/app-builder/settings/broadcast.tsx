@@ -26,6 +26,8 @@ export interface CampaignRow {
   scheduledAt: string | null;
   sentAt: string | null;
   devicesReached: number;
+  /** Why anyone was left out — shown under the row. */
+  outcomeNote: string | null;
   clientName: string | null;
 }
 
@@ -168,6 +170,7 @@ export function BroadcastForm({
                         : c.status.toLowerCase()}
                     {c.clientName ? ` · ${c.clientName} only` : ""}
                   </p>
+                  {c.outcomeNote && <p className="mt-0.5 text-[11px] text-ink-muted">{c.outcomeNote}</p>}
                 </div>
                 <Pill tone={STATUS_TONE[c.status] ?? "neutral"}>{c.status.toLowerCase()}</Pill>
                 {c.status === "SCHEDULED" && (

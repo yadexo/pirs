@@ -18,7 +18,7 @@ import type { TenantDb } from "@/lib/tenant-db";
 import { pricingOptionsSchema, toStoredPricingOptions, EMPTY_PRICING } from "@/lib/pricing-options";
 import { sendCampaignNow } from "@/lib/campaign-send";
 import { marketingAudience, marketingWindowFor } from "@/lib/marketing";
-import { nextSendableTime } from "@/lib/marketing-window";
+import { instantFromLocal, nextSendableTime } from "@/lib/marketing-window";
 
 /**
  * Every create/edit/archive behind the App Builder tabs. Each action names the
@@ -85,14 +85,6 @@ const imageUrlString = z
   .max(2048)
   .refine((v) => v.startsWith("/uploads/") || /^https:\/\/[^\s"'<>]+$/.test(v), "Upload the image again");
 const imageUrl = imageUrlString.optional();
-
-const dateTime = (label: string) =>
-  z.preprocess(
-    (v) => (v === undefined || v === "" ? undefined : new Date(String(v))),
-    z
-      .date({ required_error: `Choose ${label}`, invalid_type_error: `Choose ${label}` })
-      .refine((d) => !Number.isNaN(d.getTime()), `Choose ${label}`),
-  );
 
 const fieldError = (field: string, message: string) => new z.ZodError([{ code: "custom", path: [field], message }]);
 
@@ -593,13 +585,21 @@ export async function savePackageAction(merchantId: string, id: string | null, f
 // Offers (promotions)
 // ---------------------------------------------------------------------------
 
+/** The notify choice, read before the rest of the form is picked apart. */
+function notifyModeOf(data: { notifyMode: string }): string {
+  return data.notifyMode;
+}
+
 const promotionSchema = z
   .object({
     title: name("a title"),
     description: longText,
     imageUrl,
-    startAt: dateTime("a start date"),
-    endAt: dateTime("an end date"),
+    // Wall-clock strings from the form, read in the clinic's timezone below.
+    startAtLocal: z.string().trim().max(40).optional(),
+    endAtLocal: z.string().trim().max(40).optional(),
+    /** Ticked by default when creating: the offer starts the moment it saves. */
+    startNow: z.boolean().default(false),
     discountType: z.enum(["PERCENT", "FIXED_AMOUNT"], { errorMap: () => ({ message: "Choose a discount type" }) }),
     discountValue: z.preprocess(
       toNumber,
@@ -635,7 +635,8 @@ const promotionSchema = z
     notifyAgain: z.boolean().default(false),
   })
   .superRefine((p, ctx) => {
-    if (p.endAt <= p.startAt) ctx.addIssue({ code: "custom", path: ["endAt"], message: "End must be after the start" });
+    // The dates themselves are checked in the action, where the clinic's
+    // timezone is known — "15:30" means nothing without one.
     if (p.discountType === "PERCENT" && (p.discountValue > 100 || !Number.isInteger(p.discountValue)))
       ctx.addIssue({ code: "custom", path: ["discountValue"], message: "A whole percentage from 1 to 100" });
     if (p.discountType === "FIXED_AMOUNT" && !/^\d+(\.\d{1,2})?$/.test(String(p.discountValue)))
@@ -646,17 +647,8 @@ const promotionSchema = z
       if (!p.notifyTitle) ctx.addIssue({ code: "custom", path: ["notifyTitle"], message: "Give the notification a title" });
       if (!p.notifyBody) ctx.addIssue({ code: "custom", path: ["notifyBody"], message: "Write the message" });
     }
-    if (p.notifyMode === "schedule") {
-      const when = p.notifyAt ? new Date(p.notifyAt) : null;
-      if (!when || Number.isNaN(when.getTime())) {
-        ctx.addIssue({ code: "custom", path: ["notifyAt"], message: "Pick a date and time" });
-      } else if (when.getTime() < Date.now() - 60_000) {
-        ctx.addIssue({ code: "custom", path: ["notifyAt"], message: "That time has already passed" });
-      } else if (when.getTime() < p.startAt.getTime()) {
-        // Announcing an offer before it can be used sends clients to a shop
-        // that still shows the old price.
-        ctx.addIssue({ code: "custom", path: ["notifyAt"], message: "The offer hasn't started yet at that time" });
-      }
+    if (p.notifyMode === "schedule" && !p.notifyAt) {
+      ctx.addIssue({ code: "custom", path: ["notifyAt"], message: "Pick a date and time" });
     }
   });
 
@@ -667,8 +659,9 @@ export async function savePromotionAction(merchantId: string, id: string | null,
       title: formText(fd, "title"),
       description: formText(fd, "description"),
       imageUrl: formText(fd, "imageUrl"),
-      startAt: formText(fd, "startAt"),
-      endAt: formText(fd, "endAt"),
+      startAtLocal: formText(fd, "startAtLocal"),
+      endAtLocal: formText(fd, "endAtLocal"),
+      startNow: formBool(fd, "startNow"),
       discountType: formText(fd, "discountType"),
       discountValue: formText(fd, "discountValue"),
       code: formText(fd, "code"),
@@ -694,19 +687,72 @@ export async function savePromotionAction(merchantId: string, id: string | null,
     const tagged = data.customerSegment === "TAGGED";
     if (tagged && !(await ctx.db.customerTag.findFirst({ where: { id: data.segmentTagId } }))) throw fieldError("segmentTagId", "Choose a tag");
 
+    // ---- the times, read in the clinic's own timezone ---------------------
+    // A wall clock means nothing on its own: "15:30" is 13:30 UTC in
+    // Amsterdam in summer and 14:30 in winter. Reading it on the server's
+    // clock — UTC in production — is what made offers look like they started
+    // two hours later than the clinic intended.
+    const now = new Date();
+    const window = await marketingWindowFor(merchantId);
+    const zone = window.timeZone;
+
+    // "Start immediately" is the honest default: the minutes spent filling in
+    // the form must not leave the offer starting in the future.
+    const startAt = data.startNow || !data.startAtLocal ? now : instantFromLocal(data.startAtLocal, zone);
+    if (!startAt) throw fieldError("startAtLocal", "Choose a start date");
+    const endAt = data.endAtLocal ? instantFromLocal(data.endAtLocal, zone) : null;
+    if (!endAt) throw fieldError("endAtLocal", "Choose an end date");
+    if (endAt <= startAt) throw fieldError("endAtLocal", "End must be after the start");
+
+    // An offer whose start has just passed has started. Only a start still
+    // genuinely ahead of us delays its own announcement.
+    const startsLater = startAt.getTime() > now.getTime() + 60_000;
+
+    let notifyWhen: Date | null = null;
+    if (notifyModeOf(data) === "schedule") {
+      notifyWhen = data.notifyAt ? instantFromLocal(data.notifyAt, zone) : null;
+      if (!notifyWhen) throw fieldError("notifyAt", "Pick a date and time");
+      if (notifyWhen.getTime() < now.getTime() - 60_000) throw fieldError("notifyAt", "That time has already passed");
+      if (startsLater && notifyWhen.getTime() < startAt.getTime()) {
+        // Announcing an offer before it can be used sends clients to a shop
+        // that still shows the old price.
+        throw fieldError("notifyAt", "The offer hasn't started yet at that time");
+      }
+    }
+
     // The scope is stored as eligibility rows, not on the promotion itself.
-    const { productIds, serviceIds, productCategoryIds, serviceCategoryIds, minOrder, notifyMode, notifyTitle, notifyBody, notifyAt, notifyAgain, ...promotionFields } =
-      data;
+    const {
+      productIds,
+      serviceIds,
+      productCategoryIds,
+      serviceCategoryIds,
+      minOrder,
+      notifyMode,
+      notifyTitle,
+      notifyBody,
+      notifyAgain,
+    } = data;
+
+    // Written out rather than spread: the form carries three fields that are
+    // not columns (the two wall clocks and "start immediately"), and listing
+    // the row makes it obvious which is which.
     const values = {
-      ...promotionFields,
-      // Fixed amounts are typed in currency units and stored in cents.
-      discountValue: data.discountType === "FIXED_AMOUNT" ? Math.round(data.discountValue * 100) : data.discountValue,
+      title: data.title,
       description: data.description ?? null,
       imageUrl: data.imageUrl ?? null,
+      startAt,
+      endAt,
+      discountType: data.discountType,
+      // Fixed amounts are typed in currency units and stored in cents.
+      discountValue: data.discountType === "FIXED_AMOUNT" ? Math.round(data.discountValue * 100) : data.discountValue,
       code: data.code ?? null,
       usageLimit: data.usageLimit ?? null,
       perCustomerLimit: data.perCustomerLimit ?? null,
+      appOnly: data.appOnly,
+      customerSegment: data.customerSegment,
       segmentTagId: tagged ? (data.segmentTagId ?? null) : null,
+      active: data.active,
+      autoApply: data.autoApply,
       minOrderCents: minOrder ? Math.round(minOrder * 100) : null,
     };
 
@@ -757,7 +803,6 @@ export async function savePromotionAction(merchantId: string, id: string | null,
       if (!maySend) {
         notified = { devices: 0, scheduledFor: null, skippedNoPermission: true };
       } else {
-        const now = new Date();
         const already = await rawDb.notificationCampaign.findFirst({
           where: { tenantId: merchantId, promotionId: savedId, status: "SENT" },
           orderBy: { sentAt: "desc" },
@@ -775,9 +820,10 @@ export async function savePromotionAction(merchantId: string, id: string | null,
           data: { status: "CANCELLED" },
         });
 
-        // "Now" means when the offer starts, if that is still to come.
-        const wanted = notifyMode === "schedule" && notifyAt ? new Date(notifyAt) : data.startAt > now ? data.startAt : now;
-        const sendAt = nextSendableTime(wanted, await marketingWindowFor(merchantId));
+        // "Now" means when the offer starts, if that is genuinely still to
+        // come — a start a few minutes ago is a start.
+        const wanted = notifyWhen ?? (startsLater ? startAt : now);
+        const sendAt = nextSendableTime(wanted, window);
         const later = sendAt.getTime() > now.getTime() + 30_000;
 
         // A notification about one product opens that product; anything wider
