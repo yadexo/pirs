@@ -22,6 +22,7 @@ import {
   setItemActiveAction,
   type ItemKind,
 } from "@/lib/actions/app-builder";
+import { describeActionFailure } from "@/lib/action-failure";
 import { FORMS, type FormOptions } from "./item-forms";
 
 export interface CatalogItem {
@@ -157,12 +158,32 @@ export function CatalogTab({
 
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (editor.mode !== "open") return;
+    // Nothing below may end without either saving or saying why. A silent
+    // return here looks exactly like a dead button: the drawer stays open with
+    // the old values and no request is ever made.
+    if (editor.mode !== "open") {
+      setFormError("This editor isn't ready yet. Close it and open the item again.");
+      return;
+    }
     const action = SAVE[editor.kind];
-    if (!action) return;
+    if (!action) {
+      setFormError(`Saving a ${KIND_LABEL[editor.kind]} isn't supported here.`);
+      return;
+    }
+
     setBusy("save");
     setFormError(null);
-    const res = await action(merchantId, editor.id, new FormData(e.currentTarget));
+
+    // Read before awaiting: React clears currentTarget once the handler yields.
+    const form = e.currentTarget;
+    let res: Awaited<ReturnType<typeof action>>;
+    try {
+      res = await action(merchantId, editor.id, new FormData(form));
+    } catch (err) {
+      setBusy(null);
+      setFormError(describeActionFailure(err));
+      return;
+    }
     setBusy(null);
     if ("error" in res) {
       setErrors(res.fieldErrors);
@@ -329,7 +350,10 @@ export function CatalogTab({
                 <Button type="button" variant="outline" size="sm" onClick={close}>
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" form="app-builder-form" disabled={busy !== null}>
+                {/* Targets the form by id, so it must not be offered before
+                    that form exists — a submit button pointing at nothing is
+                    a button that does nothing, silently. */}
+                <Button type="submit" size="sm" form="app-builder-form" disabled={busy !== null || !options}>
                   {busy === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   {saveLabel}
                 </Button>

@@ -210,6 +210,42 @@ describe("App Builder actions", () => {
       expect(await A.savePromotionAction(rival, null, offer({}))).toMatchObject({ ok: true });
     });
 
+    it("saves an edit to an existing offer, including one that starts immediately", async () => {
+      signIn("owner");
+      // Exactly what the form posts when creating: "start immediately" ticked,
+      // so there is no start date field at all.
+      const created = await A.savePromotionAction(
+        clinic,
+        null,
+        fd({ title: "Autumn", startNow: true, endAtLocal: "2026-11-30T18:00", discountType: "PERCENT", discountValue: "15", active: true, autoApply: true }),
+      );
+      expect(created).toMatchObject({ ok: true });
+      const id = (created as { id: string }).id;
+
+      // And what it posts when editing that offer afterwards: a real start
+      // date, because an existing offer keeps the one it has.
+      const before = await rawDb.promotion.findUniqueOrThrow({ where: { id } });
+      const edited = await A.savePromotionAction(
+        clinic,
+        id,
+        fd({
+          title: "Autumn, renamed",
+          startAtLocal: "2026-10-05T09:00",
+          endAtLocal: "2026-12-01T18:00",
+          discountType: "PERCENT",
+          discountValue: "20",
+          active: true,
+          autoApply: true,
+        }),
+      );
+      expect(edited).toMatchObject({ ok: true, id });
+
+      const after = await rawDb.promotion.findUniqueOrThrow({ where: { id } });
+      expect(after).toMatchObject({ title: "Autumn, renamed", discountValue: 20 });
+      expect(after.startAt.toISOString()).toBe("2026-10-05T07:00:00.000Z");
+      expect(after.updatedAt.getTime()).toBeGreaterThanOrEqual(before.updatedAt.getTime());
+    });
+
     it("protects members: no silent price change, no archiving a plan in use", async () => {
       signIn("owner");
       const plan = await A.saveMembershipPlanAction(clinic, null, fd({ name: "Gold", price: "49", billingFrequency: "MONTHLY", benefits: "Free consult\n10% off products", active: true }));
