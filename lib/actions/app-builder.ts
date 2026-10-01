@@ -18,7 +18,7 @@ import type { TenantDb } from "@/lib/tenant-db";
 import { pricingOptionsSchema, toStoredPricingOptions, EMPTY_PRICING } from "@/lib/pricing-options";
 import { sendCampaignNow } from "@/lib/campaign-send";
 import { marketingAudience, marketingWindowFor } from "@/lib/marketing";
-import { instantFromLocal, nextSendableTime } from "@/lib/marketing-window";
+import { instantFromLocal, isWithinWindow, nextSendableTime } from "@/lib/marketing-window";
 
 /**
  * Every create/edit/archive behind the App Builder tabs. Each action names the
@@ -827,8 +827,11 @@ export async function savePromotionAction(merchantId: string, id: string | null,
         // "Now" means when the offer starts, if that is genuinely still to
         // come — a start a few minutes ago is a start.
         const wanted = notifyWhen ?? (startsLater ? startAt : now);
-        const sendAt = nextSendableTime(wanted, window);
-        const later = sendAt.getTime() > now.getTime() + 30_000;
+        // Stored as chosen; the gate decides at send time whether the window
+        // is open, so changing the hours later changes what happens to this.
+        const later = wanted.getTime() > now.getTime() + 30_000;
+        const closed = !isWithinWindow(now, window);
+        const sendAt = wanted;
 
         // A notification about one product opens that product; anything wider
         // opens the shop.
@@ -848,14 +851,15 @@ export async function savePromotionAction(merchantId: string, id: string | null,
             customerProfileId: (values as { customerProfileId?: string | null }).customerProfileId ?? null,
             ignoreDailyLimit: notifyIgnoreDailyLimit,
             scheduledAt: sendAt,
-            status: later ? "SCHEDULED" : "SENDING",
+            status: later || closed ? "SCHEDULED" : "SENDING",
           },
           select: { id: true },
         });
 
-        if (later) {
+        if (later || closed) {
           await ctx.audit("promotion.notify_scheduled", "Promotion", savedId, { campaignId: campaign.id, when: sendAt.toISOString() });
-          notified = { devices: 0, scheduledFor: sendAt.toISOString(), skippedNoPermission: false };
+          // The "waiting until" the clinic sees comes from the window as it is now.
+          notified = { devices: 0, scheduledFor: nextSendableTime(sendAt, window).toISOString(), skippedNoPermission: false };
         } else {
           const result = await sendCampaignNow(campaign.id, now);
           await ctx.audit("promotion.notified", "Promotion", savedId, { campaignId: campaign.id, devices: result.devices });

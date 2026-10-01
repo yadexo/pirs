@@ -27,8 +27,12 @@ export interface MarketingRunResult extends Record<string, number | string> {
   heldForQuietHours: number;
 }
 
-/** How far back to look — a campaign missed while the scheduler was down still goes. */
-const LOOKBACK_MS = 24 * 60 * 60 * 1000;
+/**
+ * How far back to look. Generous on purpose: a message now keeps the time it
+ * was created, so one made just after a narrow window closed waits for the
+ * next opening — and a scheduler outage on top of that should not lose it.
+ */
+const LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 
 function clinicPath(slug: string, rest = ""): string {
   const short = Boolean(process.env.CLIENT_APP_URL);

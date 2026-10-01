@@ -7,7 +7,7 @@ import { ActionError, requireMerchantAction, runAction, type ActionResult } from
 import { rateLimit } from "@/lib/rate-limit";
 import { sendCampaignNow } from "@/lib/campaign-send";
 import { marketingWindowFor } from "@/lib/marketing";
-import { instantFromLocal, nextSendableTime } from "@/lib/marketing-window";
+import { instantFromLocal, isWithinWindow, nextSendableTime } from "@/lib/marketing-window";
 import { vapidConfigured } from "@/lib/web-push";
 
 /**
@@ -84,10 +84,15 @@ export async function saveCampaignAction(merchantId: string, input: z.input<type
       if (picked.getTime() < now.getTime() - 60_000) throw new ActionError("That time has already passed.");
       wanted = picked;
     }
-    // Quiet hours move a send rather than refusing it, so a clinic scheduling
-    // something for 22:00 gets it at 09:00 instead of silence.
-    const when = nextSendableTime(wanted, window);
-    const later = when.getTime() > now.getTime() + 30_000;
+    // The time the clinic chose is the time that is stored. Whether the
+    // window is open is decided when the message is sent, not now — so
+    // widening the window later releases what is waiting, and narrowing it
+    // holds what was already scheduled. Keeping both decisions in one place
+    // is what makes those two behave the same way.
+    const later = wanted.getTime() > now.getTime() + 30_000;
+    const closed = !isWithinWindow(now, window);
+    // What the clinic is told, computed from the window as it stands.
+    const heldUntil = closed ? nextSendableTime(wanted, window) : null;
 
     const campaign = await rawDb.notificationCampaign.create({
       data: {
@@ -101,16 +106,22 @@ export async function saveCampaignAction(merchantId: string, input: z.input<type
         customerProfileId,
         productId: links.productId,
         promotionId: links.promotionId,
-        scheduledAt: when,
-        status: later ? "SCHEDULED" : "SENDING",
+        scheduledAt: wanted,
+        status: later || closed ? "SCHEDULED" : "SENDING",
       },
       select: { id: true },
     });
 
-    if (later) {
-      await ctx.audit("campaign.scheduled", "NotificationCampaign", campaign.id, { title: data.title, when: when.toISOString() });
+    if (later || closed) {
+      await ctx.audit("campaign.scheduled", "NotificationCampaign", campaign.id, { title: data.title, when: wanted.toISOString() });
       revalidatePath(`/m/${merchantId}/app-builder`);
-      return { id: campaign.id, devices: 0, scheduledFor: when.toISOString(), heldUntil: wanted.getTime() !== when.getTime() ? when.toISOString() : null };
+      return {
+        id: campaign.id,
+        devices: 0,
+        // When it will actually go, given the hours as they stand right now.
+        scheduledFor: (heldUntil ?? wanted).toISOString(),
+        heldUntil: heldUntil ? heldUntil.toISOString() : null,
+      };
     }
 
     const result = await sendCampaignNow(campaign.id, now);

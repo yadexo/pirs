@@ -303,6 +303,39 @@ describe("discounts and marketing", () => {
     expect(campaign).toMatchObject({ status: "SENT", devicesReached: 1 });
   });
 
+  it("keeps the time the clinic chose, and lets the window decide at send time", async () => {
+    // Created at 23:00 local, when the default window is shut. The stored time
+    // is 23:00 — not 09:00 — so the row says when it was asked for, and only
+    // the gate decides when it goes.
+    const atNight = new Date("2026-07-01T21:00:00Z"); // 23:00 Amsterdam
+    await rawDb.notificationCampaign.create({
+      data: {
+        tenantId: clinic,
+        name: "Asked for at eleven",
+        channel: "PUSH",
+        subject: "Late",
+        body: "Whenever you can",
+        scheduledAt: atNight,
+        status: "SCHEDULED",
+      },
+    });
+
+    const held = await runMarketing(atNight);
+    expect(held.campaigns).toBe(0);
+    expect(sent).toHaveLength(0);
+    const waiting = await rawDb.notificationCampaign.findFirstOrThrow({ where: { tenantId: clinic } });
+    expect(waiting.scheduledAt!.toISOString()).toBe(atNight.toISOString());
+    expect(waiting.status).toBe("SCHEDULED");
+
+    // Turning on 24/7 releases it on the very next run, at the same instant.
+    await rawDb.tenantSettings.create({ data: { tenantId: clinic, marketingWindowStartMinutes: 0, marketingWindowEndMinutes: 24 * 60 } });
+    const released = await runMarketing(atNight);
+    expect(released.campaigns).toBe(1);
+    expect(sent).toHaveLength(1);
+
+    await rawDb.tenantSettings.deleteMany({ where: { tenantId: clinic } });
+  });
+
   it("judges an already-scheduled campaign against the window as it is at send time", async () => {
     // Scheduled while the clinic sent until 22:00, and due at 19:00 local.
     await rawDb.notificationCampaign.create({

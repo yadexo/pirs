@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { rawDb } from "@/lib/db";
 import { ActionError, requireMerchantAction, runAction, type ActionResult } from "@/lib/merchant-action";
 import { marketingAudience, marketingWindowFor, sendMarketingCampaign } from "@/lib/marketing";
-import { nextSendableTime } from "@/lib/marketing-window";
+import { isWithinWindow, nextSendableTime } from "@/lib/marketing-window";
 import { vapidConfigured } from "@/lib/web-push";
 
 /**
@@ -66,9 +66,11 @@ export async function givePersonalDiscountAction(merchantId: string, input: z.in
 
     if (!data.notify || !vapidConfigured()) return { promotionId: promotion.id, notified: 0, heldUntil: null };
 
-    // Held rather than dropped when it is the middle of the night: the cron
-    // job picks the campaign up at nine.
-    const sendAt = nextSendableTime(now, await marketingWindowFor(merchantId));
+    // Held rather than dropped when the window is shut: the row keeps this
+    // moment, and the job sends it when the hours allow.
+    const window = await marketingWindowFor(merchantId);
+    const closed = !isWithinWindow(now, window);
+    const sendAt = now;
     const tenant = await rawDb.tenant.findUniqueOrThrow({
       where: { id: merchantId },
       select: { slug: true, name: true, branding: { select: { businessName: true } } },
@@ -87,13 +89,14 @@ export async function givePersonalDiscountAction(merchantId: string, input: z.in
         customerProfileId: client.id,
         promotionId: promotion.id,
         scheduledAt: sendAt,
-        status: sendAt.getTime() > now.getTime() + 30_000 ? "SCHEDULED" : "SENDING",
+        status: closed ? "SCHEDULED" : "SENDING",
       },
       select: { id: true, body: true, subject: true },
     });
 
-    if (sendAt.getTime() > now.getTime() + 30_000) {
-      return { promotionId: promotion.id, notified: 0, heldUntil: sendAt.toISOString() };
+    if (closed) {
+      // Told from the current window, so the clinic knows when to expect it.
+      return { promotionId: promotion.id, notified: 0, heldUntil: nextSendableTime(now, window).toISOString() };
     }
 
     const targets = await marketingAudience(merchantId, client.id);
