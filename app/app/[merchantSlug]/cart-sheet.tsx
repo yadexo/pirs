@@ -3,16 +3,16 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useBasePath } from "./base-path";
-import { Sheet, Stepper, EmptyState, Icon, money, useToast, Gloss, CountUp } from "@/components/client-app/ui";
+import { Sheet, Stepper, EmptyState, Icon, money, useToast } from "@/components/client-app/ui";
 import {
   clientSetCartQtyAction,
   clientCheckoutAction,
   clientRedeemableRewardsAction,
-  clientOrderStatusAction,
   clientAbandonOrderAction,
 } from "@/lib/actions/client-app";
 import { useCart, type CartLine } from "./cart-context";
 import { CardPayment, type PaymentHandoff } from "./card-payment";
+import { PaymentResult } from "./payment-result";
 
 interface Reward {
   id: string;
@@ -50,7 +50,6 @@ export function CartSheet({
   const [result, setResult] = React.useState<{ orderNumber: string; pointsEarned: number } | null>(null);
   /** Set when the clinic takes real cards: the client confirms in the Payment Element. */
   const [handoff, setHandoff] = React.useState<{ payment: PaymentHandoff; orderNumber: string; totalCents: number } | null>(null);
-  const [settling, setSettling] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) return;
@@ -100,39 +99,18 @@ export function CartSheet({
   }
 
   /**
-   * Stripe says the payment went through; our order is settled by the webhook,
-   * which usually lands within a second. Ask a few times before saying it is
-   * still processing — never claim an outcome the server hasn't confirmed.
+   * Stripe says the client is done paying. What actually happened to the
+   * order is the server's to tell, and one screen tells it — the same one a
+   * client sees after being redirected to their bank, so there is a single
+   * answer to "did that work" rather than two that can disagree.
    */
   async function afterCardPayment() {
     if (!handoff) return;
-    setSettling(true);
-    let pointsEarned = 0;
-    let settled = false;
-    for (let attempt = 0; attempt < 6 && !settled; attempt++) {
-      const status = await clientOrderStatusAction(merchantSlug, handoff.orderNumber).catch(() => null);
-      if (status && "ok" in status) {
-        if (status.status === "PAID") {
-          pointsEarned = status.pointsEarned;
-          settled = true;
-          break;
-        }
-        if (status.status === "FAILED") {
-          setSettling(false);
-          setStage("pay");
-          setError("That payment didn't go through. Please try another method.");
-          return;
-        }
-      }
-      await new Promise((r) => setTimeout(r, 700));
-    }
-    setSettling(false);
-    setResult({ orderNumber: handoff.orderNumber, pointsEarned });
+    setResult({ orderNumber: handoff.orderNumber, pointsEarned: 0 });
     setStage("done");
     setHandoff(null);
     await refresh();
     router.refresh();
-    if (!settled) toast("Payment received. Your order is being confirmed.");
   }
 
   async function cancelCardPayment() {
@@ -166,33 +144,27 @@ export function CartSheet({
       }
     >
       {stage === "card" && handoff ? (
-        settling ? (
-          <p style={{ textAlign: "center", padding: "32px 0", color: "var(--muted)", fontSize: 15 }}>Confirming your payment…</p>
-        ) : (
-          <CardPayment
+        <CardPayment
             payment={handoff.payment}
             orderNumber={handoff.orderNumber}
             amountCents={handoff.totalCents}
             currency={currency}
-            onPaid={afterCardPayment}
-            onCancel={cancelCardPayment}
-          />
-        )
+          onPaid={afterCardPayment}
+          onCancel={cancelCardPayment}
+        />
       ) : stage === "done" && result ? (
-        <div style={{ textAlign: "center", paddingTop: 8 }}>
-          <span className="okring" style={{ margin: "0 auto 10px" }}>
-            <Icon name="check" size={40} width={2.4} />
-          </span>
-          <p style={{ fontSize: 16 }}>Order {result.orderNumber} is confirmed.</p>
-          {result.pointsEarned > 0 && (
-            <Gloss className="ptsCard">
-              <span style={{ fontSize: 32, fontWeight: 700, color: "var(--on-black)" }}>
-                +<CountUp to={result.pointsEarned} />
-              </span>
-              <span style={{ fontSize: 14, color: "var(--on-black-muted)" }}>points earned</span>
-            </Gloss>
-          )}
-        </div>
+        <PaymentResult
+          merchantSlug={merchantSlug}
+          orderNumber={result.orderNumber}
+          bare
+          onClose={onClose}
+          onRetry={() => {
+            // The basket is untouched when a payment fails, so going back to
+            // it is all that is needed to try again.
+            setResult(null);
+            setStage("cart");
+          }}
+        />
       ) : items.length === 0 ? (
         <EmptyState
           text="Your cart is empty"

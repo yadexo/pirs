@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Icon, Sheet, money } from "@/components/client-app/ui";
 import { clientOrderStatusAction } from "@/lib/actions/client-app";
 import { useBasePath } from "./base-path";
+import { phaseFor, shouldAskAgain, POLL_MS, type Phase } from "./payment-phase";
 
 /**
  * What happened to a payment, told by the server.
@@ -20,23 +21,24 @@ import { useBasePath } from "./base-path";
  * thing to say — so the result is shown here too rather than only inside.
  */
 
-type Phase = "confirming" | "paid" | "failed" | "unknown";
-
-/** Long enough for a webhook, short enough that nobody sits watching a spinner. */
-const POLL_MS = 2000;
-const GIVE_UP_AFTER_MS = 45_000;
-
 export function PaymentResult({
   merchantSlug,
   orderNumber,
-  standalone,
+  bare,
+  outsideApp,
   onClose,
   onRetry,
 }: {
   merchantSlug: string;
   orderNumber: string;
-  /** True when the client landed here from a redirect, possibly outside the app. */
-  standalone?: boolean;
+  /** Render without a sheet of its own — for use inside one. */
+  bare?: boolean;
+  /**
+   * The client is looking at this in a browser tab rather than the app they
+   * installed, which happens after a bank redirect. Then the one useful
+   * thing to say is how to get back.
+   */
+  outsideApp?: boolean;
   onClose?: () => void;
   onRetry?: () => void;
 }) {
@@ -53,26 +55,15 @@ export function PaymentResult({
     async function check() {
       const res = await clientOrderStatusAction(merchantSlug, orderNumber).catch(() => null);
       if (stop) return;
-      if (!res || "error" in res) {
-        setPhase("unknown");
-        return;
-      }
-      setDetails({ totalCents: res.totalCents, pointsEarned: res.pointsEarned });
-      if (res.status === "PAID") {
-        setPhase("paid");
-        // The rest of the app — balances, items, history — is now out of date.
-        router.refresh();
-        return;
-      }
-      if (res.status === "FAILED") {
-        setPhase("failed");
-        return;
-      }
-      if (Date.now() - startedAt > GIVE_UP_AFTER_MS) {
-        setGaveUp(true);
-        return;
-      }
-      timer = setTimeout(() => void check(), POLL_MS);
+
+      const next = phaseFor(res);
+      setPhase(next);
+      if (res && !("error" in res)) setDetails({ totalCents: res.totalCents, pointsEarned: res.pointsEarned });
+      // The rest of the app — balances, items, history — is now out of date.
+      if (next === "paid") router.refresh();
+
+      if (shouldAskAgain(next, Date.now() - startedAt)) timer = setTimeout(() => void check(), POLL_MS);
+      else if (next === "confirming") setGaveUp(true);
     }
 
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -155,16 +146,16 @@ export function PaymentResult({
         </>
       )}
 
-      {standalone && phase !== "confirming" && (
+      {outsideApp && phase !== "confirming" && (
         <p className="ca-resultbody" style={{ marginTop: 20 }}>
-          You can close this tab and go back to the {`app`} — everything is saved.
+          You&apos;re in a browser tab, not the app. Close this tab and open the app from your Home Screen — everything here is saved.
         </p>
       )}
     </div>
   );
 
-  // A redirect landing is its own page; inside the app it is a sheet.
-  if (standalone) return <div style={{ padding: "0 var(--pad-x)" }}>{body}</div>;
+  // Inside another sheet it draws no sheet of its own.
+  if (bare) return <div style={{ padding: "0 var(--pad-x)" }}>{body}</div>;
   return (
     <Sheet open onClose={onClose ?? (() => undefined)} title="Your payment">
       {body}

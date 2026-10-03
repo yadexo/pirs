@@ -6,6 +6,7 @@ import { Search } from "lucide-react";
 import { Panel, Pagination, Pill, Drawer } from "@/components/ui/primitives";
 import { ClientItems } from "./client-items";
 import { PersonalDiscount } from "./personal-discount";
+import { ClientOrders } from "./client-orders";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatMoney } from "@/lib/utils";
 
@@ -27,6 +28,7 @@ const date = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en
 
 export function ClientsTable({
   merchantId,
+  canRefund,
   rows,
   q,
   sort,
@@ -35,6 +37,8 @@ export function ClientsTable({
   pageCount,
 }: {
   merchantId: string;
+  /** Passed down rather than guessed at: the server knows the permissions. */
+  canRefund: boolean;
   rows: ClientRow[];
   q: string;
   sort: string;
@@ -138,13 +142,24 @@ export function ClientsTable({
         )}
       </Panel>
 
-      <ClientDrawer merchantId={merchantId} client={selected} onClose={() => setSelected(null)} />
+      <ClientDrawer merchantId={merchantId} canRefund={canRefund} client={selected} onClose={() => setSelected(null)} />
     </>
   );
 }
 
-function ClientDrawer({ merchantId, client, onClose }: { merchantId: string; client: ClientRow | null; onClose: () => void }) {
-  const [tab, setTab] = React.useState<"profile" | "items" | "messages">("profile");
+function ClientDrawer({
+  merchantId,
+  canRefund,
+  client,
+  onClose,
+}: {
+  merchantId: string;
+  /** Whether this staff member may manage sales, and so refund. */
+  canRefund: boolean;
+  client: ClientRow | null;
+  onClose: () => void;
+}) {
+  const [tab, setTab] = React.useState<"profile" | "orders" | "items" | "messages">("profile");
 
   React.useEffect(() => {
     if (client) setTab("profile");
@@ -155,7 +170,7 @@ function ClientDrawer({ merchantId, client, onClose }: { merchantId: string; cli
       {client && (
         <>
           <div className="mb-4 flex gap-4 border-b border-border">
-            {(["profile", "items", "messages"] as const).map((t) => (
+            {(["profile", "orders", "items", "messages"] as const).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -179,6 +194,8 @@ function ClientDrawer({ merchantId, client, onClose }: { merchantId: string; cli
               <Row label="Account credit" value={formatMoney(client.creditCents)} />
               <Row label="Membership" value={client.isMember ? "Active" : "None"} />
             </dl>
+          ) : tab === "orders" ? (
+            <ClientOrders merchantId={merchantId} customerProfileId={client.id} canRefund={canRefund} />
           ) : tab === "items" ? (
             <div className="space-y-4">
               <PersonalDiscount merchantId={merchantId} customerProfileId={client.id} clientName={client.name} />

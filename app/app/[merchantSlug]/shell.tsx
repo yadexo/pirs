@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Icon, ToastProvider } from "@/components/client-app/ui";
 import { BasePathProvider, useBasePath } from "./base-path";
+import { isStandalone } from "@/components/client-app/pwa";
 import { PaymentResult } from "./payment-result";
 import { CartProvider, useCart } from "./cart-context";
 import { SearchSheet } from "./search-sheet";
@@ -80,6 +81,14 @@ function Frame({
   // shown wherever that lands, including a Safari view outside the app.
   const search = useSearchParams();
   const returnedOrder = search.get("order");
+  // A bank redirect can land the client in a browser tab rather than the app
+  // they installed. Checked after mount, because the server has no idea how
+  // the page is being displayed.
+  const [outsideApp, setOutsideApp] = React.useState(false);
+  React.useEffect(() => {
+    if (!returnedOrder) return;
+    setOutsideApp(!isStandalone());
+  }, [returnedOrder]);
   const { count, open, openCart, closeCart } = useCart();
   const [searchOpen, setSearchOpen] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -172,6 +181,7 @@ function Frame({
         <PaymentResult
           merchantSlug={merchantSlug}
           orderNumber={returnedOrder}
+          outsideApp={outsideApp}
           onClose={() => router.replace(pathname)}
           onRetry={() => {
             router.replace(pathname);

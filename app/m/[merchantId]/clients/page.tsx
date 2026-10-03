@@ -62,6 +62,7 @@ export default async function ClientsPage({
       <div className="mt-5">
         <ClientsTable
           merchantId={merchantId}
+          canRefund={ctx.viewer.permissions === "ALL" || ctx.viewer.permissions.includes("sales.manage")}
           q={q}
           sort={sort}
           status={status}

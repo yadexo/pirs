@@ -52,6 +52,60 @@ export async function refundableForOrderAction(merchantId: string, orderId: stri
   });
 }
 
+export interface ClientOrderRow {
+  id: string;
+  orderNumber: string;
+  status: string;
+  currency: string;
+  totalCents: number;
+  placedAt: string;
+  /** Already given back. */
+  refundedCents: number;
+  /** Still refundable, so the button only appears where it can do something. */
+  refundableCents: number;
+}
+
+/** One client's orders, for the record staff already have open. */
+export async function clientOrdersAction(merchantId: string, customerProfileId: string): Promise<ActionResult<{ orders: ClientOrderRow[] }>> {
+  return runAction(async () => {
+    // Reading a client's orders is part of managing sales, like refunding one.
+    const ctx = await requireMerchantAction(merchantId, "sales.manage");
+    const rows = await ctx.db.order.findMany({
+      where: { customerProfileId },
+      orderBy: { placedAt: "desc" },
+      take: 50,
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        currency: true,
+        totalCents: true,
+        placedAt: true,
+        payments: { where: { status: "SUCCEEDED" }, include: { refunds: true } },
+      },
+    });
+
+    return {
+      orders: rows.map((o) => {
+        const payment = o.payments[0];
+        const refundedCents = (payment?.refunds ?? [])
+          .filter((r) => r.status === "SUCCEEDED" || r.status === "PENDING")
+          .reduce((sum, r) => sum + r.amountCents, 0);
+        return {
+          id: o.id,
+          orderNumber: o.orderNumber,
+          status: o.status,
+          currency: o.currency,
+          totalCents: o.totalCents,
+          placedAt: o.placedAt.toISOString(),
+          refundedCents,
+          refundableCents: payment ? refundableRemainder(payment) : 0,
+        };
+      }),
+    };
+  });
+}
+
 export type RefundOrderResult = ActionResult<{ amountCents: number; fully: boolean; pending: boolean }>;
 
 export async function refundOrderAction(merchantId: string, input: z.input<typeof schema>): Promise<RefundOrderResult> {
