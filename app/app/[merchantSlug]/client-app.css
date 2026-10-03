@@ -1387,3 +1387,36 @@
   letter-spacing: 0.22em;
   color: var(--ink-strong);
 }
+
+/* Payment result: the screen after paying, including after a bank redirect. */
+.ca-resulttitle {
+  margin: 14px 0 4px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink-strong);
+}
+.ca-resultbody {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.ca-spinner {
+  display: inline-block;
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--pill-bg);
+  border-top-color: var(--black);
+  border-radius: 50%;
+  animation: ca-spin 0.9s linear infinite;
+}
+@keyframes ca-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ca-spinner {
+    animation-duration: 2.4s;
+  }
+}

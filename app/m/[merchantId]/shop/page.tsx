@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { LineChart } from "@/components/ui/line-chart";
 import { formatMoney } from "@/lib/utils";
 import { TypeFilter } from "./type-filter";
+import { RefundButton } from "./refund-button";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
 
 /** Plain words for how an item left the clinic. */
@@ -56,6 +57,8 @@ export default async function ShopSummaryPage({
       },
     }),
   ]);
+
+  const mayRefund = ctx.viewer.permissions === "ALL" || ctx.viewer.permissions.includes("sales.manage");
 
   const currency = branding?.currency ?? DEFAULT_CURRENCY;
   const totalSales = salesAgg._sum.totalCents ?? 0;
@@ -135,6 +138,7 @@ export default async function ShopSummaryPage({
                     <th className="px-5 py-2.5 font-medium">Items</th>
                     <th className="px-5 py-2.5 font-medium">Amount</th>
                     <th className="px-5 py-2.5 font-medium">Status</th>
+                    {mayRefund && <th className="px-5 py-2.5 font-medium" />}
                   </tr>
                 </thead>
                 <tbody>
@@ -153,6 +157,13 @@ export default async function ShopSummaryPage({
                           {o.status}
                         </Pill>
                       </td>
+                      {mayRefund && (
+                        <td className="px-5 py-3 text-right">
+                          {(o.status === "PAID" || o.status === "PARTIALLY_REFUNDED") && (
+                            <RefundButton merchantId={merchantId} orderId={o.id} orderNumber={o.orderNumber} />
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

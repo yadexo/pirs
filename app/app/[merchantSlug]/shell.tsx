@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Icon, ToastProvider } from "@/components/client-app/ui";
 import { BasePathProvider, useBasePath } from "./base-path";
+import { PaymentResult } from "./payment-result";
 import { CartProvider, useCart } from "./cart-context";
 import { SearchSheet } from "./search-sheet";
 import { CartSheet } from "./cart-sheet";
@@ -75,6 +76,10 @@ function Frame({
   const pathname = usePathname();
   const router = useRouter();
   const base = useBasePath();
+  // A payment that redirected away comes back with ?order=…; the result is
+  // shown wherever that lands, including a Safari view outside the app.
+  const search = useSearchParams();
+  const returnedOrder = search.get("order");
   const { count, open, openCart, closeCart } = useCart();
   const [searchOpen, setSearchOpen] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -162,6 +167,18 @@ function Frame({
           );
         })}
       </nav>
+
+      {returnedOrder && (
+        <PaymentResult
+          merchantSlug={merchantSlug}
+          orderNumber={returnedOrder}
+          onClose={() => router.replace(pathname)}
+          onRetry={() => {
+            router.replace(pathname);
+            openCart();
+          }}
+        />
+      )}
 
       <SearchSheet merchantSlug={merchantSlug} currency={currency} open={searchOpen} onClose={() => setSearchOpen(false)} />
       <CartSheet merchantSlug={merchantSlug} currency={currency} open={open} onClose={closeCart} />

@@ -36,6 +36,9 @@ export interface OrderRow {
   totalCents: number;
   pointsEarned: number;
   itemNames: string[];
+  /** What has been given back, and when the last of it was. */
+  refundedCents?: number;
+  refundedAt?: string | null;
 }
 export interface BillingRow {
   id: string;
@@ -369,6 +372,15 @@ export function ProfileView({
                 <b style={{ fontSize: 15 }}>{o.number}</b>
                 <br />
                 <span style={{ color: "var(--muted)", fontSize: 13 }}>{date(o.placedAt)}</span>
+                {!!o.refundedCents && o.refundedCents > 0 && (
+                  <>
+                    <br />
+                    <span style={{ color: "var(--danger)", fontSize: 13 }}>
+                      Refunded {money(o.refundedCents, currency)}
+                      {o.refundedAt ? ` on ${date(o.refundedAt)}` : ""}
+                    </span>
+                  </>
+                )}
               </span>
               <b className="tabular">{money(o.totalCents, currency)}</b>
             </button>

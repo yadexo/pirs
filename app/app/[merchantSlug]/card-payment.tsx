@@ -37,12 +37,15 @@ function stripeFor(publishableKey: string, stripeAccount: string) {
 
 export function CardPayment({
   payment,
+  orderNumber,
   amountCents,
   currency,
   onPaid,
   onCancel,
 }: {
   payment: PaymentHandoff;
+  /** Carried into the return URL so a redirect can be resolved on the way back. */
+  orderNumber: string;
   amountCents: number;
   currency: string;
   /** The payment went through, as far as the browser can tell. */
@@ -67,12 +70,24 @@ export function CardPayment({
         },
       }}
     >
-      <PayForm amountCents={amountCents} currency={currency} onPaid={onPaid} onCancel={onCancel} />
+      <PayForm orderNumber={orderNumber} amountCents={amountCents} currency={currency} onPaid={onPaid} onCancel={onCancel} />
     </Elements>
   );
 }
 
-function PayForm({ amountCents, currency, onPaid, onCancel }: { amountCents: number; currency: string; onPaid: () => void; onCancel: () => void }) {
+function PayForm({
+  orderNumber,
+  amountCents,
+  currency,
+  onPaid,
+  onCancel,
+}: {
+  orderNumber: string;
+  amountCents: number;
+  currency: string;
+  onPaid: () => void;
+  onCancel: () => void;
+}) {
   const stripe = useStripe();
   const elements = useElements();
   const [busy, setBusy] = React.useState(false);
@@ -97,7 +112,9 @@ function PayForm({ amountCents, currency, onPaid, onCancel }: { amountCents: num
       elements,
       // Card payments stay on this page; bank methods still redirect and come
       // back to the clinic's app.
-      confirmParams: { return_url: `${window.location.origin}${window.location.pathname}?paid=1` },
+      // iDEAL and Klarna leave the site entirely; the order number is how the
+      // page they come back to knows what to report.
+      confirmParams: { return_url: `${window.location.origin}${window.location.pathname}?order=${encodeURIComponent(orderNumber)}` },
       redirect: "if_required",
     });
     setBusy(false);

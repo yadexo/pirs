@@ -143,7 +143,14 @@ export function BookingSheet({
             <p style={{ color: "var(--muted)", fontSize: 15, paddingBottom: 8 }}>
               This clinic asks for a deposit to hold your appointment. Your slot is reserved until you pay.
             </p>
-            <CardPayment payment={deposit.payment} amountCents={deposit.amountCents} currency={currency} onPaid={afterDeposit} onCancel={cancelDeposit} />
+            <CardPayment
+              payment={deposit.payment}
+              orderNumber={deposit.orderNumber}
+              amountCents={deposit.amountCents}
+              currency={currency}
+              onPaid={afterDeposit}
+              onCancel={cancelDeposit}
+            />
           </>
         )
       ) : (

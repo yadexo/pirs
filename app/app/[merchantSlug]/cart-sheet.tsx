@@ -171,6 +171,7 @@ export function CartSheet({
         ) : (
           <CardPayment
             payment={handoff.payment}
+            orderNumber={handoff.orderNumber}
             amountCents={handoff.totalCents}
             currency={currency}
             onPaid={afterCardPayment}

@@ -19,10 +19,15 @@ export default async function ProfilePage({
   const [summary, orders, appointments, items, billing] = await Promise.all([
     getClientSummary(ctx.db, ctx.customerProfileId),
     ctx.db.order.findMany({
-      where: { customerProfileId: ctx.customerProfileId, status: "PAID" },
+      // A refunded order belongs in the history too — it is the one a client
+      // is most likely to go looking for.
+      where: { customerProfileId: ctx.customerProfileId, status: { in: ["PAID", "PARTIALLY_REFUNDED", "REFUNDED"] } },
       orderBy: { placedAt: "desc" },
       take: 20,
-      include: { items: { select: { name: true } } },
+      include: {
+        items: { select: { name: true } },
+        payments: { select: { refunds: { where: { status: "SUCCEEDED" }, select: { amountCents: true, createdAt: true } } } },
+      },
     }),
     ctx.db.appointment.findMany({
       where: { customerProfileId: ctx.customerProfileId },
@@ -61,14 +66,21 @@ export default async function ProfilePage({
         status: a.status,
         upcoming: a.startAt.getTime() > now && (a.status === "REQUESTED" || a.status === "CONFIRMED"),
       }))}
-      orders={orders.map((o) => ({
-        id: o.id,
-        number: o.orderNumber,
-        placedAt: o.placedAt.toISOString(),
-        totalCents: o.totalCents,
-        pointsEarned: Math.max(0, o.totalCents / 100),
-        itemNames: o.items.map((i) => i.name),
-      }))}
+      orders={orders.map((o) => {
+        const refunds = o.payments.flatMap((p) => p.refunds);
+        const refundedCents = refunds.reduce((sum, r) => sum + r.amountCents, 0);
+        const last = refunds.map((r) => r.createdAt).sort((a, b) => b.getTime() - a.getTime())[0];
+        return {
+          id: o.id,
+          number: o.orderNumber,
+          placedAt: o.placedAt.toISOString(),
+          totalCents: o.totalCents,
+          pointsEarned: Math.max(0, o.totalCents / 100),
+          itemNames: o.items.map((i) => i.name),
+          refundedCents,
+          refundedAt: last ? last.toISOString() : null,
+        };
+      })}
       billing={billing.map((b) => ({
         id: b.id,
         description: b.description ?? b.type,
