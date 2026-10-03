@@ -141,6 +141,22 @@ describe("client payments on the clinic's Stripe account", () => {
     expect(await rawDb.redeemableItem.count({ where: { orderId: payment.orderId! } })).toBe(0);
   });
 
+  it("ignores an event that came from a different connected account", async () => {
+    const payment = await rawDb.payment.findFirstOrThrow({ where: { tenantId: clinic }, orderBy: { createdAt: "desc" } });
+
+    // This payment was charged on this clinic's account. An event about it
+    // arriving from somebody else's account is not this payment's business.
+    const elsewhere = {
+      ...(succeeded(payment.providerPaymentId!, payment.amountCents) as unknown as Record<string, unknown>),
+      id: `evt_wrong_acct_${stamp}`,
+      account: `acct_someone_else_${stamp}`,
+    } as unknown as Stripe.Event;
+
+    await handleStripeEvent(elsewhere);
+    expect(await rawDb.order.findFirstOrThrow({ where: { id: payment.orderId! } })).toMatchObject({ status: "PENDING" });
+    expect(await rawDb.payment.findUniqueOrThrow({ where: { id: payment.id } })).not.toMatchObject({ status: "SUCCEEDED" });
+  });
+
   it("the webhook is what marks it paid, and a repeat delivery changes nothing", async () => {
     const payment = await rawDb.payment.findFirstOrThrow({ where: { tenantId: clinic }, orderBy: { createdAt: "desc" } });
     const event = succeeded(payment.providerPaymentId!, payment.amountCents);

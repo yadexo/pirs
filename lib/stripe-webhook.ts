@@ -67,9 +67,29 @@ export async function forgetProcessed(eventId: string): Promise<void> {
   await rawDb.processedStripeEvent.deleteMany({ where: { id: eventId } });
 }
 
-async function paymentFor(paymentIntentId: string | null | undefined) {
+/**
+ * The payment an event is about, looked up across every clinic — the intent id
+ * is what ties an event to a payment, and it is Stripe's to issue.
+ *
+ * `event.account` is the connected account the event came from, and a payment
+ * is only that event's business if it was charged there. Stripe signs the
+ * event, so a mismatch is not something an attacker can arrange; the check is
+ * here so that one clinic's event can never reach another clinic's records
+ * through a mistake of ours, and so a mismatch is loud rather than silent.
+ */
+async function paymentFor(paymentIntentId: string | null | undefined, event?: Stripe.Event) {
   if (!paymentIntentId) return null;
-  return rawDb.payment.findFirst({ where: { providerPaymentId: paymentIntentId } });
+  const payment = await rawDb.payment.findFirst({ where: { providerPaymentId: paymentIntentId } });
+  if (!payment) return null;
+
+  const from = event?.account;
+  if (from && payment.stripeAccountId && payment.stripeAccountId !== from) {
+    console.error(
+      `[stripe-webhook] ${event!.type} (${event!.id}) came from ${from} but payment ${payment.id} was charged on ${payment.stripeAccountId}; ignored`,
+    );
+    return null;
+  }
+  return payment;
 }
 
 function intentId(charge: Stripe.Charge): string | null {
@@ -113,7 +133,7 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
     // --- client payments --------------------------------------------------
     case "payment_intent.succeeded": {
       const intent = event.data.object as Stripe.PaymentIntent;
-      const payment = await paymentFor(intent.id);
+      const payment = await paymentFor(intent.id, event);
       if (!payment) return;
 
       // What was actually collected, against what the order was priced at by
@@ -157,7 +177,7 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
     }
     case "payment_intent.payment_failed": {
       const intent = event.data.object as Stripe.PaymentIntent;
-      const payment = await paymentFor(intent.id);
+      const payment = await paymentFor(intent.id, event);
       if (!payment) return;
       const reason = intent.last_payment_error?.message ?? "The payment was declined.";
       await rawDb.payment.updateMany({ where: { id: payment.id }, data: { status: "FAILED", failureReason: reason } });
@@ -168,7 +188,7 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
     }
     case "charge.refunded": {
       const charge = event.data.object as Stripe.Charge;
-      const payment = await paymentFor(intentId(charge));
+      const payment = await paymentFor(intentId(charge), event);
       if (!payment) return;
       const db = getTenantDb(payment.tenantId);
       const refundedCents = charge.amount_refunded ?? 0;
@@ -203,8 +223,9 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       const chargeId = typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id;
       // A dispute names the charge, not the intent; find the payment either way.
       const payment =
-        (await paymentFor(typeof dispute.payment_intent === "string" ? dispute.payment_intent : (dispute.payment_intent?.id ?? null))) ??
-        (chargeId ? await rawDb.payment.findFirst({ where: { providerPaymentId: chargeId } }) : null);
+        (await paymentFor(typeof dispute.payment_intent === "string" ? dispute.payment_intent : (dispute.payment_intent?.id ?? null), event)) ??
+        // The same account check applies to the charge-id fallback.
+        (await paymentFor(chargeId, event));
       if (!payment) return;
       await rawDb.payment.updateMany({
         where: { id: payment.id },
