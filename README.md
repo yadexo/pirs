@@ -158,7 +158,9 @@ All variables are documented in `.env.example`. Summary:
 | `DATABASE_URL` | Postgres connection string |
 | `AUTH_SECRET` | Auth.js session signing (leave `NEXTAUTH_URL` unset; the request host is used) |
 | `PAYMENT_PROVIDER` | `mock` (default) or `stripe` |
-| `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` | Required only when `PAYMENT_PROVIDER=stripe` |
+| `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY` | Required only when `PAYMENT_PROVIDER=stripe` |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | Signing secret of the webhook endpoint listening to **connected account** events (clients' payments). Needed to take money |
+| `STRIPE_WEBHOOK_SECRET` | Signing secret of the webhook endpoint listening to **platform account** events (billing the clinics) |
 | `EMAIL_PROVIDER`, `RESEND_API_KEY`, `EMAIL_FROM` | `mock` (default) or `resend` |
 | `SMS_PROVIDER`, `TWILIO_*` | `mock` (default) or `twilio` |
 | `PUSH_PROVIDER`, `WEB_PUSH_*` | `mock` (default) or `webpush` |
@@ -237,7 +239,14 @@ Default is `PAYMENT_PROVIDER=mock` — checkout and membership billing work end-
 To enable Stripe:
 
 1. Set `PAYMENT_PROVIDER=stripe`, `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`.
-2. Point a Stripe webhook at `POST /api/webhooks/stripe` for `payment_intent.succeeded`, `payment_intent.payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted`; set `STRIPE_WEBHOOK_SECRET` to the resulting signing secret.
+2. Register **two** webhook endpoints in Stripe, both pointing at `POST /api/webhooks/stripe`. Stripe treats "events on your account" and "events on connected accounts" as separate endpoints and will not deliver both to one, and it signs each with that endpoint's own secret. The route tries both secrets and refuses a request only when neither verifies.
+
+   | Endpoint | Listen to | Events | Secret goes in |
+   | --- | --- | --- | --- |
+   | Connected accounts | Events on connected accounts | `payment_intent.succeeded`, `payment_intent.payment_failed`, `charge.refunded`, `charge.dispute.created`, `account.updated`, `account.application.deauthorized`, `customer.subscription.updated`, `customer.subscription.deleted` | `STRIPE_CONNECT_WEBHOOK_SECRET` |
+   | Platform account | Events on your account | the platform's own billing events (`invoice.paid`, `invoice.payment_failed`, `customer.subscription.*`) | `STRIPE_WEBHOOK_SECRET` |
+
+   Clients' payments are direct charges on the clinic's own connected account, so the Connect endpoint is the one that marks orders paid. An instance that only takes client payments can set just `STRIPE_CONNECT_WEBHOOK_SECRET`; one that only bills clinics can set just `STRIPE_WEBHOOK_SECRET`. Each secret is issued per endpoint, so local and production values differ, and `stripe listen --forward-connect-to` issues its own again.
 3. The customer-facing checkout UI collects payment via Stripe Elements/Checkout on your front end — only a token/PaymentIntent id ever reaches this codebase.
 
 ## Notification provider architecture

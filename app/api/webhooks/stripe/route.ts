@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { alreadyProcessed, forgetProcessed, handleStripeEvent } from "@/lib/stripe-webhook";
+import { verifyWithAnySecret, webhookSecrets } from "@/lib/stripe-webhook-secrets";
 
 /**
- * Stripe webhook receiver, registered in Stripe as an endpoint for events on
- * **connected accounts** (the clinics' own accounts, where clients' payments
- * are charged). Active once STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are
- * set; the signature is verified before anything is read.
+ * Stripe webhook receiver, for two endpoints at one URL: one registered in
+ * Stripe to listen to events on **connected accounts** (the clinics' own
+ * accounts, where clients' payments are charged), and one for events on the
+ * **platform account** itself. Stripe signs each with that endpoint's own
+ * secret, so both STRIPE_CONNECT_WEBHOOK_SECRET and STRIPE_WEBHOOK_SECRET are
+ * tried and the request is refused only if neither verifies.
  *
  * Handled: account.updated, account.application.deauthorized,
  * payment_intent.succeeded, payment_intent.payment_failed, charge.refunded,
@@ -14,9 +17,9 @@ import { alreadyProcessed, forgetProcessed, handleStripeEvent } from "@/lib/stri
  * See lib/stripe-webhook.ts.
  */
 export async function POST(req: NextRequest) {
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  const secrets = webhookSecrets();
   const stripeKey = process.env.STRIPE_SECRET_KEY;
-  if (!secret || !stripeKey) {
+  if (secrets.length === 0 || !stripeKey) {
     return NextResponse.json({ error: "Stripe is not configured on this instance." }, { status: 501 });
   }
 
@@ -26,12 +29,11 @@ export async function POST(req: NextRequest) {
   const body = await req.text();
   const stripe = new Stripe(stripeKey);
 
-  let event: Stripe.Event;
-  try {
-    event = stripe.webhooks.constructEvent(body, signature, secret);
-  } catch {
-    return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
-  }
+  const verified = verifyWithAnySecret(body, signature, secrets, (payload, sig, secret) =>
+    stripe.webhooks.constructEvent(payload, sig, secret),
+  );
+  if (!verified) return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
+  const { event } = verified;
 
   // Stripe retries until it gets a 2xx, so the same event can arrive twice.
   if (await alreadyProcessed(event)) return NextResponse.json({ received: true, duplicate: true });

@@ -22,8 +22,10 @@ const statusMap: Record<string, PaymentIntentResult["status"]> = {
 
 /**
  * Stripe-backed implementation, enabled via PAYMENT_PROVIDER=stripe. Requires
- * STRIPE_SECRET_KEY (and STRIPE_WEBHOOK_SECRET for webhook verification —
- * see app/api/webhooks/stripe/route.ts). Card data never touches this
+ * STRIPE_SECRET_KEY (and a webhook signing secret per endpoint —
+ * STRIPE_CONNECT_WEBHOOK_SECRET for connected-account events,
+ * STRIPE_WEBHOOK_SECRET for the platform account; see
+ * app/api/webhooks/stripe/route.ts). Card data never touches this
  * codebase: the client collects it directly with Stripe Elements/Checkout
  * and only a token/payment-method id crosses the network to us.
  */

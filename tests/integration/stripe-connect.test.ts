@@ -224,5 +224,28 @@ describe("Stripe Connect onboarding", () => {
       await send({ id: `evt_deauth_${stamp}`, object: "event", type: "account.application.deauthorized", created: Math.floor(Date.now() / 1000), account: stripeAccountId, data: { object: { id: "ca_x", object: "application" } } });
       expect(await rawDb.tenant.findUniqueOrThrow({ where: { id: clinic } })).toMatchObject({ stripeAccountId: null, stripeStatus: "NOT_CONNECTED" });
     });
+
+    it("accepts an event signed with the Connect endpoint's own secret", async () => {
+      // Stripe will not deliver connected-account events and platform-account
+      // events to one endpoint, and signs each with that endpoint's own
+      // secret. Both arrive at this route, so both have to be accepted.
+      const connectSecret = "whsec_connect_endpoint";
+      const other = await rawDb.tenant.create({
+        data: { slug: `connect-secret-${stamp}`, name: "Second Clinic", stripeAccountId: `acct_connect_${stamp}`, stripeStatus: "PENDING_VERIFICATION" },
+      });
+      process.env.STRIPE_CONNECT_WEBHOOK_SECRET = connectSecret;
+      try {
+        const payload = JSON.stringify(accountEvent(other.stripeAccountId!, Math.floor(Date.now() / 1000) + 300, { charges: true, payouts: true }));
+        const signature = signer.webhooks.generateTestHeaderString({ payload, secret: connectSecret });
+        const res = await webhook.POST(
+          new NextRequest(`${ORIGIN}/api/webhooks/stripe`, { method: "POST", body: payload, headers: { "stripe-signature": signature } }),
+        );
+        expect(res.status).toBe(200);
+        expect((await rawDb.tenant.findUniqueOrThrow({ where: { id: other.id } })).stripeStatus).toBe("ACTIVE");
+      } finally {
+        delete process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
+        await deleteTenantCompletely(other.id);
+      }
+    });
   });
 });
