@@ -5,9 +5,18 @@ import { IMPERSONATION_MAX_MS } from "@/lib/impersonation-policy";
 import { getTenantDb } from "@/lib/tenant-db";
 import { releaseFailedOrder } from "@/lib/order-completion";
 import { runMarketing } from "@/lib/cron/marketing";
+import { PAST_DUE_GRACE_MS } from "@/lib/membership-status";
+import { notifyMembershipSuspended } from "@/lib/client-notifications";
 
 /** How long an unpaid order may hold stock and redeemed points. */
 const ABANDONED_ORDER_MS = 60 * 60 * 1000;
+
+/**
+ * How long a membership may wait for its first payment. Longer than Stripe's
+ * own patience with an unpaid first invoice (about a day), so this only ever
+ * catches sign-ups whose incomplete_expired event never reached us.
+ */
+const ABANDONED_SIGNUP_MS = 36 * 60 * 60 * 1000;
 
 export type CronResult = Record<string, number | string>;
 
@@ -75,5 +84,62 @@ export const CRON_JOBS: Record<string, () => Promise<CronResult>> = {
    */
   async marketing() {
     return runMarketing();
+  },
+
+  /**
+   * Hourly: memberships whose grace period has run out.
+   *
+   * Stripe keeps retrying a failed card for weeks, which is its business, but
+   * a clinic should not keep giving away treatment for weeks. A membership
+   * that has been past due longer than the grace period stops here. It is not
+   * cancelled — the subscription still exists, and a payment that finally
+   * succeeds turns it straight back on through invoice.paid.
+   */
+  async memberships() {
+    const cutoff = new Date(Date.now() - PAST_DUE_GRACE_MS);
+    const expired = await rawDb.customerMembership.findMany({
+      where: { status: "PAST_DUE", pastDueSince: { lt: cutoff } },
+      select: { id: true },
+      take: 500,
+    });
+
+    let suspended = 0;
+    for (const membership of expired) {
+      // Conditional, so a payment that landed a moment ago wins over this.
+      const { count } = await rawDb.customerMembership.updateMany({
+        where: { id: membership.id, status: "PAST_DUE", pastDueSince: { lt: cutoff } },
+        data: { status: "SUSPENDED", dunningState: "Suspended after the grace period" },
+      });
+      if (count === 0) continue;
+      suspended += count;
+
+      const row = await rawDb.customerMembership.findUnique({ where: { id: membership.id }, select: { tenantId: true } });
+      if (row) {
+        await rawDb.membershipBillingEvent.create({
+          data: {
+            tenantId: row.tenantId,
+            customerMembershipId: membership.id,
+            type: "STATUS_CHANGE",
+            description: "Suspended: payment still outstanding after the grace period",
+          } as never,
+        });
+      }
+      await notifyMembershipSuspended(membership.id).catch(() => undefined);
+    }
+
+    /**
+     * Sign-ups whose first payment never happened.
+     *
+     * Stripe gives up on an unpaid first invoice after about a day and says so
+     * with incomplete_expired, which frees the client straight away. This is
+     * the backstop for when that event never arrives — a membership nobody
+     * paid for must not block someone from ever joining again.
+     */
+    const stale = await rawDb.customerMembership.updateMany({
+      where: { status: "PENDING", createdAt: { lt: new Date(Date.now() - ABANDONED_SIGNUP_MS) } },
+      data: { status: "CANCELLED", cancelledAt: new Date(), dunningState: "First payment never completed" },
+    });
+
+    return { suspended, considered: expired.length, abandonedSignups: stale.count };
   },
 };

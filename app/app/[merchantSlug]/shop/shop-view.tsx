@@ -6,6 +6,7 @@ import { useBasePath } from "../base-path";
 import { Gloss, Sheet, Icon, Stepper, Carousel, EmptyState, money, useToast } from "@/components/client-app/ui";
 import { clientAddToCartAction, clientJoinPlanAction } from "@/lib/actions/client-app";
 import { useCart } from "../cart-context";
+import { CardPayment } from "../card-payment";
 import { BookingSheet } from "./booking-sheet";
 
 export interface ShopProduct {
@@ -56,6 +57,7 @@ export function ShopView({
   services,
   plans,
   currentPlanId,
+  membershipPending,
   pointsPerCents,
   banner,
   externalBookingUrl,
@@ -71,6 +73,8 @@ export function ShopView({
   services: ShopService[];
   plans: ShopPlan[];
   currentPlanId: string | null;
+  /** Their membership exists but its first payment hasn't been confirmed. */
+  membershipPending?: boolean;
   /** Same rate checkout uses: points = floor(amount in cents × rate). */
   pointsPerCents: number;
   /** Clinic's own banner copy from App Builder → Settings; null fields use the defaults. */
@@ -90,6 +94,12 @@ export function ShopView({
   const [booking, setBooking] = React.useState<ShopService | null>(null);
   const [planDetail, setPlanDetail] = React.useState<ShopPlan | null>(null);
   const [pending, setPending] = React.useState(false);
+  /** The first invoice of a membership, waiting to be confirmed by the client. */
+  const [firstPayment, setFirstPayment] = React.useState<{
+    plan: string;
+    amountCents: number;
+    payment: { clientSecret: string; publishableKey: string | null; stripeAccountId: string };
+  } | null>(null);
 
   // Treatment filters/sort — client-side over an already-scoped list.
   const [filterOpen, setFilterOpen] = React.useState(false);
@@ -147,6 +157,11 @@ export function ShopView({
     toast("Added to cart");
   }
 
+  /**
+   * Joining asks for the first payment. Nothing is a membership until that
+   * payment is confirmed by the clinic's Stripe account — so the client
+   * confirms it here, and the webhook is what switches the plan on.
+   */
   async function joinPlan(id: string) {
     setPending(true);
     const res = await clientJoinPlanAction(merchantSlug, id);
@@ -156,14 +171,27 @@ export function ShopView({
       return;
     }
     setPlanDetail(null);
-    toast(`Welcome to ${res.name}`);
-    router.refresh();
+
+    if (res.paid) {
+      toast(`Welcome to ${res.name}`);
+      router.refresh();
+      return;
+    }
+    if (!res.payment.clientSecret) {
+      // Nothing to pay for this plan; Stripe still confirms it by webhook.
+      toast("Setting up your membership…");
+      router.refresh();
+      return;
+    }
+    setFirstPayment({ plan: res.name, amountCents: res.firstPaymentCents, payment: res.payment });
   }
 
   return (
     <div>
       <div className="seg" ref={segRef}>
-        {SEGMENTS.map((s) => (
+        {/* A clinic that cannot bill a recurring plan has no memberships to
+            show, so the tab goes too rather than leading to an empty shelf. */}
+        {SEGMENTS.filter((s) => s.key !== "memberships" || plans.length > 0).map((s) => (
           <button key={s.key} className={tab === s.key ? "on" : undefined} onClick={() => go(s.key, categoryId)}>
             {s.label}
           </button>
@@ -262,7 +290,7 @@ export function ShopView({
             plans.map((pl) => {
               const current = pl.id === currentPlanId;
               return (
-                <div key={pl.id} className="ca-card plancard">
+                <div key={pl.id} className="ca-card plancard" data-plan={pl.id}>
                   <span style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
                     <h3 style={{ fontSize: 20, fontWeight: 700 }}>{pl.name}</h3>
                     <span style={{ flex: 1 }} />
@@ -282,10 +310,10 @@ export function ShopView({
                   )}
                   {current ? (
                     <span className="status-pill dark" style={{ alignSelf: "flex-start" }}>
-                      Current plan
+                      {membershipPending ? "Waiting for your first payment" : "Current plan"}
                     </span>
                   ) : (
-                    <button className="btn-black" disabled={pending} onClick={() => joinPlan(pl.id)}>
+                    <button className="btn-black" disabled={pending || membershipPending} onClick={() => joinPlan(pl.id)}>
                       Join
                     </button>
                   )}
@@ -524,6 +552,33 @@ export function ShopView({
               </div>
             ))}
           </div>
+        )}
+      </Sheet>
+
+      {/* The first payment. Until it goes through there is no membership, so
+          this sheet is the whole of joining rather than a formality after it. */}
+      <Sheet open={!!firstPayment} onClose={() => setFirstPayment(null)} title={firstPayment ? `Start ${firstPayment.plan}` : ""}>
+        {firstPayment && (
+          <>
+            <p style={{ fontSize: 14, color: "var(--muted)", paddingBottom: 4 }}>
+              {money(firstPayment.amountCents, currency)} now, then the same each period. Cancel any time from your profile.
+            </p>
+            <CardPayment
+              payment={firstPayment.payment}
+              orderNumber={{ membership: true }}
+              amountCents={firstPayment.amountCents}
+              currency={currency}
+              payLabel={`Pay ${money(firstPayment.amountCents, currency)} and start`}
+              onPaid={() => {
+                setFirstPayment(null);
+                // The clinic's Stripe account confirms it; the plan switches on
+                // when that lands, which is usually a second or two.
+                toast("Payment sent — your membership starts in a moment");
+                router.refresh();
+              }}
+              onCancel={() => setFirstPayment(null)}
+            />
+          </>
         )}
       </Sheet>
     </div>

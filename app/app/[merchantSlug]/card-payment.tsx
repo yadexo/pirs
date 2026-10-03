@@ -40,14 +40,21 @@ export function CardPayment({
   orderNumber,
   amountCents,
   currency,
+  payLabel,
   onPaid,
   onCancel,
 }: {
   payment: PaymentHandoff;
-  /** Carried into the return URL so a redirect can be resolved on the way back. */
-  orderNumber: string;
+  /**
+   * Carried into the return URL so a redirect can be resolved on the way back.
+   * A membership's first payment has no order, and says so: the page it comes
+   * back to reports the membership rather than looking for an order number.
+   */
+  orderNumber: string | { membership: true };
   amountCents: number;
   currency: string;
+  /** Overrides "Pay €X" — a first membership payment says what it starts. */
+  payLabel?: string;
   /** The payment went through, as far as the browser can tell. */
   onPaid: () => void;
   onCancel: () => void;
@@ -70,7 +77,7 @@ export function CardPayment({
         },
       }}
     >
-      <PayForm orderNumber={orderNumber} amountCents={amountCents} currency={currency} onPaid={onPaid} onCancel={onCancel} />
+      <PayForm orderNumber={orderNumber} amountCents={amountCents} currency={currency} payLabel={payLabel} onPaid={onPaid} onCancel={onCancel} />
     </Elements>
   );
 }
@@ -79,12 +86,14 @@ function PayForm({
   orderNumber,
   amountCents,
   currency,
+  payLabel,
   onPaid,
   onCancel,
 }: {
-  orderNumber: string;
+  orderNumber: string | { membership: true };
   amountCents: number;
   currency: string;
+  payLabel?: string;
   onPaid: () => void;
   onCancel: () => void;
 }) {
@@ -114,7 +123,12 @@ function PayForm({
       // back to the clinic's app.
       // iDEAL and Klarna leave the site entirely; the order number is how the
       // page they come back to knows what to report.
-      confirmParams: { return_url: `${window.location.origin}${window.location.pathname}?order=${encodeURIComponent(orderNumber)}` },
+      confirmParams: {
+        return_url:
+          typeof orderNumber === "string"
+            ? `${window.location.origin}${window.location.pathname}?order=${encodeURIComponent(orderNumber)}`
+            : `${window.location.origin}${window.location.pathname}?membership=1`,
+      },
       redirect: "if_required",
     });
     setBusy(false);
@@ -134,7 +148,7 @@ function PayForm({
         </p>
       )}
       <button className="btn-black" type="submit" disabled={!stripe || !ready || busy} style={{ width: "100%", marginTop: 16 }}>
-        {busy ? "Paying…" : `Pay ${money(amountCents, currency)}`}
+        {busy ? "Paying…" : (payLabel ?? `Pay ${money(amountCents, currency)}`)}
       </button>
       <button type="button" className="press" onClick={onCancel} disabled={busy} style={{ width: "100%", marginTop: 10, fontSize: 14, color: "var(--muted)" }}>
         Cancel

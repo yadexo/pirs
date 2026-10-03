@@ -234,7 +234,7 @@ Set `NODE_ENV=production` and point `DATABASE_URL` at your production database; 
 
 ## Payment provider setup
 
-Default is `PAYMENT_PROVIDER=mock` — checkout and membership billing work end-to-end with no external account, including a "simulate a declined payment" toggle at checkout to exercise the failure path. No card data is ever collected or stored by this codebase either way.
+Default is `PAYMENT_PROVIDER=mock` — checkout and membership billing work end-to-end with no external account. Set `MOCK_PAYMENTS_DECLINE=1` to make every mock payment fail, which is how the failed-payment path is exercised; it is ignored when `NODE_ENV=production`. No card data is ever collected or stored by this codebase either way.
 
 To enable Stripe:
 
@@ -243,11 +243,23 @@ To enable Stripe:
 
    | Endpoint | Listen to | Events | Secret goes in |
    | --- | --- | --- | --- |
-   | Connected accounts | Events on connected accounts | `payment_intent.succeeded`, `payment_intent.payment_failed`, `charge.refunded`, `charge.dispute.created`, `account.updated`, `account.application.deauthorized`, `customer.subscription.updated`, `customer.subscription.deleted` | `STRIPE_CONNECT_WEBHOOK_SECRET` |
-   | Platform account | Events on your account | the platform's own billing events (`invoice.paid`, `invoice.payment_failed`, `customer.subscription.*`) | `STRIPE_WEBHOOK_SECRET` |
+   | Connected accounts | Events on connected accounts | `payment_intent.succeeded`, `payment_intent.payment_failed`, `charge.refunded`, `charge.dispute.created`, `account.updated`, `account.application.deauthorized`, `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted` | `STRIPE_CONNECT_WEBHOOK_SECRET` |
+   | Platform account | Events on your account | the platform's own billing of its clinics, when you set that up | `STRIPE_WEBHOOK_SECRET` |
+
+   Clients' memberships are subscriptions on the clinics' own accounts, so `invoice.paid` and `invoice.payment_failed` belong on the **connected accounts** endpoint — that is what activates a membership and what puts one past due.
 
    Clients' payments are direct charges on the clinic's own connected account, so the Connect endpoint is the one that marks orders paid. An instance that only takes client payments can set just `STRIPE_CONNECT_WEBHOOK_SECRET`; one that only bills clinics can set just `STRIPE_WEBHOOK_SECRET`. Each secret is issued per endpoint, so local and production values differ, and `stripe listen --forward-connect-to` issues its own again.
 3. The customer-facing checkout UI collects payment via Stripe Elements/Checkout on your front end — only a token/PaymentIntent id ever reaches this codebase.
+
+## Memberships
+
+A membership is a Stripe subscription **on the clinic's own connected account**: the clinic's customer, the clinic's price, the clinic's invoices, visible in the clinic's own Stripe dashboard. The platform's cut rides on each invoice as an `application_fee_percent`.
+
+- **Joining** creates the membership `PENDING` and the subscription with its first invoice incomplete. The client confirms that invoice in the Payment Element. Nothing is a membership until it is paid: no benefits and no included credit while it is `PENDING`.
+- **`invoice.paid` is the only thing that activates a period.** It sets the period dates, clears any outstanding failures, and grants the plan's included credit — once per invoice, so a repeated delivery cannot grant it twice, and again for each new period.
+- **The fee per clinic** is set by the agency on /agency ("Membership fee"), stored on `Tenant.membershipFeePercent`. Blank means the clinic pays the same percentage as its other sales (`PLATFORM_FEE_PERCENT`); `0` means the platform takes nothing. It is never editable by the clinic.
+- **A failed payment** sets `PAST_DUE` and stamps `pastDueSince`. Benefits continue for seven days (`PAST_DUE_GRACE_MS` in `lib/membership-status.ts`) while Stripe retries the card; the clock starts at the first failure and is not restarted by later ones. The `memberships` cron job then suspends it. A payment that succeeds at any point brings it straight back.
+- **A clinic that cannot take payments** shows no membership plans at all — the tab is not rendered, and joining is refused server-side as well.
 
 ## Notification provider architecture
 
@@ -261,10 +273,11 @@ To enable Stripe:
 - **Stripe integration** is implemented against the SDK but not exercised against a live Stripe account in this environment — verify against a real test-mode account before going live.
 - **Data retention** (`TenantSettings.dataRetentionDays`) is stored and surfaced in settings but no background job currently acts on it.
 - **Appointment reminders** (`appointmentReminderHours`) are stored in settings but no scheduler currently sends them — wire up a cron/queue calling the notification campaign path.
+- **Membership proration and plan changes** are not implemented: a client cancels and joins again rather than switching plans, and a price change applies to new members only (existing subscriptions keep the price they signed up on, which is Stripe's behaviour).
 
 ## Recommended next steps
 
-1. Add a background job runner (e.g. a cron-triggered route or a queue) for: membership renewal billing, appointment reminders, loyalty point expiry, and scheduled notification campaigns (`scheduledAt` is stored but not yet auto-triggered).
+1. Add a background job runner (e.g. a cron-triggered route or a queue) for: appointment reminders and loyalty point expiry. Membership renewals are Stripe's own schedule, and scheduled campaigns and membership suspensions already run from `/api/cron/marketing` and `/api/cron/memberships`.
 2. Move rate limiting to a shared store for multi-instance deployments.
 3. Add end-to-end browser tests (e.g. Playwright) for the golden paths, complementing the current integration-test coverage of business logic.
 4. Wire up real Resend/Twilio/Web Push credentials and remove the mock fallbacks once the business is ready to send live notifications.

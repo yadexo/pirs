@@ -1,5 +1,7 @@
 import { getClientAppContext } from "@/lib/client-app-context";
 import { discountedUnitPrice, shopDiscountsFor } from "@/lib/discounts";
+import { clinicPaymentMode } from "@/lib/stripe-payments";
+import { MEMBERSHIP_HOLDS_SLOT } from "@/lib/membership-status";
 import { ShopView } from "./shop-view";
 
 export default async function ShopPage({
@@ -7,14 +9,17 @@ export default async function ShopPage({
   searchParams,
 }: {
   params: Promise<{ merchantSlug: string }>;
-  searchParams: Promise<{ tab?: string; category?: string; product?: string }>;
+  searchParams: Promise<{ tab?: string; category?: string; product?: string; membership?: string }>;
 }) {
   const { merchantSlug } = await params;
   const sp = await searchParams;
   const ctx = await getClientAppContext(merchantSlug);
   if (!ctx.customerProfileId) return null;
 
-  const tab = sp.tab === "memberships" || sp.tab === "treatments" ? sp.tab : "browse";
+  // ?membership=1 is where a bank redirect comes back to after a first
+  // membership payment, so that client lands on their plan rather than on the
+  // shop front with nothing to show what just happened.
+  const tab = sp.membership ? "memberships" : sp.tab === "memberships" || sp.tab === "treatments" ? sp.tab : "browse";
 
   // This client's own automatic discounts, including any personal one.
   const discounts = await shopDiscountsFor(ctx.merchant.id, ctx.customerProfileId);
@@ -36,12 +41,15 @@ export default async function ShopPage({
       include: { benefits: { select: { description: true, service: { select: { name: true } } } } },
     }),
     ctx.db.customerMembership.findFirst({
-      where: { customerProfileId: ctx.customerProfileId, status: { in: ["ACTIVE", "TRIAL", "PAST_DUE", "PAUSED"] } },
-      select: { membershipPlanId: true },
+      where: { customerProfileId: ctx.customerProfileId, status: { in: [...MEMBERSHIP_HOLDS_SLOT] } },
+      select: { membershipPlanId: true, status: true },
     }),
     ctx.db.loyaltyProgramme.findFirst({ where: {} }),
     ctx.db.tenantSettings.findFirst({ where: {} }),
   ]);
+
+  // Whether this clinic can bill a recurring plan at all.
+  const billable = (await clinicPaymentMode(ctx.merchant.id)).mode !== "blocked";
 
   return (
     <ShopView
@@ -97,14 +105,22 @@ export default async function ShopPage({
         categoryName: s.category.name,
         };
       })}
-      plans={plans.map((m) => ({
-        id: m.id,
-        name: m.name,
-        description: m.description,
-        priceCents: m.priceCents,
-        interval: m.billingFrequency === "MONTHLY" ? "month" : "year",
-        benefits: m.benefits.map((b) => b.service?.name ?? b.description),
-      }))}
+      // A plan is a promise to bill somebody every month. A clinic that
+      // cannot take a payment cannot keep that promise, so its plans are not
+      // shown at all rather than offered and then refused at the last step.
+      plans={
+        billable
+          ? plans.map((m) => ({
+              id: m.id,
+              name: m.name,
+              description: m.description,
+              priceCents: m.priceCents,
+              interval: m.billingFrequency === "MONTHLY" ? "month" : "year",
+              benefits: m.benefits.map((b) => b.service?.name ?? b.description),
+            }))
+          : []
+      }
+      membershipPending={membership?.status === "PENDING"}
     />
   );
 }

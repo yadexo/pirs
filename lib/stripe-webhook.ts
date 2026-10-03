@@ -5,7 +5,14 @@ import { getTenantDb } from "@/lib/tenant-db";
 import { completePaidOrder, releaseFailedOrder } from "@/lib/order-completion";
 import { disconnectClinicAccount, syncClinicFromAccount } from "@/lib/stripe-connect";
 import { domainsApi, registerApplePayDomains } from "@/lib/apple-pay-domains";
-import { notifyOrderPaid, notifyRefundProcessed } from "@/lib/client-notifications";
+import {
+  notifyMembershipActive,
+  notifyMembershipPaymentFailed,
+  notifyOrderPaid,
+  notifyRefundProcessed,
+} from "@/lib/client-notifications";
+import { recordActivity } from "@/lib/activity";
+import { graceEndsAt } from "@/lib/membership-status";
 import { createItemsForOrder, voidItemsForOrder } from "@/lib/redeemable";
 import { stripe } from "@/lib/stripe-payments";
 
@@ -110,6 +117,157 @@ async function registerDomainsQuietly(stripeAccountId: string): Promise<void> {
   } catch (err) {
     console.error(`[stripe-webhook] Apple Pay domains skipped for ${stripeAccountId}:`, err instanceof Error ? err.message : err);
   }
+}
+
+/** The subscription an invoice belongs to, across Stripe's API versions. */
+function subscriptionIdOf(invoice: Stripe.Invoice): string | null {
+  const direct = (invoice as unknown as Record<string, unknown>).subscription;
+  if (typeof direct === "string") return direct;
+  if (direct && typeof direct === "object" && "id" in direct) return String((direct as { id: string }).id);
+  // Newer versions hang it off the invoice's line items instead.
+  for (const line of invoice.lines?.data ?? []) {
+    const onLine = (line as unknown as Record<string, unknown>).subscription;
+    if (typeof onLine === "string") return onLine;
+    const parent = (line as unknown as { parent?: { subscription_item_details?: { subscription?: string } } }).parent;
+    if (parent?.subscription_item_details?.subscription) return parent.subscription_item_details.subscription;
+  }
+  return null;
+}
+
+/**
+ * A membership period that has been paid for.
+ *
+ * Idempotent in the way that matters: the status change is conditional, and
+ * the included credit is granted against this invoice's id, so Stripe
+ * delivering the same invoice twice cannot hand out the credit twice.
+ */
+async function activateMembershipPeriod(subscriptionId: string, invoice: Stripe.Invoice, event: Stripe.Event): Promise<void> {
+  const membership = await rawDb.customerMembership.findFirst({
+    where: { stripeSubscriptionId: subscriptionId },
+    include: { membershipPlan: { select: { name: true, includedCreditCents: true } } },
+  });
+  if (!membership) return;
+  // A membership that is over stays over. A final invoice settling after a
+  // cancellation is money owed for a period already had, not a reason to
+  // start the plan up again behind the client's back.
+  if (membership.status === "CANCELLED" || membership.status === "EXPIRED") {
+    console.error(`[stripe-webhook] invoice for ${subscriptionId} ignored: membership ${membership.id} is ${membership.status}`);
+    return;
+  }
+
+  const line = invoice.lines?.data?.[0];
+  const start = line?.period?.start ? new Date(line.period.start * 1000) : new Date(event.created * 1000);
+  const end = line?.period?.end ? new Date(line.period.end * 1000) : membership.currentPeriodEnd;
+  const paidCents = invoice.amount_paid ?? 0;
+  const invoiceId = invoice.id ?? `evt-${event.id}`;
+
+  const wasOff = membership.status !== "ACTIVE" && membership.status !== "TRIAL";
+
+  await rawDb.customerMembership.update({
+    where: { id: membership.id },
+    data: {
+      status: "ACTIVE",
+      currentPeriodStart: start,
+      currentPeriodEnd: end,
+      nextBillingAt: end,
+      // Paid up: nothing is owed, so no failures and no grace are outstanding.
+      failedAttempts: 0,
+      dunningState: null,
+      pastDueSince: null,
+    },
+  });
+
+  // One grant per invoice. The marker is the billing event's description,
+  // which is also what the clinic's dunning panel shows.
+  const credit = membership.membershipPlan?.includedCreditCents ?? 0;
+  const marker = `invoice:${invoiceId}`;
+  const already = await rawDb.membershipBillingEvent.findFirst({
+    where: { customerMembershipId: membership.id, description: { contains: marker } },
+    select: { id: true },
+  });
+  if (!already) {
+    await rawDb.membershipBillingEvent.create({
+      data: {
+        tenantId: membership.tenantId,
+        customerMembershipId: membership.id,
+        type: "CHARGE",
+        amountCents: paidCents,
+        description: `${membership.membershipPlan?.name ?? "Membership"} — period paid (${marker})`,
+        occurredAt: new Date(event.created * 1000),
+      } as never,
+    });
+    if (credit > 0) {
+      // The credit comes with the period that was paid for, not with signing
+      // up: a client who never completes the first payment gets nothing.
+      await rawDb.customerMembership.update({
+        where: { id: membership.id },
+        data: { creditBalanceCents: { increment: credit } },
+      });
+      await rawDb.membershipBillingEvent.create({
+        data: {
+          tenantId: membership.tenantId,
+          customerMembershipId: membership.id,
+          type: "CREDIT_GRANT",
+          amountCents: credit,
+          description: `Included credit for this period (${marker})`,
+          occurredAt: new Date(event.created * 1000),
+        } as never,
+      });
+    }
+  }
+
+  if (wasOff) {
+    await recordActivity(getTenantDb(membership.tenantId), {
+      type: "MEMBERSHIP_JOINED",
+      customerProfileId: membership.customerProfileId,
+      summary: `Membership active: ${membership.membershipPlan?.name ?? "plan"}`,
+      amountCents: paidCents,
+    });
+    // After the membership is on, and unable to affect it: a notification
+    // that fails must not have Stripe retry a payment already applied.
+    await notifyMembershipActive(membership.id).catch((err) =>
+      console.error("[stripe-webhook] membership notice not sent:", err instanceof Error ? err.message : err),
+    );
+  }
+}
+
+/**
+ * A membership payment Stripe could not take. Benefits continue for the grace
+ * period (see lib/membership-status.ts) while Stripe retries the card; the
+ * clock starts at the first failure and is not restarted by later ones.
+ */
+async function recordMembershipFailure(subscriptionId: string, invoice: Stripe.Invoice): Promise<void> {
+  const membership = await rawDb.customerMembership.findFirst({
+    where: { stripeSubscriptionId: subscriptionId },
+    include: { membershipPlan: { select: { name: true } } },
+  });
+  if (!membership) return;
+
+  const attempts = membership.failedAttempts + 1;
+  await rawDb.customerMembership.update({
+    where: { id: membership.id },
+    data: {
+      status: "PAST_DUE",
+      failedAttempts: attempts,
+      dunningState: `Payment failed ${attempts} time${attempts === 1 ? "" : "s"}`,
+      pastDueSince: membership.pastDueSince ?? new Date(),
+    },
+  });
+  await rawDb.membershipBillingEvent.create({
+    data: {
+      tenantId: membership.tenantId,
+      customerMembershipId: membership.id,
+      type: "FAILED_PAYMENT",
+      amountCents: invoice.amount_due ?? 0,
+      description: `${membership.membershipPlan?.name ?? "Membership"} — payment failed (attempt ${attempts})`,
+      occurredAt: new Date(),
+    } as never,
+  });
+
+  const updated = { status: "PAST_DUE", pastDueSince: membership.pastDueSince ?? new Date() };
+  await notifyMembershipPaymentFailed(membership.id, graceEndsAt(updated)).catch((err) =>
+    console.error("[stripe-webhook] membership failure notice not sent:", err instanceof Error ? err.message : err),
+  );
 }
 
 export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
@@ -238,11 +396,35 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
     }
 
     // --- memberships ------------------------------------------------------
+    /**
+     * The only thing that turns a membership on. A client who confirmed a
+     * payment in the browser, a renewal that went through months later, and a
+     * card retry that finally succeeded all arrive here, and all mean the same
+     * thing: this period is paid for.
+     */
+    case "invoice.paid": {
+      const invoice = event.data.object as Stripe.Invoice;
+      const subscriptionId = subscriptionIdOf(invoice);
+      if (!subscriptionId) return;
+      await activateMembershipPeriod(subscriptionId, invoice, event);
+      return;
+    }
+    case "invoice.payment_failed": {
+      const invoice = event.data.object as Stripe.Invoice;
+      const subscriptionId = subscriptionIdOf(invoice);
+      if (!subscriptionId) return;
+      await recordMembershipFailure(subscriptionId, invoice);
+      return;
+    }
     case "customer.subscription.updated":
     case "customer.subscription.deleted": {
       const sub = event.data.object as Stripe.Subscription;
       const membership = await rawDb.customerMembership.findFirst({ where: { stripeSubscriptionId: sub.id } });
       if (!membership) return;
+
+      // Stripe's own view of the subscription. "incomplete" is a first
+      // invoice nobody has paid yet, which is exactly our PENDING — it must
+      // never be read as an active membership.
       const status =
         sub.status === "active"
           ? "ACTIVE"
@@ -252,8 +434,29 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
               ? "PAST_DUE"
               : sub.status === "canceled"
                 ? "CANCELLED"
-                : membership.status;
-      await rawDb.customerMembership.update({ where: { id: membership.id }, data: { status } });
+                : sub.status === "unpaid"
+                  ? "SUSPENDED"
+                  : // The first payment was never completed and Stripe has
+                    // given up on it. The client's slot has to come free, or
+                    // they can never join anything again.
+                    sub.status === "incomplete_expired"
+                    ? "CANCELLED"
+                    : sub.status === "incomplete"
+                      ? membership.status === "PENDING"
+                        ? "PENDING"
+                        : membership.status
+                      : membership.status;
+
+      await rawDb.customerMembership.update({
+        where: { id: membership.id },
+        data: {
+          status,
+          // A membership that is no longer behind has no grace left to count.
+          ...(status === "ACTIVE" || status === "TRIAL" ? { pastDueSince: null, failedAttempts: 0, dunningState: null } : {}),
+          ...(status === "PAST_DUE" && !membership.pastDueSince ? { pastDueSince: new Date(event.created * 1000) } : {}),
+          ...(status === "CANCELLED" && !membership.cancelledAt ? { cancelledAt: new Date(event.created * 1000) } : {}),
+        },
+      });
       return;
     }
     default:

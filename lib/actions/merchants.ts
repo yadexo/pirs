@@ -137,6 +137,43 @@ export async function setMerchantActiveAction(merchantId: string, active: boolea
   revalidatePath("/agency");
 }
 
+/**
+ * The platform's cut of this clinic's memberships.
+ *
+ * The agency's decision, not the clinic's — which is why it lives here, behind
+ * PLATFORM_ADMIN, and not in the clinic's own settings. Blank means "the same
+ * as this clinic's other sales"; 0 is a real answer and means the platform
+ * takes nothing from its memberships.
+ */
+export async function setMembershipFeeAction(
+  merchantId: string,
+  percent: number | null,
+): Promise<{ error: string } | { ok: true; percent: number | null }> {
+  const user = await requireRole("PLATFORM_ADMIN");
+
+  if (percent !== null) {
+    if (!Number.isFinite(percent) || percent < 0) return { error: "Enter a percentage of 0 or more, or leave it blank." };
+    if (percent > 100) return { error: "A fee above 100% isn't possible." };
+  }
+  // Stripe takes two decimal places; round rather than silently losing the rest.
+  const value = percent === null ? null : Math.round(percent * 100) / 100;
+
+  await rawDb.tenant.update({ where: { id: merchantId }, data: { membershipFeePercent: value } });
+
+  await writeAuditLog({
+    tenantId: merchantId,
+    actorUserId: user.id,
+    actorType: "PLATFORM_ADMIN",
+    action: "merchant.membership_fee_set",
+    entityType: "Tenant",
+    entityId: merchantId,
+    metadata: { percent: value },
+  });
+
+  revalidatePath("/agency");
+  return { ok: true, percent: value };
+}
+
 export async function deleteMerchantAction(merchantId: string) {
   const user = await requireRole("PLATFORM_ADMIN");
 

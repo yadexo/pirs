@@ -75,33 +75,44 @@ export async function adjustLoyaltyPoints(
   const profile = await db.customerProfile.findFirst({ where: { id: params.customerProfileId }, select: { id: true, tenantId: true } });
   if (!profile) throw new Error("Customer not found.");
 
-  return rawDb.$transaction(async (tx) => {
-    const rows = await tx.$queryRaw<{ balance: number }[]>`
-      UPDATE "CustomerProfile"
-      SET "loyaltyPointsBalance" = "loyaltyPointsBalance" + ${params.points}, "updatedAt" = NOW()
-      WHERE "id" = ${profile.id} AND "tenantId" = ${profile.tenantId}
-        AND "loyaltyPointsBalance" + ${params.points} >= 0
-      RETURNING "loyaltyPointsBalance" AS balance
-    `;
-    if (rows.length === 0) throw new InsufficientPointsError();
-    const balanceAfter = Number(rows[0]!.balance);
+  return rawDb.$transaction(
+    async (tx) => {
+      const rows = await tx.$queryRaw<{ balance: number }[]>`
+        UPDATE "CustomerProfile"
+        SET "loyaltyPointsBalance" = "loyaltyPointsBalance" + ${params.points}, "updatedAt" = NOW()
+        WHERE "id" = ${profile.id} AND "tenantId" = ${profile.tenantId}
+          AND "loyaltyPointsBalance" + ${params.points} >= 0
+        RETURNING "loyaltyPointsBalance" AS balance
+      `;
+      if (rows.length === 0) throw new InsufficientPointsError();
+      const balanceAfter = Number(rows[0]!.balance);
 
-    await tx.loyaltyTransaction.create({
-      data: {
-        tenantId: profile.tenantId,
-        customerProfileId: profile.id,
-        type: params.type,
-        points: params.points,
-        balanceAfter,
-        reason: params.reason,
-        relatedOrderId: params.relatedOrderId,
-        relatedRewardId: params.relatedRewardId,
-        performedByStaffProfileId: params.performedByStaffProfileId,
-        expiresAt: params.expiresAt ?? undefined,
-      },
-    });
-    return balanceAfter;
-  });
+      await tx.loyaltyTransaction.create({
+        data: {
+          tenantId: profile.tenantId,
+          customerProfileId: profile.id,
+          type: params.type,
+          points: params.points,
+          balanceAfter,
+          reason: params.reason,
+          relatedOrderId: params.relatedOrderId,
+          relatedRewardId: params.relatedRewardId,
+          performedByStaffProfileId: params.performedByStaffProfileId,
+          expiresAt: params.expiresAt ?? undefined,
+        },
+      });
+      return balanceAfter;
+    },
+    /**
+     * Two short statements, but they serialise on one row: a client whose
+     * points move several times at once (a checkout redeeming and earning
+     * while a staff member adjusts them) queues up here. Prisma's default
+     * five seconds is the whole queue's budget, not this writer's, so a busy
+     * moment on a loaded database fails writes that would have succeeded a
+     * second later. The work inside is unchanged; only the patience is.
+     */
+    { timeout: 20_000 },
+  );
 }
 
 export function rewardDiscountCents(

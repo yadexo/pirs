@@ -16,6 +16,13 @@ import { clinicPaymentMode, createDirectCharge } from "@/lib/stripe-payments";
 import { completePaidOrder, releaseFailedOrder } from "@/lib/order-completion";
 import { bookingDepositCents } from "@/lib/booking-deposit";
 import { resolveDiscount } from "@/lib/discounts";
+import { MEMBERSHIP_HOLDS_SLOT } from "@/lib/membership-status";
+import {
+  cancelMembershipSubscription,
+  createMembershipSubscription,
+  ensureStripeCustomer,
+  ensureStripePrice,
+} from "@/lib/memberships-billing";
 
 /**
  * Every mutating action the patient app can perform.
@@ -717,29 +724,152 @@ export async function clientReferralAction(slug: string): Promise<{ error: strin
 // Membership
 // ---------------------------------------------------------------------------
 
-export async function clientJoinPlanAction(slug: string, planId: string): Promise<{ error: string } | { ok: true; name: string }> {
+export type JoinPlanResult =
+  | { error: string }
+  /** The mock provider settled it on the spot; there is nothing to confirm. */
+  | { ok: true; name: string; paid: true }
+  /** The client confirms the first invoice in the Payment Element. */
+  | {
+      ok: true;
+      name: string;
+      paid: false;
+      membershipId: string;
+      payment: { clientSecret: string; publishableKey: string | null; stripeAccountId: string };
+      firstPaymentCents: number;
+    };
+
+/**
+ * Joining a plan.
+ *
+ * The membership is created PENDING and gives nothing — no benefits, no
+ * included credit — until Stripe says the first invoice is paid. The
+ * subscription itself lives on the clinic's own connected account, so the
+ * clinic bills its own members and sees them in its own dashboard, and the
+ * platform's cut rides on each invoice as an application fee.
+ */
+export async function clientJoinPlanAction(slug: string, planId: string): Promise<JoinPlanResult> {
   const { db, user } = await requireCustomerContext();
 
   const plan = await db.membershipPlan.findFirst({ where: { id: planId, active: true } });
   if (!plan) return { error: "That plan is no longer available." };
 
   const existing = await db.customerMembership.findFirst({
-    where: { customerProfileId: user.customerProfileId!, status: { in: ["ACTIVE", "TRIAL", "PAST_DUE", "PAUSED"] } },
+    where: { customerProfileId: user.customerProfileId!, status: { in: [...MEMBERSHIP_HOLDS_SLOT] } },
+    select: { id: true, status: true },
   });
-  if (existing) return { error: "You already have an active membership." };
+  if (existing) {
+    return {
+      error:
+        existing.status === "PENDING"
+          ? "You already have a membership waiting for its first payment."
+          : "You already have an active membership.",
+    };
+  }
 
-  const sub = await getPaymentProvider().createSubscription({
-    customerRef: user.customerProfileId!,
-    planRef: plan.name,
-    amountCents: plan.priceCents,
-    currency: await tenantCurrency(db),
-    intervalMonths: plan.billingFrequency === "MONTHLY" ? 1 : 12,
-  });
+  const currency = await tenantCurrency(db);
+  const payment = await clinicPaymentMode(user.tenantId!);
+  // Decided before anything is written: no membership row for a clinic that
+  // cannot take the payment that is supposed to keep it alive.
+  if (payment.mode === "blocked") return { error: payment.reason };
 
   const now = new Date();
   const end = new Date(now);
   if (plan.billingFrequency === "MONTHLY") end.setMonth(end.getMonth() + 1);
   else end.setFullYear(end.getFullYear() + 1);
+
+  if (payment.mode === "stripe") {
+    const clinic = await rawDb.tenant.findUniqueOrThrow({
+      where: { id: user.tenantId! },
+      select: { id: true, membershipFeePercent: true },
+    });
+    const profile = await db.customerProfile.findFirstOrThrow({
+      where: { id: user.customerProfileId! },
+      select: { id: true, stripeCustomerId: true, firstName: true, lastName: true, user: { select: { email: true } } },
+    });
+
+    // Created first, so its id can key the subscription: a double-submitted
+    // join then reuses one subscription instead of making two.
+    const membership = await db.customerMembership.create({
+      data: {
+        customerProfileId: user.customerProfileId!,
+        membershipPlanId: plan.id,
+        status: "PENDING",
+        startedAt: now,
+        currentPeriodStart: now,
+        currentPeriodEnd: end,
+        nextBillingAt: end,
+        creditBalanceCents: 0,
+      } as never,
+      select: { id: true },
+    });
+
+    try {
+      const account = { id: clinic.id, stripeAccountId: payment.stripeAccountId, membershipFeePercent: clinic.membershipFeePercent };
+      const stripeCustomerId = await ensureStripeCustomer(account, {
+        id: profile.id,
+        stripeCustomerId: profile.stripeCustomerId,
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        email: profile.user?.email ?? null,
+      });
+      const priceId = await ensureStripePrice(account, plan, currency);
+      const handoff = await createMembershipSubscription({
+        clinic: account,
+        stripeCustomerId,
+        priceId,
+        membershipId: membership.id,
+        planId: plan.id,
+        customerProfileId: profile.id,
+      });
+
+      await db.customerMembership.updateMany({
+        where: { id: membership.id },
+        data: {
+          stripeSubscriptionId: handoff.subscriptionId,
+          currentPeriodStart: handoff.currentPeriodStart,
+          currentPeriodEnd: handoff.currentPeriodEnd,
+          nextBillingAt: handoff.currentPeriodEnd,
+        },
+      });
+
+      if (!handoff.clientSecret) {
+        // Nothing to pay — a free or trial plan. Stripe still sends
+        // invoice.paid, which is what will activate it.
+        revalidateClient(slug);
+        return { ok: true, name: plan.name, paid: false, membershipId: membership.id, payment: { clientSecret: "", publishableKey: handoff.publishableKey, stripeAccountId: handoff.stripeAccountId }, firstPaymentCents: plan.priceCents };
+      }
+
+      revalidateClient(slug);
+      return {
+        ok: true,
+        name: plan.name,
+        paid: false,
+        membershipId: membership.id,
+        payment: {
+          clientSecret: handoff.clientSecret,
+          publishableKey: handoff.publishableKey,
+          stripeAccountId: handoff.stripeAccountId,
+        },
+        firstPaymentCents: plan.priceCents,
+      };
+    } catch (err) {
+      console.error("[membership] could not start the subscription:", err instanceof Error ? err.message : err);
+      // Nothing was charged, so leave nothing behind that looks like a
+      // membership: the slot has to be free for them to try again.
+      await db.customerMembership.updateMany({ where: { id: membership.id }, data: { status: "CANCELLED", cancelledAt: new Date() } });
+      return { error: "We couldn't start that membership. Please try again." };
+    }
+  }
+
+  // No Stripe keys on this deployment: the mock provider settles immediately,
+  // which is what keeps local development and the demo usable.
+  const sub = await getPaymentProvider().createSubscription({
+    customerRef: user.customerProfileId!,
+    planRef: plan.name,
+    amountCents: plan.priceCents,
+    currency,
+    intervalMonths: plan.billingFrequency === "MONTHLY" ? 1 : 12,
+  });
 
   const membership = await db.customerMembership.create({
     data: {
@@ -772,19 +902,31 @@ export async function clientJoinPlanAction(slug: string, planId: string): Promis
     amountCents: plan.priceCents,
   });
   revalidateClient(slug);
-  return { ok: true, name: plan.name };
+  return { ok: true, name: plan.name, paid: true };
 }
 
 export async function clientCancelPlanAction(slug: string): Promise<{ error: string } | { ok: true }> {
   const { db, user } = await requireCustomerContext();
 
   const membership = await db.customerMembership.findFirst({
-    where: { customerProfileId: user.customerProfileId!, status: { in: ["ACTIVE", "TRIAL", "PAST_DUE", "PAUSED"] } },
+    where: { customerProfileId: user.customerProfileId!, status: { in: [...MEMBERSHIP_HOLDS_SLOT] } },
   });
   if (!membership) return { error: "You don't have an active membership." };
 
   if (membership.stripeSubscriptionId) {
-    await getPaymentProvider().cancelSubscription(membership.stripeSubscriptionId);
+    // On the clinic's own account, where the subscription was created. Asking
+    // the platform account to cancel it would simply not find it.
+    const clinic = await rawDb.tenant.findUnique({ where: { id: user.tenantId! }, select: { stripeAccountId: true } });
+    if (clinic?.stripeAccountId && membership.stripeSubscriptionId.startsWith("sub_")) {
+      try {
+        await cancelMembershipSubscription(clinic.stripeAccountId, membership.stripeSubscriptionId);
+      } catch (err) {
+        console.error("[membership] Stripe refused the cancellation:", err instanceof Error ? err.message : err);
+        return { error: "We couldn't cancel that with the payment provider. Please try again." };
+      }
+    } else {
+      await getPaymentProvider().cancelSubscription(membership.stripeSubscriptionId);
+    }
   }
 
   await db.customerMembership.updateMany({

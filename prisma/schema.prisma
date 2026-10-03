@@ -65,6 +65,13 @@ model Tenant {
   /// When the stored status was last read from Stripe. Older webhooks are ignored.
   stripeStatusCheckedAt  DateTime?
 
+  /// The platform's cut of this clinic's membership subscriptions, as a
+  /// percentage. Set by the agency, never by the clinic; null means the same
+  /// percentage as the clinic's other sales, and 0 means the platform takes
+  /// nothing. Kept apart from the per-sale fee because a recurring plan is a
+  /// different deal from a one-off purchase.
+  membershipFeePercent   Float?
+
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
@@ -488,6 +495,11 @@ model CustomerProfile {
 
   loyaltyPointsBalance   Int @default(0)
   accountCreditBalanceCents Int @default(0)
+
+  /// This client as a customer on their clinic's own Stripe account, used for
+  /// membership subscriptions. It belongs to that one connected account — a
+  /// client of another clinic is a different Stripe customer entirely.
+  stripeCustomerId       String?
 
   /// Drives the Visits / Last Visit columns on Client Profiles. A client with
   /// zero visits is what the "Leads" filter selects.
@@ -928,6 +940,13 @@ model MembershipPlan {
   active                 Boolean           @default(true)
   archivedAt             DateTime?
 
+  /// The product and recurring price this plan is billed by, created on the
+  /// clinic's own connected account the first time somebody joins. Cleared if
+  /// the price changes, so the next join creates a fresh one rather than
+  /// charging the old amount.
+  stripeProductId        String?
+  stripePriceId          String?
+
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
 
@@ -955,9 +974,15 @@ model MembershipBenefit {
 }
 
 enum MembershipStatus {
+  /// Signed up, waiting for the first payment to be confirmed. No benefits and
+  /// no included credit until Stripe says the first invoice is paid.
+  PENDING
   TRIAL
   ACTIVE
   PAST_DUE
+  /// Past due for longer than the grace period: benefits stop, and the
+  /// membership comes back only when a payment succeeds.
+  SUSPENDED
   PAUSED
   CANCELLED
   EXPIRED
@@ -987,6 +1012,9 @@ model CustomerMembership {
   /// Card-failure retry state, surfaced in the Memberships dunning panel.
   failedAttempts      Int               @default(0)
   dunningState        String?
+  /// When the current run of failures began, which is what the grace period is
+  /// counted from. Cleared the moment a payment succeeds.
+  pastDueSince        DateTime?
 
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt

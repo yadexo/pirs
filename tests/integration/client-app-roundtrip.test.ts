@@ -289,8 +289,10 @@ describe("patient app -> clinic portal round trip", () => {
   });
 
   it("joining a plan creates the membership the clinic manages, and cancelling ends it", async () => {
+    // No Stripe keys in this test, so the mock provider settles on the spot
+    // and the plan is active immediately — `paid` says which path it took.
     const joined = await clientJoinPlanAction(SLUG, planId);
-    expect(joined).toEqual({ ok: true, name: "Care Plan" });
+    expect(joined).toEqual({ ok: true, name: "Care Plan", paid: true });
 
     const membership = await db.customerMembership.findFirst({ where: { customerProfileId } });
     expect(membership!.status).toBe("ACTIVE");

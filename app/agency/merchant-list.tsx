@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { startImpersonationAction } from "@/lib/actions/impersonation";
-import { setMerchantActiveAction, deleteMerchantAction } from "@/lib/actions/merchants";
+import { setMerchantActiveAction, deleteMerchantAction, setMembershipFeeAction } from "@/lib/actions/merchants";
 import { toast } from "@/components/ui/toaster";
 import { AddMerchantButton } from "./add-merchant";
 
@@ -20,6 +20,10 @@ export interface MerchantRow {
   isActive: boolean;
   verified: boolean;
   createdAt: string;
+  /** The platform's cut of this clinic's memberships; null means the default. */
+  membershipFeePercent: number | null;
+  /** What null falls back to — the percentage the clinic's other sales pay. */
+  defaultFeePercent: number;
 }
 
 type Sort = "name-asc" | "name-desc" | "newest" | "clients";
@@ -163,6 +167,61 @@ function useMerchantActions(merchant: MerchantRow) {
   return { pending, active, impersonate, toggleActive, remove };
 }
 
+/**
+ * The platform's cut of this clinic's memberships, editable here because it is
+ * the agency's decision and nobody else's. Blank means the clinic pays what it
+ * pays on everything else; 0 is a real answer and is kept as one.
+ */
+function MembershipFee({ merchant }: { merchant: MerchantRow }) {
+  const [value, setValue] = React.useState(merchant.membershipFeePercent === null ? "" : String(merchant.membershipFeePercent));
+  const [saving, setSaving] = React.useState(false);
+  const saved = React.useRef(value);
+
+  async function commit() {
+    const text = value.trim().replace(",", ".");
+    if (text === saved.current) return;
+    const percent = text === "" ? null : Number(text);
+    if (percent !== null && !Number.isFinite(percent)) {
+      setValue(saved.current);
+      toast.error("Enter a percentage, or leave it blank for the default.");
+      return;
+    }
+    setSaving(true);
+    const res = await setMembershipFeeAction(merchant.id, percent);
+    setSaving(false);
+    if ("error" in res) {
+      setValue(saved.current);
+      toast.error(res.error);
+      return;
+    }
+    const next = res.percent === null ? "" : String(res.percent);
+    setValue(next);
+    saved.current = next;
+    toast.success(res.percent === null ? "Membership fee back to the default" : `Membership fee set to ${res.percent}%`);
+  }
+
+  return (
+    <label className="flex items-center gap-1 text-[11px] text-ink-muted" title="The platform's cut of this clinic's memberships">
+      <span className="hidden sm:inline">Membership fee</span>
+      <input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") setValue(saved.current);
+        }}
+        disabled={saving}
+        inputMode="decimal"
+        placeholder={`${merchant.defaultFeePercent}`}
+        aria-label={`Membership fee percentage for ${merchant.name}`}
+        className="h-7 w-12 rounded-[8px] border border-border bg-surface px-1.5 text-right text-[12px] tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+      />
+      <span>%</span>
+    </label>
+  );
+}
+
 function MerchantRowItem({ merchant }: { merchant: MerchantRow }) {
   const { pending, active, impersonate, toggleActive, remove } = useMerchantActions(merchant);
   const router = useRouter();
@@ -191,6 +250,7 @@ function MerchantRowItem({ merchant }: { merchant: MerchantRow }) {
             <Clock className="h-3 w-3" /> To Verify
           </Pill>
         )}
+        <MembershipFee merchant={merchant} />
         <Toggle checked={active} onChange={toggleActive} label={active ? "Active" : "Inactive"} disabled={pending} />
         <button
           type="button"

@@ -13,8 +13,8 @@ import { verifyWithAnySecret, webhookSecrets } from "@/lib/stripe-webhook-secret
  *
  * Handled: account.updated, account.application.deauthorized,
  * payment_intent.succeeded, payment_intent.payment_failed, charge.refunded,
- * charge.dispute.created, and membership subscription changes.
- * See lib/stripe-webhook.ts.
+ * charge.dispute.created, invoice.paid, invoice.payment_failed, and
+ * customer.subscription.updated/deleted. See lib/stripe-webhook.ts.
  */
 export async function POST(req: NextRequest) {
   const secrets = webhookSecrets();

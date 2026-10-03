@@ -2,6 +2,7 @@ import { Building2, Clock, TrendingUp, Users } from "lucide-react";
 import { rawDb } from "@/lib/db";
 import { requireAgencyContext } from "@/lib/merchant-context";
 import { StatCard } from "@/components/ui/stat-card";
+import { platformFeePercent } from "@/lib/platform-fee";
 import { MerchantList } from "./merchant-list";
 import { AddMerchantButton } from "./add-merchant";
 
@@ -25,6 +26,8 @@ export default async function AgencyHomePage() {
   ]);
 
   const firstName = user.name?.split(" ")[0] ?? "there";
+  // What a clinic pays on memberships when nothing has been set for it.
+  const defaultFeePercent = platformFeePercent();
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-6">
@@ -53,6 +56,8 @@ export default async function AgencyHomePage() {
             isActive: m.status === "ACTIVE",
             verified: m.subscriptionStatus === "ACTIVE",
             createdAt: m.createdAt.toISOString(),
+            membershipFeePercent: m.membershipFeePercent,
+            defaultFeePercent,
           }))}
         />
       </div>

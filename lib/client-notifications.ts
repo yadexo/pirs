@@ -99,3 +99,68 @@ export async function notifyRefundProcessed(orderId: string, amountCents: number
     tag: `order-refund-${orderId}`,
   });
 }
+
+/** Who to tell about a membership, and how to address them. */
+async function recipientForMembership(membershipId: string) {
+  const membership = await rawDb.customerMembership.findUnique({
+    where: { id: membershipId },
+    select: {
+      customerProfile: { select: { userId: true } },
+      membershipPlan: { select: { name: true } },
+      tenant: { select: { name: true, slug: true, branding: { select: { businessName: true } } } },
+    },
+  });
+  if (!membership?.customerProfile?.userId) return null;
+  return {
+    userId: membership.customerProfile.userId,
+    clinicName: membership.tenant.branding?.businessName ?? membership.tenant.name,
+    slug: membership.tenant.slug,
+    planName: membership.membershipPlan?.name ?? "Membership",
+  };
+}
+
+/**
+ * A membership payment failed. Said plainly, with what to do and by when —
+ * a card that merely expired should not cost somebody their benefits because
+ * nobody told them.
+ */
+export async function notifyMembershipPaymentFailed(membershipId: string, benefitsEndAt?: Date | null): Promise<void> {
+  const to = await recipientForMembership(membershipId);
+  if (!to) return;
+  const deadline = benefitsEndAt
+    ? ` Your benefits continue until ${benefitsEndAt.toLocaleDateString("en-GB", { day: "numeric", month: "long" })}.`
+    : "";
+  await notifyClientQuietly(to.userId, {
+    title: to.clinicName,
+    body: `We couldn't take the payment for your ${to.planName}. Update your card to keep it.${deadline}`,
+    url: clinicPath(to.slug, "/profile?tab=settings"),
+    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    tag: `membership-failed-${membershipId}`,
+  });
+}
+
+/** The grace period ran out and the membership has stopped. */
+export async function notifyMembershipSuspended(membershipId: string): Promise<void> {
+  const to = await recipientForMembership(membershipId);
+  if (!to) return;
+  await notifyClientQuietly(to.userId, {
+    title: to.clinicName,
+    body: `Your ${to.planName} is on hold because the payment didn't go through. It restarts as soon as a payment succeeds.`,
+    url: clinicPath(to.slug, "/profile?tab=settings"),
+    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    tag: `membership-suspended-${membershipId}`,
+  });
+}
+
+/** A membership period has been paid for and the plan is live. */
+export async function notifyMembershipActive(membershipId: string): Promise<void> {
+  const to = await recipientForMembership(membershipId);
+  if (!to) return;
+  await notifyClientQuietly(to.userId, {
+    title: to.clinicName,
+    body: `Your ${to.planName} is active. Enjoy your benefits!`,
+    url: clinicPath(to.slug, "/profile?tab=settings"),
+    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    tag: `membership-active-${membershipId}`,
+  });
+}
