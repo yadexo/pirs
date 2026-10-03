@@ -224,6 +224,45 @@ describe("refunding an order", () => {
     expect(params.stripeAccountId).toBe(ACCOUNT);
   });
 
+  it("gives Stripe a key for this attempt, so a retry can't refund twice", async () => {
+    const order = await paidOrder(3_000);
+    await refundOrderAction(clinic, { orderId: order.id });
+
+    const [params] = stripeRefund.mock.calls[0] as [{ idempotencyKey?: string }];
+    const refund = await rawDb.refund.findFirstOrThrow({ where: { payment: { orderId: order.id } } });
+    // The key is this refund's own id: stable across retries of the same
+    // attempt, different for a later refund of the same amount.
+    expect(params.idempotencyKey).toBe(`refund-${refund.id}`);
+  });
+
+  it("two refunds at the same instant give the money back once", async () => {
+    const order = await paidOrder(7_000);
+
+    // Both read the same remainder before either has written anything — the
+    // double-click the read-then-write check could not catch.
+    const [a, b] = await Promise.all([refundOrderAction(clinic, { orderId: order.id }), refundOrderAction(clinic, { orderId: order.id })]);
+
+    const outcomes = [a, b];
+    expect(outcomes.filter((r) => "ok" in r)).toHaveLength(1);
+    expect(outcomes.filter((r) => "error" in r)).toHaveLength(1);
+
+    const refunds = await rawDb.refund.findMany({ where: { payment: { orderId: order.id }, status: { not: "FAILED" } } });
+    expect(refunds).toHaveLength(1);
+    expect(refunds[0]!.amountCents).toBe(7_000);
+    expect(stripeRefund).toHaveBeenCalledTimes(1);
+  });
+
+  it("frees the amount again when Stripe refuses, so the rest stays refundable", async () => {
+    const order = await paidOrder(5_000);
+    stripeRefund.mockRejectedValueOnce(new Error("Your connected account has insufficient funds"));
+
+    expect(await refundOrderAction(clinic, { orderId: order.id, amount: "20" })).toMatchObject({ error: expect.stringContaining("insufficient funds") });
+
+    // The failed attempt must not hold the money hostage.
+    expect(await refundableForOrderAction(clinic, order.id)).toMatchObject({ ok: true, order: { remainderCents: 5_000 } });
+    expect(await refundOrderAction(clinic, { orderId: order.id })).toMatchObject({ ok: true, amountCents: 5_000 });
+  });
+
   it("lists a client's orders with what is refundable, for the record staff have open", async () => {
     const order = await paidOrder(8_000);
     await refundOrderAction(clinic, { orderId: order.id, amount: "20" });

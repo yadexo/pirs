@@ -29,6 +29,14 @@ import { notifyRefundProcessed } from "@/lib/client-notifications";
  */
 export const REFUND_RETURNS_PLATFORM_FEE = true;
 
+/** Someone else's refund took the amount between the check and the claim. */
+class RemainderTaken extends Error {
+  constructor(readonly left: number) {
+    super(`Only ${left} left to refund`);
+    this.name = "RemainderTaken";
+  }
+}
+
 export interface RefundResult {
   refundId: string;
   amountCents: number;
@@ -70,6 +78,57 @@ export async function refundPayment(db: TenantDb, input: RefundInput): Promise<{
 
   const reason = input.reason?.trim() || "Refunded by the clinic";
 
+  /**
+   * The amount is claimed in our own records before a penny is asked of
+   * Stripe, because the check above is a read and two clicks can both pass
+   * it. A PENDING row counts against the remainder (see
+   * refundableRemainder), so a second attempt arriving now is told there is
+   * nothing left rather than refunding the same money twice.
+   *
+   * Serializable, so two attempts that read the same remainder at the same
+   * instant cannot both write a claim; the loser is told to try again.
+   */
+  let claim: { id: string };
+  try {
+    claim = await db.$transaction(
+      async (tx) => {
+        const fresh = await tx.payment.findFirstOrThrow({ where: { id: payment.id }, include: { refunds: true } });
+        const left = refundableRemainder(fresh);
+        if (amountCents > left) throw new RemainderTaken(left);
+        return tx.refund.create({
+          data: {
+            paymentId: payment.id,
+            amountCents,
+            reason,
+            status: "PENDING",
+            createdByStaffProfileId: input.staffProfileId ?? null,
+          } as never,
+          select: { id: true },
+        });
+      },
+      { isolationLevel: "Serializable" },
+    );
+  } catch (err) {
+    if (err instanceof RemainderTaken) {
+      return {
+        error:
+          err.left === 0
+            ? "This payment has already been refunded in full."
+            : `That's more than the ${(err.left / 100).toFixed(2)} still refundable on this payment.`,
+      };
+    }
+    // A serialization failure means another refund of this payment won the
+    // race. Nothing was written, and nothing was sent to Stripe.
+    console.error("[refund] could not claim the amount:", err instanceof Error ? err.message : err);
+    return { error: "Another refund for this payment is being processed. Try again in a moment." };
+  }
+
+  /**
+   * The claim's own id is the idempotency key. A retried request carries the
+   * same key and Stripe returns the one refund it already made instead of a
+   * second; a genuinely separate refund of the same amount is a different
+   * claim, so it is not collapsed into the first.
+   */
   let result: { providerRefundId: string; status: "PENDING" | "SUCCEEDED" | "FAILED" };
   const viaStripe = payment.provider === "STRIPE" && payment.stripeAccountId && payment.providerPaymentId;
   if (viaStripe) {
@@ -81,10 +140,15 @@ export async function refundPayment(db: TenantDb, input: RefundInput): Promise<{
         reason,
         // The platform's cut goes back with the client's money.
         hasApplicationFee: REFUND_RETURNS_PLATFORM_FEE && payment.applicationFeeCents > 0,
+        idempotencyKey: `refund-${claim.id}`,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Stripe refused the refund.";
       console.error("[refund] Stripe refused:", message);
+      // The money never moved, so the claim must not keep holding the
+      // remainder — otherwise a Stripe error would make the rest of the
+      // payment permanently unrefundable.
+      await db.refund.updateMany({ where: { id: claim.id }, data: { status: "FAILED" } });
       return { error: `Stripe couldn't refund this payment: ${message}` };
     }
   } else {
@@ -92,15 +156,9 @@ export async function refundPayment(db: TenantDb, input: RefundInput): Promise<{
     result = await provider.refund({ providerPaymentId: payment.providerPaymentId ?? "", amountCents, reason });
   }
 
-  const refund = await db.refund.create({
-    data: {
-      paymentId: payment.id,
-      amountCents,
-      reason,
-      status: result.status,
-      providerRefundId: result.providerRefundId,
-      createdByStaffProfileId: input.staffProfileId ?? null,
-    } as never,
+  const refund = await db.refund.update({
+    where: { id: claim.id },
+    data: { status: result.status, providerRefundId: result.providerRefundId },
     select: { id: true },
   });
 

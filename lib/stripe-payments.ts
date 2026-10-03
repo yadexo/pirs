@@ -109,6 +109,11 @@ export async function refundDirectCharge(params: {
   amountCents: number;
   reason?: string;
   hasApplicationFee: boolean;
+  /**
+   * Identifies this one refund attempt, so a retried or double-submitted
+   * request gets back the refund Stripe already made rather than a second one.
+   */
+  idempotencyKey?: string;
 }): Promise<{ providerRefundId: string; status: "PENDING" | "SUCCEEDED" | "FAILED" }> {
   const refund = await stripe().refunds.create(
     {
@@ -117,7 +122,7 @@ export async function refundDirectCharge(params: {
       ...(params.hasApplicationFee ? { refund_application_fee: true } : {}),
       ...(params.reason ? { metadata: { reason: params.reason } } : {}),
     },
-    { stripeAccount: params.stripeAccountId },
+    { stripeAccount: params.stripeAccountId, ...(params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : {}) },
   );
   return {
     providerRefundId: refund.id,
