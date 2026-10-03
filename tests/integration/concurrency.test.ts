@@ -108,7 +108,15 @@ describe("concurrent requests", () => {
     const c = await makeClient("declined", 800);
     await as(c, () => clientAddToCartAction(slug, "product", productId, 2));
 
-    const res = await as(c, () => clientCheckoutAction(slug, rewardId, true /* simulate a declined card */));
+    // The decline is asked for through the environment, not through the
+    // action — the client has no say in whether their payment fails.
+    process.env.MOCK_PAYMENTS_DECLINE = "1";
+    let res;
+    try {
+      res = await as(c, () => clientCheckoutAction(slug, rewardId));
+    } finally {
+      delete process.env.MOCK_PAYMENTS_DECLINE;
+    }
     expect(res).toMatchObject({ error: expect.any(String) });
 
     expect((await rawDb.product.findUniqueOrThrow({ where: { id: productId } })).inventoryQuantity).toBe(3);

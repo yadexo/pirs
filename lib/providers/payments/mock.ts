@@ -2,10 +2,24 @@ import { nanoid } from "nanoid";
 import type { PaymentIntentResult, PaymentProvider, RefundResult, SubscriptionResult } from "./types";
 
 /**
+ * Whether this deployment should decline mock payments, for exercising the
+ * failed-payment path without a real processor.
+ *
+ * It is an environment setting, not something a caller passes in: a server
+ * action is a live HTTP endpoint, so a "fail this payment" argument on one is
+ * a switch the client holds. Ignored outright in production, where a decline
+ * is Stripe's to report.
+ */
+export function mockDeclineRequested(env: Record<string, string | undefined> = process.env): boolean {
+  if (env.NODE_ENV === "production") return false;
+  return env.MOCK_PAYMENTS_DECLINE === "1";
+}
+
+/**
  * Deterministic in-process payment provider used when PAYMENT_PROVIDER=mock
- * (the default). No card data is ever collected or stored — checkout simply
- * asks whether to simulate a decline, which is how the failed-payment path
- * is exercised without a real processor.
+ * (the default). No card data is ever collected or stored — a decline is
+ * simulated on request, which is how the failed-payment path is exercised
+ * without a real processor.
  */
 export class MockPaymentProvider implements PaymentProvider {
   readonly name = "MOCK" as const;

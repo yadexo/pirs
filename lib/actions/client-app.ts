@@ -7,6 +7,7 @@ import { rawDb } from "@/lib/db";
 import { getAvailableSlots } from "@/lib/availability";
 import { adjustLoyaltyPoints, InsufficientPointsError, rewardDiscountCents } from "@/lib/loyalty";
 import { getPaymentProvider } from "@/lib/providers/payments";
+import { mockDeclineRequested } from "@/lib/providers/payments/mock";
 import { writeAuditLog } from "@/lib/audit";
 import { nanoid } from "nanoid";
 import { tenantCurrency } from "@/lib/currency";
@@ -355,7 +356,7 @@ export type CheckoutResult =
       payment: { clientSecret: string; publishableKey: string | null; stripeAccountId: string };
     };
 
-export async function clientCheckoutAction(slug: string, rewardId: string | null, simulateFailure = false): Promise<CheckoutResult> {
+export async function clientCheckoutAction(slug: string, rewardId: string | null): Promise<CheckoutResult> {
   const { db, user } = await requireCustomerContext();
 
   const basket = await db.basket.findFirst({
@@ -545,7 +546,9 @@ export async function clientCheckoutAction(slug: string, rewardId: string | null
     currency,
     customerRef: user.customerProfileId!,
     description: `Order ${orderNumber}`,
-    simulateFailure,
+    // An environment setting, never an argument the caller chose: this action
+    // is a live endpoint, and "fail this payment" is not the client's to say.
+    simulateFailure: mockDeclineRequested(),
   });
 
   await db.payment.create({

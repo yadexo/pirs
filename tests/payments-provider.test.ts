@@ -1,5 +1,27 @@
 import { describe, it, expect } from "vitest";
-import { MockPaymentProvider } from "@/lib/providers/payments/mock";
+import { MockPaymentProvider, mockDeclineRequested } from "@/lib/providers/payments/mock";
+
+/**
+ * Who gets to say a payment failed. Not the client: checkout is a live
+ * endpoint, so a decline has to be asked for by whoever runs the deployment,
+ * and cannot be asked for at all in production.
+ */
+describe("asking for a simulated decline", () => {
+  it("is off unless the environment asks for it", () => {
+    expect(mockDeclineRequested({})).toBe(false);
+    expect(mockDeclineRequested({ MOCK_PAYMENTS_DECLINE: "0" })).toBe(false);
+    expect(mockDeclineRequested({ MOCK_PAYMENTS_DECLINE: "true" })).toBe(false);
+  });
+
+  it("is honoured in development", () => {
+    expect(mockDeclineRequested({ MOCK_PAYMENTS_DECLINE: "1" })).toBe(true);
+    expect(mockDeclineRequested({ MOCK_PAYMENTS_DECLINE: "1", NODE_ENV: "test" })).toBe(true);
+  });
+
+  it("is ignored in production, whatever is set", () => {
+    expect(mockDeclineRequested({ MOCK_PAYMENTS_DECLINE: "1", NODE_ENV: "production" })).toBe(false);
+  });
+});
 
 describe("MockPaymentProvider", () => {
   const provider = new MockPaymentProvider();

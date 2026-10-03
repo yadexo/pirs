@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 import { redirect } from "next/navigation";
 import { requireCustomerContext } from "@/lib/rbac";
 import { getPaymentProvider } from "@/lib/providers/payments";
+import { mockDeclineRequested } from "@/lib/providers/payments/mock";
 import { awardPointsForOrder, adjustLoyaltyPoints } from "@/lib/loyalty";
 import { computeCheckoutTotals, type LineItem } from "@/lib/checkout-calculations";
 import type { TenantDb } from "@/lib/tenant-db";
@@ -125,7 +126,10 @@ export async function placeOrderAction(
   const promoCode = String(formData.get("promoCode") ?? "").trim() || null;
   const useCreditCents = Math.max(0, Math.round(Number(formData.get("useCreditDollars") ?? 0) * 100));
   const rewardId = String(formData.get("rewardId") ?? "").trim() || null;
-  const simulateFailure = formData.get("simulateFailure") === "on";
+  // An environment setting rather than a form field the client submits: a
+  // "fail this payment" checkbox on a server action is a switch the client
+  // holds. (This action is slated for deletion; see the audit's fix B.)
+  const simulateFailure = mockDeclineRequested();
 
   const basket = await loadBasket(db, user.customerProfileId!);
   const items = basket?.items ?? [];

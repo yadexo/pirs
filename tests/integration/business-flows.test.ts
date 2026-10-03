@@ -179,7 +179,13 @@ describe("business-critical workflows", () => {
 
       const before = await rawDb.product.findUnique({ where: { id: productId } });
 
-      await expectRedirect(placeOrderAction("test-tenant", undefined, formData({ simulateFailure: "on" })));
+      // Asked for through the environment, not a form field the client sends.
+      process.env.MOCK_PAYMENTS_DECLINE = "1";
+      try {
+        await expectRedirect(placeOrderAction("test-tenant", undefined, formData({})));
+      } finally {
+        delete process.env.MOCK_PAYMENTS_DECLINE;
+      }
 
       const order = await rawDb.order.findFirst({ where: { tenantId, customerProfileId }, orderBy: { placedAt: "desc" } });
       expect(order?.status).toBe("FAILED");
