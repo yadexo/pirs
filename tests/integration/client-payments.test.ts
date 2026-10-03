@@ -43,8 +43,15 @@ describe("client payments on the clinic's Stripe account", () => {
       user: { id: staffUserId, email: `s-${stamp}@x.com`, name: "S", role: "TENANT_ADMIN", tenantId: clinic, tenantSlug: null, staffProfileId, customerProfileId: null, permissions: "ALL" },
     });
 
-  const succeeded = (intentId: string) =>
-    ({ id: `evt_ok_${intentId}`, type: "payment_intent.succeeded", created: Math.floor(Date.now() / 1000), account: ACCOUNT, data: { object: { id: intentId, payment_method_types: ["card"] } } }) as unknown as Stripe.Event;
+  /** `collectedCents` is what Stripe says was actually taken, as a real event carries. */
+  const succeeded = (intentId: string, collectedCents?: number) =>
+    ({
+      id: `evt_ok_${intentId}`,
+      type: "payment_intent.succeeded",
+      created: Math.floor(Date.now() / 1000),
+      account: ACCOUNT,
+      data: { object: { id: intentId, payment_method_types: ["card"], amount_received: collectedCents } },
+    }) as unknown as Stripe.Event;
   const failed = (intentId: string) =>
     ({ id: `evt_fail_${intentId}`, type: "payment_intent.payment_failed", created: Math.floor(Date.now() / 1000), account: ACCOUNT, data: { object: { id: intentId, last_payment_error: { message: "Your card was declined." } } } }) as unknown as Stripe.Event;
 
@@ -122,9 +129,21 @@ describe("client payments on the clinic's Stripe account", () => {
     expect((await rawDb.product.findUniqueOrThrow({ where: { id: productId } })).inventoryQuantity).toBe(4); // stock held
   });
 
+  it("leaves the order pending when less was collected than was due", async () => {
+    const payment = await rawDb.payment.findFirstOrThrow({ where: { tenantId: clinic }, orderBy: { createdAt: "desc" } });
+
+    // A clinic can capture a smaller amount on its own account. The client
+    // must not end up with a paid order and collectable items for it.
+    await handleStripeEvent(succeeded(payment.providerPaymentId!, payment.amountCents - 1));
+
+    expect(await rawDb.order.findFirstOrThrow({ where: { id: payment.orderId! } })).toMatchObject({ status: "PENDING" });
+    expect(await rawDb.payment.findUniqueOrThrow({ where: { id: payment.id } })).toMatchObject({ status: "PROCESSING" });
+    expect(await rawDb.redeemableItem.count({ where: { orderId: payment.orderId! } })).toBe(0);
+  });
+
   it("the webhook is what marks it paid, and a repeat delivery changes nothing", async () => {
     const payment = await rawDb.payment.findFirstOrThrow({ where: { tenantId: clinic }, orderBy: { createdAt: "desc" } });
-    const event = succeeded(payment.providerPaymentId!);
+    const event = succeeded(payment.providerPaymentId!, payment.amountCents);
 
     expect(await alreadyProcessed(event)).toBe(false);
     await handleStripeEvent(event);

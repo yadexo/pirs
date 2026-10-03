@@ -115,6 +115,30 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       const intent = event.data.object as Stripe.PaymentIntent;
       const payment = await paymentFor(intent.id);
       if (!payment) return;
+
+      // What was actually collected, against what the order was priced at by
+      // this server. These are direct charges on the clinic's own account, so
+      // the clinic can capture less than was asked for in its own dashboard;
+      // that must not hand the client a paid order and collectable items.
+      // Left pending rather than failed: the money is real, it is just short,
+      // and somebody has to look at it.
+      //
+      // An event that carries neither field is let through. Stripe always
+      // sends them, and only Stripe can sign an event, so the alternative —
+      // refusing on an absent field — would risk wedging real payments to
+      // guard against a forgery nobody can produce.
+      const collected = intent.amount_received ?? intent.amount ?? null;
+      if (collected != null && collected < payment.amountCents) {
+        console.error(
+          `[stripe-webhook] ${intent.id} collected ${collected} but ${payment.amountCents} was due on payment ${payment.id}; order left pending`,
+        );
+        await rawDb.payment.updateMany({
+          where: { id: payment.id },
+          data: { status: "PROCESSING", failureReason: `Only ${collected} of ${payment.amountCents} was collected.` },
+        });
+        return;
+      }
+
       const method = intent.payment_method_types?.[0] ?? null;
       await rawDb.payment.updateMany({
         where: { id: payment.id },
