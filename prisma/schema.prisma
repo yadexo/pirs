@@ -1886,11 +1886,19 @@ model AgencySettings {
 /// Every Stripe event we have already acted on. Stripe retries events and can
 /// deliver one twice; without this a repeat of payment_intent.succeeded would
 /// award loyalty points again.
+///
+/// A row is written when the event is claimed and stamped `completedAt` when
+/// its handler finishes. A row without that stamp is a claim nobody finished —
+/// an instance killed mid-handler — and once it is old enough that no handler
+/// can still be running, Stripe's next retry is allowed to take it over.
+/// Otherwise an interrupted event would be answered "already done" forever and
+/// the order would stay unpaid.
 model ProcessedStripeEvent {
-  id          String   @id
+  id          String    @id
   type        String
   accountId   String?
-  processedAt DateTime @default(now())
+  processedAt DateTime  @default(now())
+  completedAt DateTime?
 
   @@index([processedAt])
 }

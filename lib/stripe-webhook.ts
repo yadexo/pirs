@@ -18,20 +18,50 @@ import { stripe } from "@/lib/stripe-payments";
  * write is conditional so a race between two deliveries still settles once.
  */
 
-/** True when this event has been acted on before. Records it otherwise. */
+/**
+ * How long a claim is assumed to belong to a handler that is still working.
+ *
+ * Above Stripe's own 25-second limit for a response, and above the time our
+ * slowest handler can take, so a claim older than this belongs to an instance
+ * that is gone rather than one still running.
+ */
+const CLAIM_HOLDS_FOR_MS = 5 * 60 * 1000;
+
+/**
+ * True when this event is not ours to handle — already finished, or claimed
+ * by a delivery that could still be working on it. Claims it otherwise.
+ *
+ * The claim is written before the handler runs, so two simultaneous
+ * deliveries cannot both act. But a claim is not proof of completion: an
+ * instance can be killed mid-handler, and that used to leave the event
+ * answered "already done" for every later retry, with the order stuck
+ * unpaid. So a claim nobody stamped, old enough that no handler can still be
+ * running, is taken over by the next retry.
+ */
 export async function alreadyProcessed(event: Stripe.Event): Promise<boolean> {
   try {
     await rawDb.processedStripeEvent.create({ data: { id: event.id, type: event.type, accountId: event.account ?? null } });
     return false;
   } catch {
-    // Unique violation: another delivery of the same event got here first.
-    return true;
+    // Unique violation: this event has been claimed before.
+    const stale = new Date(Date.now() - CLAIM_HOLDS_FOR_MS);
+    const takenOver = await rawDb.processedStripeEvent.updateMany({
+      where: { id: event.id, completedAt: null, processedAt: { lt: stale } },
+      data: { processedAt: new Date() },
+    });
+    // Exactly one retry wins the take-over; anyone else steps back.
+    return takenOver.count === 0;
   }
 }
 
+/** Stamps a claim as finished, so no later retry re-runs it. */
+export async function markProcessed(eventId: string): Promise<void> {
+  await rawDb.processedStripeEvent.updateMany({ where: { id: eventId }, data: { completedAt: new Date() } });
+}
+
 /**
- * Undoes the record above, so a handler that failed halfway is retried by
- * Stripe rather than being skipped as a duplicate.
+ * Undoes the claim, so a handler that failed outright is retried by Stripe
+ * immediately rather than waiting out the claim.
  */
 export async function forgetProcessed(eventId: string): Promise<void> {
   await rawDb.processedStripeEvent.deleteMany({ where: { id: eventId } });

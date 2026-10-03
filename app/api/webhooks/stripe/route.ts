@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { alreadyProcessed, forgetProcessed, handleStripeEvent } from "@/lib/stripe-webhook";
+import { alreadyProcessed, forgetProcessed, handleStripeEvent, markProcessed } from "@/lib/stripe-webhook";
 import { verifyWithAnySecret, webhookSecrets } from "@/lib/stripe-webhook-secrets";
 
 /**
@@ -40,6 +40,9 @@ export async function POST(req: NextRequest) {
 
   try {
     await handleStripeEvent(event);
+    // Only now is the event finished. A claim left unstamped is picked up by a
+    // later retry, so an instance killed on the line above loses nothing.
+    await markProcessed(event.id);
   } catch (err) {
     // Tell Stripe to retry rather than swallowing a half-applied change.
     await forgetProcessed(event.id);
