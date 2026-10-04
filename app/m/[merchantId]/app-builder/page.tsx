@@ -127,8 +127,11 @@ async function loadItems(
       const rows = await db.notificationCampaign.findMany({ where: nameFilter, orderBy: { createdAt: "desc" } });
       return rows.map((r) => ({ kind: "campaign", id: r.id, name: r.name, meta: `${r.channel} · ${r.status}`, priceCents: null, active: r.status !== "CANCELLED" }));
     }
+    // An offer that has been used is hidden rather than deleted, so a clinic
+    // needs to be able to leave those out of the list — or go and find one.
+    const visibility = typeFilter === "visible" ? { active: true } : typeFilter === "hidden" ? { active: false } : {};
     const rows = await db.promotion.findMany({
-      where: q ? { title: { contains: q, mode: "insensitive" } } : {},
+      where: { ...(q ? { title: { contains: q, mode: "insensitive" as const } } : {}), ...visibility },
       orderBy: { startAt: "desc" },
       include: {
         // Whether clients have been told, shown on the row itself.

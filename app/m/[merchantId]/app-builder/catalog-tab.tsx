@@ -23,6 +23,7 @@ import {
   type ItemKind,
 } from "@/lib/actions/app-builder";
 import { describeActionFailure } from "@/lib/action-failure";
+import { NO_USAGE, warnBeforeDelete, whyHidden, type PromotionUsage } from "@/lib/promotion-usage";
 import { FORMS, type FormOptions } from "./item-forms";
 
 export interface CatalogItem {
@@ -43,6 +44,10 @@ const TAB_CONFIG: Record<string, { heading: string; create: string; empty: strin
     empty: "No offers available",
     filters: [
       ["all", "All"],
+      ["visible", "Visible"],
+      // An offer that was used is hidden rather than deleted, so this is
+      // where those go to be found again — or left out of the way.
+      ["hidden", "Hidden"],
       ["campaigns", "Campaigns"],
     ],
     kinds: ["promotion"],
@@ -111,6 +116,17 @@ export function CatalogTab({
   const [busy, setBusy] = React.useState<null | "save" | "toggle" | "archive">(null);
   const [confirmArchive, setConfirmArchive] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement>(null);
+
+  /**
+   * What this offer is already tangled up in, counted when it was loaded, so
+   * the Remove button can say what it will do before it is pressed. Anything
+   * else in App Builder has its own fixed rule and nothing to warn about.
+   */
+  const promotionUsage: PromotionUsage =
+    editor.mode === "open" && editor.kind === "promotion" && editor.item._count
+      ? (editor.item._count as PromotionUsage)
+      : NO_USAGE;
+  const deleteWarning = editor.mode === "open" && editor.kind === "promotion" ? warnBeforeDelete(promotionUsage) : null;
 
   function navigate(next: Partial<{ q: string; type: string }>) {
     const merged = { q, type: typeFilter, ...next };
@@ -219,7 +235,10 @@ export function CatalogTab({
       setConfirmArchive(false);
       return toast.error(res.error);
     }
-    toast.success("Removed");
+    // Hidden and deleted look the same from here — the row simply changes —
+    // so the clinic is told which one it got, and why.
+    const explanation = res.hidden ? whyHidden(res.usage) : null;
+    toast.success(explanation ?? "Removed");
     close();
     router.refresh();
   }
@@ -335,7 +354,7 @@ export function CatalogTab({
                 )}
                 {confirmArchive && (
                   <>
-                    <span className="text-[12px] text-ink-muted">Remove this {kindLabel}?</span>
+                    <span className="max-w-md text-[12px] text-ink-muted">{deleteWarning ?? `Remove this ${kindLabel}?`}</span>
                     <Button type="button" variant="danger" size="sm" onClick={archive} disabled={busy !== null}>
                       {busy === "archive" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                       Remove

@@ -15,6 +15,7 @@ import {
   type MerchantRequirement,
 } from "@/lib/merchant-action";
 import type { TenantDb } from "@/lib/tenant-db";
+import { isPromotionUsed, NO_USAGE, type PromotionUsage } from "@/lib/promotion-usage";
 import { pricingOptionsSchema, toStoredPricingOptions, EMPTY_PRICING } from "@/lib/pricing-options";
 import { sendCampaignNow } from "@/lib/campaign-send";
 import { marketingAudience, marketingWindowFor } from "@/lib/marketing";
@@ -191,6 +192,9 @@ export async function getAppBuilderItemAction(merchantId: string, kind: ItemKind
         item = await db.promotion.findFirst({
           where: { id },
           include: {
+            // So the delete button can say what will happen before it is
+            // pressed, rather than explaining itself afterwards.
+            _count: { select: { orders: true, redemptions: true, campaigns: true } },
             eligibility: { select: { productId: true, serviceId: true, productCategoryId: true, serviceCategoryId: true } },
             // So the form can say whether clients have already heard about it.
             campaigns: {
@@ -1095,16 +1099,42 @@ export async function setItemActiveAction(merchantId: string, kind: ItemKind, id
 }
 
 /**
+ * What an offer is tangled up in. Orders and campaigns both point at a
+ * promotion with a nullable column, so the database would happily delete it
+ * and leave an order showing a discount from nothing — see
+ * lib/promotion-usage.ts.
+ */
+async function promotionUsage(db: TenantDb, promotionId: string): Promise<PromotionUsage> {
+  const [orders, redemptions, campaigns] = await Promise.all([
+    db.order.count({ where: { promotionId } }),
+    db.promotionRedemption.count({ where: { promotionId } }),
+    db.notificationCampaign.count({ where: { promotionId } }),
+  ]);
+  return { orders, redemptions, campaigns };
+}
+
+/**
  * Removes an item from App Builder and the client app. History that points at
  * it — past orders, redemptions, memberships — is kept, so anything that may
  * be referenced is archived rather than deleted.
+ *
+ * Says which of the two happened, so the clinic is never left wondering why
+ * the thing it deleted is still on the list.
  */
-export async function archiveItemAction(merchantId: string, kind: ItemKind, id: string): Promise<ActionResult> {
+export async function archiveItemAction(
+  merchantId: string,
+  kind: ItemKind,
+  id: string,
+): Promise<ActionResult<{ hidden: boolean; usage: PromotionUsage }>> {
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, NEEDS[kind]);
     const archived = { active: false, archivedAt: new Date() };
     const where = { id };
     let count = 0;
+    // Only an offer can come back as "hidden instead"; everything else is
+    // either deleted or archived by its own fixed rule.
+    let hidden = false;
+    let usage: PromotionUsage = NO_USAGE;
     switch (kind) {
       case "service":
         ({ count } = await ctx.db.service.updateMany({ where, data: archived }));
@@ -1126,8 +1156,9 @@ export async function archiveItemAction(merchantId: string, kind: ItemKind, id: 
         break;
       }
       case "promotion": {
-        const used = await ctx.db.promotionRedemption.count({ where: { promotionId: id } });
-        ({ count } = used
+        usage = await promotionUsage(ctx.db, id);
+        hidden = isPromotionUsed(usage);
+        ({ count } = hidden
           ? await ctx.db.promotion.updateMany({ where, data: { active: false } })
           : await ctx.db.promotion.deleteMany({ where }));
         break;
@@ -1146,8 +1177,8 @@ export async function archiveItemAction(merchantId: string, kind: ItemKind, id: 
       }
     }
     if (count === 0) throw new ActionError("That item no longer exists.");
-    await ctx.audit(`${kind}.archived`, kind, id);
+    await ctx.audit(`${kind}.${hidden ? "hidden" : "archived"}`, kind, id, hidden ? { ...usage } : undefined);
     await revalidateMerchant(merchantId);
-    return {};
+    return { hidden, usage };
   });
 }
