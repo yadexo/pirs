@@ -13,6 +13,7 @@ import {
 } from "@/lib/client-notifications";
 import { recordActivity } from "@/lib/activity";
 import { graceEndsAt } from "@/lib/membership-status";
+import { adjustAccountCredit } from "@/lib/account-credit";
 import { createItemsForOrder, voidItemsForOrder } from "@/lib/redeemable";
 import { stripe } from "@/lib/stripe-payments";
 
@@ -199,6 +200,17 @@ async function activateMembershipPeriod(subscriptionId: string, invoice: Stripe.
     if (credit > 0) {
       // The credit comes with the period that was paid for, not with signing
       // up: a client who never completes the first payment gets nothing.
+      //
+      // It lands in the client's account credit, which is the balance their
+      // app shows and the one checkout can spend. The membership's own
+      // creditBalanceCents keeps the running total this plan has granted, for
+      // the clinic's billing history.
+      await adjustAccountCredit(getTenantDb(membership.tenantId), {
+        customerProfileId: membership.customerProfileId,
+        amountCents: credit,
+        type: "MEMBERSHIP_GRANT",
+        reason: `${membership.membershipPlan?.name ?? "Membership"} credit for this period`,
+      });
       await rawDb.customerMembership.update({
         where: { id: membership.id },
         data: { creditBalanceCents: { increment: credit } },

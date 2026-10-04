@@ -3,6 +3,7 @@ import type { TenantDb } from "@/lib/tenant-db";
 import { getPaymentProvider } from "@/lib/providers/payments";
 import { refundDirectCharge } from "@/lib/stripe-payments";
 import { voidItemsForOrder } from "@/lib/redeemable";
+import { adjustAccountCredit } from "@/lib/account-credit";
 import { notifyRefundProcessed } from "@/lib/client-notifications";
 
 /**
@@ -131,7 +132,35 @@ export async function refundPayment(db: TenantDb, input: RefundInput): Promise<{
    */
   let result: { providerRefundId: string; status: "PENDING" | "SUCCEEDED" | "FAILED" };
   const viaStripe = payment.provider === "STRIPE" && payment.stripeAccountId && payment.providerPaymentId;
-  if (viaStripe) {
+  /** Nothing was charged to a card, so the money goes back where it came from. */
+  const viaCredit = payment.provider === "ACCOUNT_CREDIT";
+
+  if (viaCredit) {
+    if (!payment.order) {
+      await db.refund.updateMany({ where: { id: claim.id }, data: { status: "FAILED" } });
+      return { error: "That payment has no order to refund against." };
+    }
+    const owner = await db.order.findFirst({ where: { id: payment.order.id }, select: { customerProfileId: true } });
+    if (!owner) {
+      await db.refund.updateMany({ where: { id: claim.id }, data: { status: "FAILED" } });
+      return { error: "That order no longer has a client to refund." };
+    }
+    try {
+      await adjustAccountCredit(db, {
+        customerProfileId: owner.customerProfileId,
+        amountCents,
+        type: "REFUND",
+        reason,
+        relatedOrderId: payment.order.id,
+      });
+    } catch (err) {
+      console.error("[refund] could not return the credit:", err instanceof Error ? err.message : err);
+      await db.refund.updateMany({ where: { id: claim.id }, data: { status: "FAILED" } });
+      return { error: "We couldn't return that credit. Please try again." };
+    }
+    // Our own ledger is the record; there is no provider to name.
+    result = { providerRefundId: `credit-${claim.id}`, status: "SUCCEEDED" };
+  } else if (viaStripe) {
     try {
       result = await refundDirectCharge({
         stripeAccountId: payment.stripeAccountId!,

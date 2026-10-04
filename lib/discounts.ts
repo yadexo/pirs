@@ -1,5 +1,6 @@
 import type { DiscountType, PrismaClient } from "@prisma/client";
 import { rawDb } from "@/lib/db";
+import { membershipGivesBenefits } from "@/lib/membership-status";
 
 /**
  * Which discount a client actually gets, decided here and nowhere else.
@@ -9,9 +10,15 @@ import { rawDb } from "@/lib/db";
  * and the same function runs again when the PaymentIntent is created. A client
  * who edits a price in devtools changes nothing but their own screen.
  *
- * A clinic's own POS keeps its code-based promotions (lib/actions/checkout.ts).
+ * A clinic's own counter keeps its code-based promotions (lib/promo-codes.ts).
  * This is the automatic kind: no code to type, applied because the client and
- * the basket qualify.
+ * the basket qualify — which includes being a member, since a plan's discount
+ * is exactly that. A membership is just another candidate here, so the member
+ * price a client sees in the shop and the one the till charges come from one
+ * calculation and cannot disagree.
+ *
+ * They never stack. A client gets whichever single discount is worth most to
+ * them on a given line — see bestDiscount.
  *
  * No "server-only" here so the shop can import the pure helpers for display.
  */
@@ -40,10 +47,24 @@ export interface DiscountCandidate {
     productCategoryId: string | null;
     serviceCategoryId: string | null;
   }[];
+  /**
+   * A membership's benefit rather than a promotion. There is nothing to
+   * redeem, so no PromotionRedemption is written and no usage limit applies:
+   * it is a benefit of paying for the plan, available every time.
+   */
+  source?: "PROMOTION" | "MEMBERSHIP";
+  /**
+   * Narrows the candidate to products or to services, which is how a plan's
+   * two rates are expressed ("10% off treatments, 5% off products"). A
+   * promotion leaves it unset and uses eligibility rows instead.
+   */
+  appliesToKind?: "PRODUCT" | "SERVICE";
 }
 
 export interface AppliedDiscount {
-  promotionId: string;
+  /** Null for a membership's own discount: there is no promotion behind it. */
+  promotionId: string | null;
+  source: "PROMOTION" | "MEMBERSHIP";
   title: string;
   /** What comes off the subtotal, in cents. Never more than the basket. */
   discountCents: number;
@@ -58,7 +79,9 @@ export function subtotalOf(lines: BasketLine[]): number {
 
 /** Whether one basket line is covered by a promotion's eligibility rules. */
 export function lineQualifies(line: BasketLine, candidate: DiscountCandidate): boolean {
-  // No rows at all: the promotion covers the whole shop.
+  // A plan's rate for treatments says nothing about the shelf, and vice versa.
+  if (candidate.appliesToKind && candidate.appliesToKind !== line.kind) return false;
+  // No rows at all: the candidate covers the whole shop (of that kind).
   if (candidate.eligibility.length === 0) return true;
   return candidate.eligibility.some((rule) => {
     if (line.kind === "PRODUCT") {
@@ -98,15 +121,23 @@ export function discountFor(lines: BasketLine[], candidate: DiscountCandidate): 
   const discountCents = Math.max(0, Math.min(raw, qualifyingCents));
   if (discountCents === 0) return null;
 
+  const source = candidate.source ?? "PROMOTION";
   return {
-    promotionId: candidate.id,
+    promotionId: source === "MEMBERSHIP" ? null : candidate.id,
+    source,
     title: candidate.title,
     discountCents,
     lineIds: qualifying.map((l) => l.id),
   };
 }
 
-/** The best of several, so a client is never quietly given the smaller one. */
+/**
+ * The best of several, so a client is never quietly given the smaller one.
+ *
+ * This is also where "no stacking" lives: a member whose basket a promotion
+ * also covers gets the larger of the two, not both. Ties go to whichever came
+ * first, which is a coin toss nobody can feel — the client pays the same.
+ */
 export function bestDiscount(lines: BasketLine[], candidates: DiscountCandidate[]): AppliedDiscount | null {
   let best: AppliedDiscount | null = null;
   for (const candidate of candidates) {
@@ -116,7 +147,81 @@ export function bestDiscount(lines: BasketLine[], candidates: DiscountCandidate[
   return best;
 }
 
-type Db = Pick<PrismaClient, "promotion" | "promotionRedemption">;
+type Db = Pick<PrismaClient, "promotion" | "promotionRedemption" | "customerMembership">;
+
+/**
+ * A plan's own discounts as candidates — one for treatments, one for the
+ * shelf, whichever the plan sets.
+ *
+ * Pure, so the shop and the till both get them from the same place, and they
+ * compete with promotions in bestDiscount rather than adding to them.
+ */
+export function membershipCandidates(membership: {
+  membershipPlan: { id: string; name: string; serviceDiscountPercent: number | null; productDiscountPercent: number | null } | null;
+}): DiscountCandidate[] {
+  const plan = membership.membershipPlan;
+  if (!plan) return [];
+
+  const shared = {
+    discountType: "PERCENT" as DiscountType,
+    minOrderCents: null,
+    // A benefit of paying for the plan, not a coupon: no limits, every time.
+    perCustomerLimit: null,
+    usageLimit: null,
+    eligibility: [],
+    source: "MEMBERSHIP" as const,
+  };
+
+  const out: DiscountCandidate[] = [];
+  if (plan.serviceDiscountPercent && plan.serviceDiscountPercent > 0) {
+    out.push({
+      ...shared,
+      id: `membership:${plan.id}:service`,
+      title: `${plan.name} member price`,
+      discountValue: plan.serviceDiscountPercent,
+      appliesToKind: "SERVICE",
+    });
+  }
+  if (plan.productDiscountPercent && plan.productDiscountPercent > 0) {
+    out.push({
+      ...shared,
+      id: `membership:${plan.id}:product`,
+      title: `${plan.name} member price`,
+      discountValue: plan.productDiscountPercent,
+      appliesToKind: "PRODUCT",
+    });
+  }
+  return out;
+}
+
+/**
+ * The plan discounts this client is entitled to right now.
+ *
+ * "Right now" is the point: a membership waiting for its first payment gives
+ * nothing, and one whose payment failed keeps its benefits only through the
+ * grace period — see lib/membership-status.ts. The query asks for the statuses
+ * that can give benefits and the helper decides the borderline one, so a
+ * member who stopped paying stops getting member prices on the day they
+ * should.
+ */
+export async function memberCandidatesFor(
+  tenantId: string,
+  customerProfileId: string,
+  now: Date = new Date(),
+  db: Db = rawDb as Db,
+): Promise<DiscountCandidate[]> {
+  const membership = await db.customerMembership.findFirst({
+    where: { tenantId, customerProfileId, status: { in: ["ACTIVE", "TRIAL", "PAST_DUE"] } },
+    orderBy: { startedAt: "desc" },
+    select: {
+      status: true,
+      pastDueSince: true,
+      membershipPlan: { select: { id: true, name: true, serviceDiscountPercent: true, productDiscountPercent: true } },
+    },
+  });
+  if (!membership || !membershipGivesBenefits(membership, now)) return [];
+  return membershipCandidates(membership);
+}
 
 /**
  * The automatic promotions this client could use right now: running today,
@@ -173,21 +278,27 @@ export async function candidatesFor(
  * The discount to apply to this basket, straight from the database.
  *
  * This is what checkout calls, and what the PaymentIntent amount is built
- * from. Returns null when nothing applies, which is the common case.
+ * from. Promotions and the client's plan compete here; the client gets the
+ * better one. Returns null when nothing applies, which is the common case.
  */
 export async function resolveDiscount(
   params: { tenantId: string; customerProfileId: string; lines: BasketLine[]; now?: Date },
   db: Db = rawDb as Db,
 ): Promise<AppliedDiscount | null> {
   if (params.lines.length === 0) return null;
-  const candidates = await candidatesFor(params.tenantId, params.customerProfileId, params.now ?? new Date(), db);
-  return bestDiscount(params.lines, candidates);
+  const now = params.now ?? new Date();
+  const [promotions, member] = await Promise.all([
+    candidatesFor(params.tenantId, params.customerProfileId, now, db),
+    memberCandidatesFor(params.tenantId, params.customerProfileId, now, db),
+  ]);
+  return bestDiscount(params.lines, [...promotions, ...member]);
 }
 
 /**
- * The promotions worth showing on the shop, so a price can be struck through
- * before anything is in the basket. Eligibility only — no basket minimum is
- * judged here, because there is no basket yet.
+ * The discounts worth showing on the shop, so a price can be struck through
+ * before anything is in the basket — the client's plan included, because a
+ * member should see the member price while they are deciding. Eligibility
+ * only: no basket minimum is judged here, because there is no basket yet.
  */
 export async function shopDiscountsFor(
   tenantId: string,
@@ -195,7 +306,11 @@ export async function shopDiscountsFor(
   now: Date = new Date(),
   db: Db = rawDb as Db,
 ): Promise<DiscountCandidate[]> {
-  return candidatesFor(tenantId, customerProfileId, now, db);
+  const [promotions, member] = await Promise.all([
+    candidatesFor(tenantId, customerProfileId, now, db),
+    memberCandidatesFor(tenantId, customerProfileId, now, db),
+  ]);
+  return [...promotions, ...member];
 }
 
 /** The price a client actually sees for one item, given the promotions on it. */

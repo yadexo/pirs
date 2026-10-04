@@ -1424,6 +1424,10 @@ model OrderItem {
 enum PaymentProviderName {
   MOCK
   STRIPE
+  /// Settled out of the client's account credit — money the clinic already
+  /// held for them, so no card and no provider were involved. Refunding one of
+  /// these puts the credit back rather than touching a bank.
+  ACCOUNT_CREDIT
 }
 
 enum PaymentStatus {

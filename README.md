@@ -261,6 +261,22 @@ A membership is a Stripe subscription **on the clinic's own connected account**:
 - **A failed payment** sets `PAST_DUE` and stamps `pastDueSince`. Benefits continue for seven days (`PAST_DUE_GRACE_MS` in `lib/membership-status.ts`) while Stripe retries the card; the clock starts at the first failure and is not restarted by later ones. The `memberships` cron job then suspends it. A payment that succeeds at any point brings it straight back.
 - **A clinic that cannot take payments** shows no membership plans at all — the tab is not rendered, and joining is refused server-side as well.
 
+### What a member gets
+
+- **The plan's price at the till.** `serviceDiscountPercent` and `productDiscountPercent` become discount candidates in `lib/discounts.ts`, scoped to treatments and to products respectively, so the member price in the shop and the one charged at checkout come from one calculation.
+- **Whichever discount is larger, never both.** A plan competes with the automatic promotions in `bestDiscount`; the client gets the single best one. A membership discount has no promotion behind it, so no `PromotionRedemption` is written and no usage limit applies — it is a benefit of paying for the plan, available every time.
+- **Benefits follow the status, including the grace period.** A `PENDING` membership gives nothing; a `PAST_DUE` one keeps the member price until the grace period runs out; `SUSPENDED` and `CANCELLED` give nothing. One helper, `membershipGivesBenefits`, decides it everywhere.
+- **The included credit is money.** It lands in `CustomerProfile.accountCreditBalanceCents` — the balance the client app already showed them — with a row in the credit ledger, granted per paid period. `CustomerMembership.creditBalanceCents` keeps the running total that plan has granted, for the clinic's billing history.
+
+### Account credit at checkout
+
+`lib/account-credit.ts` is the only place a balance moves: one conditional UPDATE plus a ledger row, like the loyalty ledger, so two checkouts cannot spend the same credit.
+
+- The cart sends `useCredit` as a yes/no. **How much** is read from the balance on the server and capped at the bill, so a browser cannot ask for credit the client does not have.
+- Credit comes off **after** tax, because it is money rather than a discount: the tax was on what they bought, however they paid for it.
+- It is taken before the card is charged and given back if the payment fails, exactly like reserved loyalty points and stock.
+- When credit covers the whole bill there is no card step: the order is settled with a `Payment` row whose provider is `ACCOUNT_CREDIT`, and refunding that payment puts the credit back rather than touching a bank.
+
 ## Notification provider architecture
 
 `lib/providers/notifications/{email,sms,push}.ts` are documented, ready-to-implement integration points (Resend, Twilio, Web Push respectively) — each currently throws with instructions if selected without being implemented. Until then, `EMAIL_PROVIDER`/`SMS_PROVIDER`/`PUSH_PROVIDER=mock` (the default) logs the send and records a normal `NotificationDelivery` row, so campaign creation, targeting, and delivery-status UI all work today without any external account.
@@ -274,6 +290,7 @@ A membership is a Stripe subscription **on the clinic's own connected account**:
 - **Data retention** (`TenantSettings.dataRetentionDays`) is stored and surfaced in settings but no background job currently acts on it.
 - **Appointment reminders** (`appointmentReminderHours`) are stored in settings but no scheduler currently sends them — wire up a cron/queue calling the notification campaign path.
 - **Membership proration and plan changes** are not implemented: a client cancels and joins again rather than switching plans, and a price change applies to new members only (existing subscriptions keep the price they signed up on, which is Stripe's behaviour).
+- **Part-credit refunds** return only the card's share. An order paid for with credit *and* a card records the card charge as its payment, so refunding it refunds the card; the credit portion is on the order (`creditAppliedCents`) and in the credit ledger, but giving that part back is a manual adjustment for now. An order paid for entirely with credit refunds entirely to credit.
 
 ## Recommended next steps
 

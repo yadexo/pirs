@@ -14,9 +14,11 @@ import { tenantCurrency } from "@/lib/currency";
 import { recordActivity } from "@/lib/activity";
 import { clinicPaymentMode, createDirectCharge } from "@/lib/stripe-payments";
 import { completePaidOrder, releaseFailedOrder } from "@/lib/order-completion";
+import { createItemsForOrder } from "@/lib/redeemable";
 import { bookingDepositCents } from "@/lib/booking-deposit";
-import { resolveDiscount } from "@/lib/discounts";
+import { memberCandidatesFor, resolveDiscount } from "@/lib/discounts";
 import { MEMBERSHIP_HOLDS_SLOT } from "@/lib/membership-status";
+import { adjustAccountCredit, availableCredit, creditToApply, InsufficientCreditError } from "@/lib/account-credit";
 import {
   cancelMembershipSubscription,
   createMembershipSubscription,
@@ -328,6 +330,22 @@ export async function clientSetCartQtyAction(
   return { ok: true };
 }
 
+/**
+ * What the cart needs to show besides the items: the client's spendable
+ * credit, and what their membership is worth on this basket.
+ *
+ * Both are read here rather than worked out in the browser, so the cart shows
+ * the same numbers the till will charge.
+ */
+export async function clientCartExtrasAction(): Promise<{ creditCents: number; memberDiscountTitle: string | null }> {
+  const { db, user } = await requireCustomerContext();
+  const [creditCents, member] = await Promise.all([
+    availableCredit(db, user.customerProfileId!),
+    memberCandidatesFor(user.tenantId!, user.customerProfileId!),
+  ]);
+  return { creditCents, memberDiscountTitle: member[0]?.title ?? null };
+}
+
 /** Rewards the client can afford that reduce an order total. */
 export async function clientRedeemableRewardsAction() {
   const { db, user } = await requireCustomerContext();
@@ -363,7 +381,16 @@ export type CheckoutResult =
       payment: { clientSecret: string; publishableKey: string | null; stripeAccountId: string };
     };
 
-export async function clientCheckoutAction(slug: string, rewardId: string | null): Promise<CheckoutResult> {
+/**
+ * `useCredit` is a yes/no, never a number: how much of a client's credit a
+ * bill can take is read from their balance on the server. A browser that
+ * asks for "€500 of credit" gets whatever they actually have, up to the bill.
+ */
+export async function clientCheckoutAction(
+  slug: string,
+  rewardId: string | null,
+  options: { useCredit?: boolean } = {},
+): Promise<CheckoutResult> {
   const { db, user } = await requireCustomerContext();
 
   const basket = await db.basket.findFirst({
@@ -412,15 +439,26 @@ export async function clientCheckoutAction(slug: string, rewardId: string | null
   const taxRate = settings?.taxRateBasisPoints ?? 0;
   const taxable = Math.max(subtotalCents - discountCents - loyaltyDiscountCents, 0);
   const taxCents = Math.round((taxable * taxRate) / 10000);
-  const totalCents = Math.max(subtotalCents - discountCents - loyaltyDiscountCents + taxCents, 0);
+  const billCents = Math.max(subtotalCents - discountCents - loyaltyDiscountCents + taxCents, 0);
+
+  // Credit is money the clinic already holds for this client, so it comes off
+  // the bill after tax rather than acting as a discount: the tax was on what
+  // they bought, however they pay for it.
+  const creditAppliedCents = creditToApply({
+    requestedUse: options.useCredit === true,
+    availableCents: await availableCredit(db, user.customerProfileId!),
+    totalCents: billCents,
+  });
+  const totalCents = Math.max(billCents - creditAppliedCents, 0);
 
   const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}-${nanoid(4).toUpperCase()}`;
 
   const currency = await tenantCurrency(db);
   // Decided before anything is written: a clinic that can't take card payments
-  // must not end up with a pending order and reserved stock.
+  // must not end up with a pending order and reserved stock. Credit covering
+  // the whole bill needs no card, so that case is not blocked.
   const payment = await clinicPaymentMode(user.tenantId!);
-  if (payment.mode === "blocked") return { error: payment.reason };
+  if (payment.mode === "blocked" && totalCents > 0) return { error: payment.reason };
   const provider = getPaymentProvider();
 
   const order = await db.order.create({
@@ -435,7 +473,7 @@ export async function clientCheckoutAction(slug: string, rewardId: string | null
       loyaltyDiscountCents,
       loyaltyPointsRedeemed: pointsRedeemed,
       taxCents,
-      creditAppliedCents: 0,
+      creditAppliedCents,
       totalCents,
       items: {
         create: items.map((i) => ({
@@ -457,7 +495,7 @@ export async function clientCheckoutAction(slug: string, rewardId: string | null
   // update, so two clients cannot both take the last item and two checkouts
   // cannot spend the same points. Anything reserved is released if a later
   // step fails, so a failed checkout leaves balances and stock unchanged.
-  const reserved = { points: 0, stock: [] as { productId: string; quantity: number }[] };
+  const reserved = { points: 0, credit: 0, stock: [] as { productId: string; quantity: number }[] };
   const release = async () => {
     for (const r of reserved.stock) {
       await db.product.updateMany({ where: { id: r.productId }, data: { inventoryQuantity: { increment: r.quantity } } });
@@ -467,6 +505,15 @@ export async function clientCheckoutAction(slug: string, rewardId: string | null
         customerProfileId: user.customerProfileId!,
         points: reserved.points,
         type: "REFUNDED",
+        reason: `Order ${orderNumber} did not complete`,
+        relatedOrderId: order.id,
+      });
+    }
+    if (reserved.credit > 0) {
+      await adjustAccountCredit(db, {
+        customerProfileId: user.customerProfileId!,
+        amountCents: reserved.credit,
+        type: "REFUND",
         reason: `Order ${orderNumber} did not complete`,
         relatedOrderId: order.id,
       });
@@ -494,6 +541,24 @@ export async function clientCheckoutAction(slug: string, rewardId: string | null
       throw err;
     }
   }
+  if (creditAppliedCents > 0) {
+    try {
+      await adjustAccountCredit(db, {
+        customerProfileId: user.customerProfileId!,
+        amountCents: -creditAppliedCents,
+        type: "REDEEMED",
+        reason: `Applied to order ${orderNumber}`,
+        relatedOrderId: order.id,
+      });
+      reserved.credit = creditAppliedCents;
+    } catch (err) {
+      // Another checkout spent it first. Nothing is charged and nothing is
+      // kept; the client can try again with what they have left.
+      if (err instanceof InsufficientCreditError) return abandon("Your credit has changed. Please check your cart and try again.");
+      throw err;
+    }
+  }
+
   for (const i of items) {
     if (i.itemType !== "PRODUCT" || !i.productId) continue;
     const taken = await db.product.updateMany({
@@ -502,6 +567,27 @@ export async function clientCheckoutAction(slug: string, rewardId: string | null
     });
     if (taken.count === 0) return abandon(`${i.product?.name ?? "An item"} just sold out.`);
     reserved.stock.push({ productId: i.productId, quantity: i.quantity });
+  }
+
+  // Paid for entirely out of credit: there is nothing to ask a card for, and
+  // the money was collected when the credit was granted. A payment row records
+  // what settled it, so the order is not a sale with no payment behind it.
+  if (totalCents === 0) {
+    await db.payment.create({
+      data: {
+        orderId: order.id,
+        provider: "ACCOUNT_CREDIT",
+        // What settled it, not what a card was charged: refunding this gives
+        // the credit back rather than touching a bank.
+        amountCents: creditAppliedCents,
+        currency,
+        status: "SUCCEEDED",
+      } as never,
+    });
+    const { pointsEarned } = await completePaidOrder(db, order.id);
+    await createItemsForOrder(order.id);
+    revalidateClient(slug);
+    return { ok: true, paid: true, orderNumber, pointsEarned, totalCents: 0 };
   }
 
   // Real cards: the charge is made on the clinic's own Stripe account, the
@@ -894,6 +980,17 @@ export async function clientJoinPlanAction(slug: string, planId: string): Promis
       occurredAt: now,
     } as never,
   });
+
+  // Same as the paid path, where invoice.paid does this: the included credit
+  // is spendable money in the client's balance, not a number on a membership.
+  if (plan.includedCreditCents > 0) {
+    await adjustAccountCredit(db, {
+      customerProfileId: user.customerProfileId!,
+      amountCents: plan.includedCreditCents,
+      type: "MEMBERSHIP_GRANT",
+      reason: `${plan.name} credit for this period`,
+    });
+  }
 
   await recordActivity(db, {
     type: "MEMBERSHIP_JOINED",

@@ -137,9 +137,11 @@ describe("joining a membership plan", () => {
     billing.price.mockResolvedValue(`price_${stamp}`);
     billing.cancel.mockResolvedValue(undefined);
     asClient();
-    // Each test starts with no membership of its own.
+    // Each test starts with no membership and an empty credit balance of its own.
     await rawDb.membershipBillingEvent.deleteMany({ where: { tenantId: clinic } });
     await rawDb.customerMembership.deleteMany({ where: { tenantId: clinic } });
+    await rawDb.accountCreditTransaction.deleteMany({ where: { tenantId: clinic } });
+    await rawDb.customerProfile.update({ where: { id: clientProfileId }, data: { accountCreditBalanceCents: 0 } });
   });
 
   /** Signs up and returns the pending membership with its subscription id. */
@@ -187,6 +189,17 @@ describe("joining a membership plan", () => {
     expect(membership).toMatchObject({ status: "ACTIVE", creditBalanceCents: 1_000, failedAttempts: 0, pastDueSince: null });
     const grant = await rawDb.membershipBillingEvent.findFirst({ where: { customerMembershipId: membership.id, type: "CREDIT_GRANT" } });
     expect(grant).toMatchObject({ amountCents: 1_000 });
+
+    // And it is spendable money in the client's own balance, not just a
+    // number on the membership — that is the whole point of including it.
+    expect(await rawDb.customerProfile.findUniqueOrThrow({ where: { id: clientProfileId } })).toMatchObject({
+      accountCreditBalanceCents: 1_000,
+    });
+    expect(await rawDb.accountCreditTransaction.findFirstOrThrow({ where: { customerProfileId: clientProfileId } })).toMatchObject({
+      type: "MEMBERSHIP_GRANT",
+      amountCents: 1_000,
+      balanceAfterCents: 1_000,
+    });
   });
 
   it("grants the included credit once however many times Stripe delivers the invoice", async () => {

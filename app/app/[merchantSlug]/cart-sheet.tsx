@@ -9,6 +9,7 @@ import {
   clientCheckoutAction,
   clientRedeemableRewardsAction,
   clientAbandonOrderAction,
+  clientCartExtrasAction,
 } from "@/lib/actions/client-app";
 import { useCart, type CartLine } from "./cart-context";
 import { CardPayment, type PaymentHandoff } from "./card-payment";
@@ -45,6 +46,10 @@ export function CartSheet({
   const [rewardId, setRewardId] = React.useState<string | null>(null);
   const [pickingReward, setPickingReward] = React.useState(false);
   const [method, setMethod] = React.useState<"card" | "later">("card");
+  /** The client's spendable credit, and whether this order should use it. */
+  const [credit, setCredit] = React.useState(0);
+  const [useCredit, setUseCredit] = React.useState(true);
+  const [memberTitle, setMemberTitle] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<{ orderNumber: string; pointsEarned: number } | null>(null);
@@ -58,8 +63,18 @@ export function CartSheet({
     setRewardId(null);
     setResult(null);
     setHandoff(null);
+    setUseCredit(true);
     void refresh();
     clientRedeemableRewardsAction().then(setRewards).catch(() => setRewards([]));
+    clientCartExtrasAction()
+      .then((extras) => {
+        setCredit(extras.creditCents);
+        setMemberTitle(extras.memberDiscountTitle);
+      })
+      .catch(() => {
+        setCredit(0);
+        setMemberTitle(null);
+      });
   }, [open, refresh]);
 
   const subtotal = items.reduce((s, i) => s + i.unitPriceCents * i.quantity, 0);
@@ -69,7 +84,11 @@ export function CartSheet({
       ? Math.min(reward.discountAmountCents, subtotal)
       : Math.round((subtotal * (reward.discountPercent ?? 0)) / 100)
     : 0;
-  const total = Math.max(0, subtotal - discount);
+  const beforeCredit = Math.max(0, subtotal - discount);
+  // Shown, not decided: the server reads the balance again and takes at most
+  // what is really there.
+  const creditUsed = useCredit ? Math.min(credit, beforeCredit) : 0;
+  const total = Math.max(0, beforeCredit - creditUsed);
 
   async function setQty(id: string, qty: number) {
     const res = await clientSetCartQtyAction(merchantSlug, id, qty);
@@ -80,7 +99,7 @@ export function CartSheet({
   async function pay() {
     setPending(true);
     setError(null);
-    const res = await clientCheckoutAction(merchantSlug, rewardId);
+    const res = await clientCheckoutAction(merchantSlug, rewardId, { useCredit });
     setPending(false);
     if ("error" in res) {
       setError(res.error);
@@ -134,7 +153,7 @@ export function CartSheet({
           </button>
         ) : stage === "card" ? undefined : items.length === 0 ? undefined : stage === "pay" ? (
           <button className="btn-black" disabled={pending} onClick={pay}>
-            {pending ? "Processing…" : `Pay ${money(total, currency)}`}
+            {pending ? "Processing…" : total === 0 ? "Place order" : `Pay ${money(total, currency)}`}
           </button>
         ) : (
           <button className="btn-black" onClick={() => setStage("pay")}>
@@ -211,6 +230,31 @@ export function CartSheet({
                 <Icon name="chevR" size={18} />
               </button>
             )
+          )}
+
+          {credit > 0 && (
+            <div className="optrow">
+              <span>{creditUsed > 0 ? "Account credit" : `Account credit (${money(credit, currency)} available)`}</span>
+              <span style={{ flex: 1 }} />
+              {creditUsed > 0 ? (
+                <>
+                  <b className="tabular">−{money(creditUsed, currency)}</b>
+                  <button aria-label="Don't use my credit" onClick={() => setUseCredit(false)} style={{ color: "var(--muted)" }}>
+                    <Icon name="close" size={16} />
+                  </button>
+                </>
+              ) : (
+                <button className="press" style={{ fontSize: 14 }} onClick={() => setUseCredit(true)}>
+                  Use it
+                </button>
+              )}
+            </div>
+          )}
+
+          {memberTitle && (
+            <p style={{ fontSize: 13, color: "var(--muted)", padding: "0 2px" }}>
+              {memberTitle} is applied at checkout, or a promotion if that saves you more.
+            </p>
           )}
 
           {stage === "pay" && (
