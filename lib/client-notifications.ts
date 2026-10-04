@@ -139,6 +139,25 @@ export async function notifyCreditChanged(customerProfileId: string, amountCents
   });
 }
 
+/**
+ * A staff member changed this client's loyalty points.
+ *
+ * Points are worth money to the client, so this is a service notification
+ * too: it goes to them whatever they have said about offers.
+ */
+export async function notifyPointsChanged(customerProfileId: string, points: number, reason: string): Promise<void> {
+  const to = await recipientForClient(customerProfileId);
+  if (!to) return;
+  const added = points > 0;
+  await notifyClientQuietly(to.userId, {
+    title: to.clinicName,
+    body: `${added ? "Points added" : "Points removed"}: ${Math.abs(points)} — ${reason}`,
+    url: clinicPath(to.slug, "/rewards"),
+    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    tag: `points-${customerProfileId}-${Date.now()}`,
+  });
+}
+
 /** Who to tell about a membership, and how to address them. */
 async function recipientForMembership(membershipId: string) {
   const membership = await rawDb.customerMembership.findUnique({

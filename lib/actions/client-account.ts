@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { rawDb } from "@/lib/db";
 import { ActionError, requireMerchantAction, runAction, type ActionResult } from "@/lib/merchant-action";
 import { adjustAccountCredit, InsufficientCreditError } from "@/lib/account-credit";
-import { notifyCreditChanged } from "@/lib/client-notifications";
+import { adjustLoyaltyPoints, InsufficientPointsError } from "@/lib/loyalty";
+import { notifyCreditChanged, notifyPointsChanged } from "@/lib/client-notifications";
 
 /**
  * A client's balances, as the clinic's own staff see and change them.
@@ -37,9 +38,9 @@ const adjustment = z.object({
 
 export interface LedgerRow {
   id: string;
-  /** Signed: negative is money leaving the client's balance. */
-  amountCents: number;
-  balanceAfterCents: number;
+  /** Signed: negative is leaving the client's balance. Cents, or points. */
+  amount: number;
+  balanceAfter: number;
   type: string;
   reason: string | null;
   /** The staff member who did it, when a person did. */
@@ -50,6 +51,8 @@ export interface LedgerRow {
 export interface ClientAccount {
   creditCents: number;
   credit: LedgerRow[];
+  pointsBalance: number;
+  points: LedgerRow[];
 }
 
 const staffName = (staff: { firstName: string | null; lastName: string | null } | null) =>
@@ -62,32 +65,59 @@ export async function clientAccountAction(merchantId: string, customerProfileId:
 
     const profile = await ctx.db.customerProfile.findFirst({
       where: { id: customerProfileId },
-      select: { accountCreditBalanceCents: true },
+      select: { accountCreditBalanceCents: true, loyaltyPointsBalance: true },
     });
     if (!profile) throw new ActionError("That client no longer exists.");
 
-    const credit = await ctx.db.accountCreditTransaction.findMany({
-      where: { customerProfileId },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-      select: {
-        id: true,
-        amountCents: true,
-        balanceAfterCents: true,
-        type: true,
-        reason: true,
-        createdAt: true,
-        performedByStaffProfile: { select: { firstName: true, lastName: true } },
-      },
-    });
+    const by = { select: { firstName: true, lastName: true } };
+    const [credit, points] = await Promise.all([
+      ctx.db.accountCreditTransaction.findMany({
+        where: { customerProfileId },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+        select: {
+          id: true,
+          amountCents: true,
+          balanceAfterCents: true,
+          type: true,
+          reason: true,
+          createdAt: true,
+          performedByStaffProfile: by,
+        },
+      }),
+      ctx.db.loyaltyTransaction.findMany({
+        where: { customerProfileId },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+        select: {
+          id: true,
+          points: true,
+          balanceAfter: true,
+          type: true,
+          reason: true,
+          createdAt: true,
+          performedByStaffProfile: by,
+        },
+      }),
+    ]);
 
     return {
       account: {
         creditCents: profile.accountCreditBalanceCents,
         credit: credit.map((row) => ({
           id: row.id,
-          amountCents: row.amountCents,
-          balanceAfterCents: row.balanceAfterCents,
+          amount: row.amountCents,
+          balanceAfter: row.balanceAfterCents,
+          type: row.type,
+          reason: row.reason,
+          by: staffName(row.performedByStaffProfile),
+          at: row.createdAt.toISOString(),
+        })),
+        pointsBalance: profile.loyaltyPointsBalance,
+        points: points.map((row) => ({
+          id: row.id,
+          amount: row.points,
+          balanceAfter: row.balanceAfter,
           type: row.type,
           reason: row.reason,
           by: staffName(row.performedByStaffProfile),
@@ -151,6 +181,70 @@ export async function adjustClientCreditAction(
 
     revalidatePath(`/m/${merchantId}/clients`);
     return { balanceCents };
+  });
+}
+
+const pointsAdjustment = z.object({
+  direction: z.enum(["add", "remove"]),
+  points: z
+    .string()
+    .trim()
+    .min(1, "Enter a number of points")
+    .max(12)
+    .transform((v) => Number(v))
+    .refine((n) => Number.isInteger(n) && n > 0, "Points are whole numbers above zero"),
+  reason: z.string().trim().min(1, "A reason is required").max(200, "Keep the reason under 200 characters"),
+});
+
+/**
+ * Adds or takes back loyalty points.
+ *
+ * The same shape as credit, and for the same reason: points are worth money
+ * to the client, so nobody moves them anonymously. Taking more than the
+ * client has is refused rather than wrapping into a negative balance.
+ */
+export async function adjustClientPointsAction(
+  merchantId: string,
+  customerProfileId: string,
+  input: z.input<typeof pointsAdjustment>,
+): Promise<ActionResult<{ balance: number }>> {
+  return runAction(async () => {
+    const ctx = await requireMerchantAction(merchantId, "loyalty.adjust");
+    const { direction, points, reason } = pointsAdjustment.parse(input);
+
+    const profile = await ctx.db.customerProfile.findFirst({ where: { id: customerProfileId }, select: { id: true } });
+    if (!profile) throw new ActionError("That client no longer exists.");
+
+    const signed = direction === "add" ? points : -points;
+
+    let balance: number;
+    try {
+      balance = await adjustLoyaltyPoints(ctx.db, {
+        customerProfileId,
+        points: signed,
+        type: "MANUAL_ADJUSTMENT",
+        reason,
+        performedByStaffProfileId: ctx.user.staffProfileId ?? undefined,
+      });
+    } catch (err) {
+      if (err instanceof InsufficientPointsError) {
+        const current = await ctx.db.customerProfile.findFirst({
+          where: { id: customerProfileId },
+          select: { loyaltyPointsBalance: true },
+        });
+        throw new ActionError(`That's more than the ${current?.loyaltyPointsBalance ?? 0} points this client has.`);
+      }
+      throw err;
+    }
+
+    await ctx.audit("loyalty.adjusted", "CustomerProfile", customerProfileId, { points: signed, reason, balance });
+
+    await notifyPointsChanged(customerProfileId, signed, reason).catch((err) =>
+      console.error("[client-account] points notice not sent:", err instanceof Error ? err.message : err),
+    );
+
+    revalidatePath(`/m/${merchantId}/clients`);
+    return { balance };
   });
 }
 

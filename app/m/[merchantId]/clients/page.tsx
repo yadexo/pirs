@@ -68,6 +68,7 @@ export default async function ClientsPage({
           merchantId={merchantId}
           canRefund={can("sales.manage")}
           canEditAccount={can("customers.edit")}
+          canAdjustPoints={can("loyalty.adjust")}
           currency={branding?.currency ?? DEFAULT_CURRENCY}
           q={q}
           sort={sort}

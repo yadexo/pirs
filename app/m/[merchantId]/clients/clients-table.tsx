@@ -31,6 +31,7 @@ export function ClientsTable({
   merchantId,
   canRefund,
   canEditAccount,
+  canAdjustPoints,
   currency,
   rows,
   q,
@@ -44,6 +45,7 @@ export function ClientsTable({
   canRefund: boolean;
   /** Whether this staff member may move a client's balances. */
   canEditAccount: boolean;
+  canAdjustPoints: boolean;
   currency: string;
   rows: ClientRow[];
   q: string;
@@ -152,6 +154,7 @@ export function ClientsTable({
         merchantId={merchantId}
         canRefund={canRefund}
         canEditAccount={canEditAccount}
+        canAdjustPoints={canAdjustPoints}
         currency={currency}
         client={selected}
         onClose={() => setSelected(null)}
@@ -164,6 +167,7 @@ function ClientDrawer({
   merchantId,
   canRefund,
   canEditAccount,
+  canAdjustPoints,
   currency,
   client,
   onClose,
@@ -172,6 +176,7 @@ function ClientDrawer({
   /** Whether this staff member may manage sales, and so refund. */
   canRefund: boolean;
   canEditAccount: boolean;
+  canAdjustPoints: boolean;
   currency: string;
   client: ClientRow | null;
   onClose: () => void;
@@ -212,7 +217,13 @@ function ClientDrawer({
               <Row label="Membership" value={client.isMember ? "Active" : "None"} />
             </dl>
           ) : tab === "account" ? (
-            <ClientAccountPanel merchantId={merchantId} customerProfileId={client.id} currency={currency} canEdit={canEditAccount} />
+            <ClientAccountPanel
+              merchantId={merchantId}
+              customerProfileId={client.id}
+              currency={currency}
+              canEdit={canEditAccount}
+              canAdjustPoints={canAdjustPoints}
+            />
           ) : tab === "orders" ? (
             <ClientOrders merchantId={merchantId} customerProfileId={client.id} canRefund={canRefund} />
           ) : tab === "items" ? (

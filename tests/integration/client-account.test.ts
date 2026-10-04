@@ -12,7 +12,7 @@ vi.mock("@/lib/web-push", async (importOriginal) => {
   return { ...actual, notifyClientQuietly: (...args: unknown[]) => push.notify(...args) };
 });
 
-const { clientAccountAction, adjustClientCreditAction } = await import("@/lib/actions/client-account");
+const { clientAccountAction, adjustClientCreditAction, adjustClientPointsAction } = await import("@/lib/actions/client-account");
 
 /**
  * Staff moving a client's account credit.
@@ -205,7 +205,120 @@ describe("a client's account credit", () => {
     expect(res.account.creditCents).toBe(2_000);
     expect(res.account.credit).toHaveLength(2);
     // Newest first, each naming the staff member who decided it.
-    expect(res.account.credit[0]).toMatchObject({ amountCents: -1_000, balanceAfterCents: 2_000, reason: "Used in person", by: "Sam Staff" });
-    expect(res.account.credit[1]).toMatchObject({ amountCents: 3_000, balanceAfterCents: 3_000, by: "Sam Staff" });
+    expect(res.account.credit[0]).toMatchObject({ amount: -1_000, balanceAfter: 2_000, reason: "Used in person", by: "Sam Staff" });
+    expect(res.account.credit[1]).toMatchObject({ amount: 3_000, balanceAfter: 3_000, by: "Sam Staff" });
+  });
+});
+
+/**
+ * The same story for loyalty points, which are worth money to the client and
+ * so get the same accountability — and the same floor at zero.
+ */
+describe("a client's loyalty points", () => {
+  const stamp = Date.now();
+  let clinic: string;
+  let staffUserId: string;
+  let staffProfileId: string;
+  let clientProfileId: string;
+  let clientUserId: string;
+
+  beforeAll(async () => {
+    process.env.AUTH_SECRET ??= "test-secret";
+    clinic = (await rawDb.tenant.create({ data: { slug: `pts-${stamp}`, name: "Points Clinic" } })).id;
+    await rawDb.tenantBranding.create({ data: { tenantId: clinic, businessName: "Points Clinic", currency: "EUR" } });
+
+    const su = await rawDb.user.create({ data: { tenantId: clinic, email: `sp-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } });
+    staffUserId = su.id;
+    staffProfileId = (await rawDb.staffProfile.create({ data: { tenantId: clinic, userId: su.id, firstName: "Pat", lastName: "Points" } })).id;
+
+    const cu = await rawDb.user.create({ data: { tenantId: clinic, email: `cp-${stamp}@x.com`, passwordHash: "x", role: "CUSTOMER" } });
+    clientUserId = cu.id;
+    clientProfileId = (await rawDb.customerProfile.create({ data: { tenantId: clinic, userId: cu.id, firstName: "Pia", lastName: "Client" } })).id;
+  });
+
+  afterAll(async () => {
+    await deleteTenantCompletely(clinic);
+  });
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    authMock.auth.mockResolvedValue({
+      user: {
+        id: staffUserId,
+        email: `sp-${stamp}@x.com`,
+        name: "Pat Points",
+        role: "TENANT_ADMIN",
+        tenantId: clinic,
+        tenantSlug: null,
+        staffProfileId,
+        customerProfileId: null,
+        permissions: "ALL",
+      },
+    });
+    await rawDb.loyaltyTransaction.deleteMany({ where: { tenantId: clinic } });
+    await rawDb.customerProfile.update({ where: { id: clientProfileId }, data: { loyaltyPointsBalance: 0 } });
+  });
+
+  it("adds points, with the reason and the staff member on the row", async () => {
+    expect(await adjustClientPointsAction(clinic, clientProfileId, { direction: "add", points: "150", reason: "Referred a friend" })).toMatchObject({
+      ok: true,
+      balance: 150,
+    });
+
+    expect(await rawDb.loyaltyTransaction.findFirstOrThrow({ where: { tenantId: clinic } })).toMatchObject({
+      points: 150,
+      balanceAfter: 150,
+      type: "MANUAL_ADJUSTMENT",
+      reason: "Referred a friend",
+      performedByStaffProfileId: staffProfileId,
+    });
+  });
+
+  it("writes an audit entry and tells the client", async () => {
+    await adjustClientPointsAction(clinic, clientProfileId, { direction: "add", points: "50", reason: "Apology" });
+
+    expect(await rawDb.auditLog.findFirstOrThrow({ where: { tenantId: clinic, action: "loyalty.adjusted" } })).toMatchObject({
+      entityId: clientProfileId,
+      actorUserId: staffUserId,
+    });
+    const [userId, message] = push.notify.mock.calls[0] as [string, { body: string }];
+    expect(userId).toBe(clientUserId);
+    expect(message.body).toContain("Points added");
+    expect(message.body).toContain("Apology");
+  });
+
+  it("takes points back, down to zero but no further", async () => {
+    await adjustClientPointsAction(clinic, clientProfileId, { direction: "add", points: "100", reason: "Welcome" });
+
+    expect(await adjustClientPointsAction(clinic, clientProfileId, { direction: "remove", points: "40", reason: "Correction" })).toMatchObject({
+      balance: 60,
+    });
+
+    const tooMany = await adjustClientPointsAction(clinic, clientProfileId, { direction: "remove", points: "100", reason: "Too many" });
+    expect(tooMany).toMatchObject({ error: expect.stringContaining("60 points") });
+    expect(await rawDb.customerProfile.findUniqueOrThrow({ where: { id: clientProfileId } })).toMatchObject({ loyaltyPointsBalance: 60 });
+  });
+
+  it("insists on whole points above zero, and on a reason", async () => {
+    for (const points of ["0", "-10", "2.5", "abc"]) {
+      expect(await adjustClientPointsAction(clinic, clientProfileId, { direction: "add", points, reason: "Test" }), points).toMatchObject({
+        error: expect.any(String),
+      });
+    }
+    expect(await adjustClientPointsAction(clinic, clientProfileId, { direction: "add", points: "10", reason: " " })).toMatchObject({
+      error: expect.any(String),
+    });
+    expect(await rawDb.loyaltyTransaction.count({ where: { tenantId: clinic } })).toBe(0);
+  });
+
+  it("shows both balances and both histories together", async () => {
+    await adjustClientPointsAction(clinic, clientProfileId, { direction: "add", points: "20", reason: "Welcome" });
+    await adjustClientCreditAction(clinic, clientProfileId, { direction: "add", amount: "5", reason: "Goodwill" });
+
+    const res = await clientAccountAction(clinic, clientProfileId);
+    if ("error" in res) throw new Error(res.error);
+    expect(res.account).toMatchObject({ pointsBalance: 20, creditCents: 500 });
+    expect(res.account.points[0]).toMatchObject({ amount: 20, balanceAfter: 20, by: "Pat Points" });
+    expect(res.account.credit[0]).toMatchObject({ amount: 500, by: "Pat Points" });
   });
 });
