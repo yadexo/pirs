@@ -11,13 +11,12 @@ const rbacMocks = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/rbac", () => rbacMocks);
 
-const { placeOrderAction, getCheckoutQuoteAction } = await import("@/lib/actions/checkout");
+const { clientCheckoutAction } = await import("@/lib/actions/client-app");
 const { joinMembershipAction, pauseMembershipAction, resumeMembershipAction, cancelMembershipAction } = await import(
   "@/lib/actions/memberships"
 );
 const { adjustAccountCreditAction } = await import("@/lib/actions/customers");
 const { manualLoyaltyAdjustmentAction } = await import("@/lib/actions/loyalty");
-const { refundPaymentAction } = await import("@/lib/actions/payments");
 const { getAvailableSlots } = await import("@/lib/availability");
 
 function formData(fields: Record<string, string>) {
@@ -141,23 +140,25 @@ describe("business-critical workflows", () => {
   }
 
   describe("checkout calculations + order placement", () => {
-    it("computes subtotal, tax, and total for a basket with no discounts", async () => {
+    it("prices an order from the catalogue and the clinic's tax rate", async () => {
+      await clearOpenBaskets();
       await openBasketWithService();
-      const quote = await getCheckoutQuoteAction("test-tenant", null, 0);
-      expect(quote.subtotalCents).toBe(10000);
-      expect(quote.taxCents).toBe(1000); // 10% tax rate fixture
-      expect(quote.totalCents).toBe(11000);
 
-      // clean up basket for the next test
-      const basket = await db.basket.findFirst({ where: { customerProfileId, status: "OPEN" } });
-      if (basket) await db.basket.delete({ where: { id: basket.id } });
+      const res = await clientCheckoutAction("test-tenant", null);
+      expect(res).toMatchObject({ ok: true, totalCents: 11000 });
+
+      const order = await rawDb.order.findFirst({ where: { tenantId, customerProfileId }, orderBy: { placedAt: "desc" } });
+      // Nothing the browser sent: the service's own price, plus the clinic's
+      // 10% from the fixture.
+      expect(order).toMatchObject({ subtotalCents: 10000, taxCents: 1000, totalCents: 11000 });
     });
 
     it("places an order, decrements inventory, and awards loyalty points on success", async () => {
+      await clearOpenBaskets();
       const basket = await db.basket.create({ data: { customerProfileId, status: "OPEN" } as never });
       await db.basketItem.create({ data: { basketId: basket.id, itemType: "PRODUCT", productId, quantity: 2, unitPriceCents: 2000 } });
 
-      await expectRedirect(placeOrderAction("test-tenant", undefined, formData({})));
+      expect(await clientCheckoutAction("test-tenant", null)).toMatchObject({ ok: true, paid: true });
 
       const order = await rawDb.order.findFirst({ where: { tenantId, customerProfileId }, orderBy: { placedAt: "desc" } });
       expect(order?.status).toBe("PAID");
@@ -174,15 +175,17 @@ describe("business-critical workflows", () => {
     });
 
     it("records a FAILED order and does not touch inventory when the payment is simulated to decline", async () => {
+      await clearOpenBaskets();
       const basket = await db.basket.create({ data: { customerProfileId, status: "OPEN" } as never });
       await db.basketItem.create({ data: { basketId: basket.id, itemType: "PRODUCT", productId, quantity: 1, unitPriceCents: 2000 } });
 
       const before = await rawDb.product.findUnique({ where: { id: productId } });
 
-      // Asked for through the environment, not a form field the client sends.
+      // Asked for through the environment, not by the caller: see fix 1 in
+      // lib/providers/payments/mock.ts.
       process.env.MOCK_PAYMENTS_DECLINE = "1";
       try {
-        await expectRedirect(placeOrderAction("test-tenant", undefined, formData({})));
+        expect(await clientCheckoutAction("test-tenant", null)).toMatchObject({ error: expect.any(String) });
       } finally {
         delete process.env.MOCK_PAYMENTS_DECLINE;
       }
@@ -206,85 +209,15 @@ describe("business-critical workflows", () => {
 
     it("rejects checkout on an empty basket", async () => {
       await clearOpenBaskets();
-      const result = await placeOrderAction("test-tenant", undefined, formData({}));
-      expect(result).toEqual({ error: "Your basket is empty." });
+      expect(await clientCheckoutAction("test-tenant", null)).toEqual({ error: "Your cart is empty." });
     });
   });
 
-  describe("promotion eligibility", () => {
-    it("applies a valid code, rejects an expired one, and enforces per-customer limits server-side", async () => {
-      const validCode = `VALID-${Date.now()}`;
-      await rawDb.promotion.create({
-        data: {
-          tenantId,
-          title: "Test promo",
-          startAt: new Date(Date.now() - 86400000),
-          endAt: new Date(Date.now() + 86400000),
-          discountType: "PERCENT",
-          discountValue: 10,
-          code: validCode,
-          perCustomerLimit: 1,
-        },
-      });
-
-      await openBasketWithService();
-      const quote = await getCheckoutQuoteAction("test-tenant", validCode, 0);
-      expect(quote.promoError).toBeNull();
-      expect(quote.discountCents).toBe(1000); // 10% of 10000
-
-      const expiredCode = `EXPIRED-${Date.now()}`;
-      await rawDb.promotion.create({
-        data: {
-          tenantId,
-          title: "Expired promo",
-          startAt: new Date(Date.now() - 20 * 86400000),
-          endAt: new Date(Date.now() - 10 * 86400000),
-          discountType: "PERCENT",
-          discountValue: 50,
-          code: expiredCode,
-        },
-      });
-      const expiredQuote = await getCheckoutQuoteAction("test-tenant", expiredCode, 0);
-      expect(expiredQuote.promoError).toMatch(/not valid or has expired/);
-
-      // Simulate the customer having already redeemed the valid promo once.
-      const promo = await rawDb.promotion.findFirst({ where: { code: validCode } });
-      await rawDb.promotionRedemption.create({
-        data: { tenantId, promotionId: promo!.id, customerProfileId, discountAppliedCents: 1000 },
-      });
-      const secondUse = await getCheckoutQuoteAction("test-tenant", validCode, 0);
-      expect(secondUse.promoError).toMatch(/already used/);
-
-      const basket = await db.basket.findFirst({ where: { customerProfileId, status: "OPEN" } });
-      if (basket) await db.basket.delete({ where: { id: basket.id } });
-    });
-
-    it("only discounts items covered by the promotion's eligibility rules", async () => {
-      const scopedCode = `SCOPED-${Date.now()}`;
-      const promo = await rawDb.promotion.create({
-        data: {
-          tenantId,
-          title: "Product-only promo",
-          startAt: new Date(Date.now() - 86400000),
-          endAt: new Date(Date.now() + 86400000),
-          discountType: "PERCENT",
-          discountValue: 50,
-          code: scopedCode,
-        },
-      });
-      await rawDb.promotionEligibility.create({ data: { promotionId: promo.id, productId } });
-
-      const basket = await db.basket.create({ data: { customerProfileId, status: "OPEN" } as never });
-      await db.basketItem.create({ data: { basketId: basket.id, itemType: "SERVICE", serviceId, quantity: 1, unitPriceCents: 10000 } });
-      await db.basketItem.create({ data: { basketId: basket.id, itemType: "PRODUCT", productId, quantity: 1, unitPriceCents: 2000 } });
-
-      const quote = await getCheckoutQuoteAction("test-tenant", scopedCode, 0);
-      // Only the $20 product is eligible, so the 50% discount is $10 — not 50% of the $120 basket.
-      expect(quote.discountCents).toBe(1000);
-
-      await db.basket.delete({ where: { id: basket.id } });
-    });
-  });
+  // Promotion codes are covered in tests/integration/promo-codes.test.ts:
+  // the code's window, the overall and per-client limits, and what a scoped
+  // promotion is allowed to discount. They test lib/promo-codes.ts, which is
+  // where those rules live now that the counter's checkout action — which had
+  // no screen behind it — has been deleted.
 
   describe("loyalty points", () => {
     it("applies a reward as a discount and keeps the points ledger balanced", async () => {
@@ -296,7 +229,7 @@ describe("business-critical workflows", () => {
       const balanceBefore = before!.loyaltyPointsBalance;
 
       await openBasketWithService();
-      await expectRedirect(placeOrderAction("test-tenant", undefined, formData({ rewardId })));
+      expect(await clientCheckoutAction("test-tenant", rewardId)).toMatchObject({ ok: true, paid: true });
 
       const order = await rawDb.order.findFirst({ where: { tenantId, customerProfileId }, orderBy: { placedAt: "desc" } });
 
@@ -335,8 +268,7 @@ describe("business-critical workflows", () => {
       });
 
       await openBasketWithService();
-      const result = await placeOrderAction("test-tenant", undefined, formData({ rewardId: expensiveReward.id }));
-      expect(result).toEqual({ error: "Not enough points for this reward." });
+      expect(await clientCheckoutAction("test-tenant", expensiveReward.id)).toEqual({ error: "Not enough points for that reward." });
 
       await clearOpenBaskets();
     });
@@ -435,23 +367,10 @@ describe("business-critical workflows", () => {
     });
   });
 
-  describe("payment and refund state transitions", () => {
-    it("marks an order REFUNDED after a full refund and rejects over-refunding", async () => {
-      const basket = await openBasketWithService();
-      await expectRedirect(placeOrderAction("test-tenant", undefined, formData({})));
-      void basket;
-
-      const order = await rawDb.order.findFirst({ where: { tenantId, customerProfileId, status: "PAID" }, orderBy: { placedAt: "desc" } });
-      const payment = await rawDb.payment.findFirst({ where: { orderId: order!.id } });
-
-      const full = await refundPaymentAction(undefined, formData({ paymentId: payment!.id, amount: (payment!.amountCents / 100).toFixed(2), reason: "Customer requested" }));
-      expect(full).toEqual({ success: true });
-
-      const refundedOrder = await rawDb.order.findUnique({ where: { id: order!.id } });
-      expect(refundedOrder?.status).toBe("REFUNDED");
-
-      const overRefund = await refundPaymentAction(undefined, formData({ paymentId: payment!.id, amount: "1.00", reason: "Should fail" }));
-      expect(overRefund).toEqual({ error: "Refund amount exceeds the remaining refundable balance." });
-    });
-  });
+  // Refunds are covered end to end in tests/integration/refunds.test.ts:
+  // full and partial refunds, over-refunding, refunding twice, another
+  // clinic's order, and the two concurrent attempts. They go through
+  // refundOrderAction, which is what the dashboard actually calls — the
+  // action this file used to test was never wired to any screen and has been
+  // deleted.
 });

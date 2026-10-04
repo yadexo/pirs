@@ -20,7 +20,7 @@ vi.mock("@/lib/stripe-payments", async (importOriginal) => {
 });
 
 const clientApp = await import("@/lib/actions/client-app");
-const payments = await import("@/lib/actions/payments");
+const { refundOrderAction } = await import("@/lib/actions/refund-order");
 const { handleStripeEvent, alreadyProcessed } = await import("@/lib/stripe-webhook");
 
 describe("client payments on the clinic's Stripe account", () => {
@@ -240,12 +240,8 @@ describe("client payments on the clinic's Stripe account", () => {
     const payment = await rawDb.payment.findFirstOrThrow({ where: { tenantId: clinic, status: "SUCCEEDED" }, orderBy: { createdAt: "asc" } });
     stripeMock.refund.mockResolvedValue({ providerRefundId: "re_test_1", status: "SUCCEEDED" });
 
-    const fd = new FormData();
-    fd.set("paymentId", payment.id);
-    fd.set("amount", String(payment.amountCents / 100));
-    fd.set("reason", "Client changed their mind");
-    const res = await payments.refundPaymentAction(undefined, fd);
-    expect(res).not.toMatchObject({ error: expect.any(String) });
+    const res = await refundOrderAction(clinic, { orderId: payment.orderId!, reason: "Client changed their mind" });
+    expect(res).toMatchObject({ ok: true, amountCents: payment.amountCents, fully: true });
 
     expect(stripeMock.refund.mock.calls[0]![0]).toMatchObject({
       stripeAccountId: ACCOUNT,
@@ -253,7 +249,35 @@ describe("client payments on the clinic's Stripe account", () => {
       amountCents: payment.amountCents,
       hasApplicationFee: true,
     });
+
+    // The refund is recorded, and the order's status is deliberately not
+    // changed here: charge.refunded owns that, so a refund made in the
+    // clinic's own Stripe dashboard behaves exactly like this one.
+    expect(await rawDb.refund.findFirstOrThrow({ where: { paymentId: payment.id } })).toMatchObject({
+      amountCents: payment.amountCents,
+      status: "SUCCEEDED",
+      providerRefundId: "re_test_1",
+    });
+    expect(await rawDb.order.findFirstOrThrow({ where: { id: payment.orderId! } })).toMatchObject({ status: "PAID" });
+
+    await handleStripeEvent({
+      id: `evt_refunded_${stamp}`,
+      type: "charge.refunded",
+      created: Math.floor(Date.now() / 1000),
+      account: ACCOUNT,
+      data: {
+        object: {
+          id: "ch_refunded",
+          payment_intent: payment.providerPaymentId,
+          amount_refunded: payment.amountCents,
+          refunds: { data: [{ id: "re_test_1", amount: payment.amountCents, status: "succeeded" }] },
+        },
+      },
+    } as unknown as Stripe.Event);
+
     expect(await rawDb.order.findFirstOrThrow({ where: { id: payment.orderId! } })).toMatchObject({ status: "REFUNDED" });
+    // The row the action already wrote is not duplicated by the webhook.
+    expect(await rawDb.refund.count({ where: { paymentId: payment.id } })).toBe(1);
   });
 
   it("a chargeback marks the payment and its order disputed", async () => {

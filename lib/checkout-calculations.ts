@@ -1,7 +1,12 @@
 /**
- * Pure checkout math — no Prisma, no session, no I/O. Kept separate from
- * lib/actions/checkout.ts so it can be unit tested directly and reused
- * anywhere totals need recomputing (e.g. webhooks, admin tools).
+ * Pure checkout math — no Prisma, no session, no I/O.
+ *
+ * This is the clinic counter's arithmetic: promotion codes, account credit
+ * and a loyalty reward on one basket. It has no caller in the app today; the
+ * counter screen it was written for does not exist yet, and the client app
+ * prices its own baskets in lib/actions/client-app.ts, from the catalogue and
+ * lib/discounts.ts. Kept, with lib/promo-codes.ts beside it, because the rules
+ * are worth more than the screen and both are tested on their own.
  */
 
 export interface LineItem {
