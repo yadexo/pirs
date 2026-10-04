@@ -337,13 +337,55 @@ export async function clientSetCartQtyAction(
  * Both are read here rather than worked out in the browser, so the cart shows
  * the same numbers the till will charge.
  */
-export async function clientCartExtrasAction(): Promise<{ creditCents: number; memberDiscountTitle: string | null }> {
+export async function clientCartExtrasAction(): Promise<{
+  creditCents: number;
+  /** What the basket is actually being discounted by, and by how much. */
+  discount: { title: string; source: "PROMOTION" | "MEMBERSHIP"; discountCents: number } | null;
+  /**
+   * The client has a plan whose discounts cover nothing in this basket — a
+   * treatment rate with only products in the cart, or the other way round.
+   * Said plainly, because a member being charged full price is exactly the
+   * moment to explain why rather than advertise a price they won't get.
+   */
+  memberDiscountNotApplicable: string | null;
+}> {
   const { db, user } = await requireCustomerContext();
-  const [creditCents, member] = await Promise.all([
+
+  const basket = await db.basket.findFirst({
+    where: { customerProfileId: user.customerProfileId!, status: "OPEN" },
+    include: { items: { include: { service: true, product: true } } },
+  });
+  const lines = (basket?.items ?? []).map((i) => ({
+    kind: (i.itemType === "PRODUCT" ? "PRODUCT" : "SERVICE") as "PRODUCT" | "SERVICE",
+    id: (i.itemType === "PRODUCT" ? i.productId : i.serviceId) ?? i.id,
+    categoryId: (i.itemType === "PRODUCT" ? i.product?.categoryId : i.service?.categoryId) ?? null,
+    unitPriceCents: i.unitPriceCents,
+    quantity: i.quantity,
+  }));
+
+  // The same resolver checkout uses, on the same basket — so the cart cannot
+  // promise a discount the till won't give, which is the whole point of
+  // keeping one calculation.
+  const [creditCents, applied, member] = await Promise.all([
     availableCredit(db, user.customerProfileId!),
+    resolveDiscount({ tenantId: user.tenantId!, customerProfileId: user.customerProfileId!, lines }),
     memberCandidatesFor(user.tenantId!, user.customerProfileId!),
   ]);
-  return { creditCents, memberDiscountTitle: member[0]?.title ?? null };
+
+  const hasPlan = member.length > 0;
+  const planCoversNothingHere = hasPlan && applied?.source !== "MEMBERSHIP" && !member.some((c) => lines.some((l) => c.appliesToKind === l.kind));
+
+  return {
+    creditCents,
+    discount: applied ? { title: applied.title, source: applied.source, discountCents: applied.discountCents } : null,
+    memberDiscountNotApplicable: planCoversNothingHere
+      ? member.every((c) => c.appliesToKind === "SERVICE")
+        ? "Your plan's discount applies to treatments, so it doesn't change these items."
+        : member.every((c) => c.appliesToKind === "PRODUCT")
+          ? "Your plan's discount applies to products, so it doesn't change these items."
+          : "Your plan's discount doesn't apply to these items."
+      : null,
+  };
 }
 
 /** Rewards the client can afford that reduce an order total. */

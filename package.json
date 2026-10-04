@@ -33,7 +33,8 @@
     "prod:push-debug": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 push-debug",
     "prisma:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
-    "serve": "node scripts/serve.mjs"
+    "serve": "node scripts/serve.mjs",
+    "prod:membership-debug": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 membership-debug"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

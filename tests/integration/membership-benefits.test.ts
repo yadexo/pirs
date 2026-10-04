@@ -2,6 +2,8 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vites
 import { rawDb } from "@/lib/db";
 import { getTenantDb } from "@/lib/tenant-db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
+import { discountedUnitPrice, shopDiscountsFor } from "@/lib/discounts";
+import { membershipDebug } from "../../prisma/membership-debug";
 
 const clientAuthMock = vi.hoisted(() => ({ clientAuth: vi.fn(), clientSignIn: vi.fn(), clientSignOut: vi.fn() }));
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
@@ -284,14 +286,178 @@ describe("membership benefits at checkout", () => {
     ]);
   });
 
-  it("tells the cart what the client has to spend and what their plan is worth", async () => {
+  it("tells the cart what the basket is actually discounted by", async () => {
     await member("ACTIVE");
     await adjustAccountCredit(db, { customerProfileId: clientProfileId, amountCents: 2_500, type: "MEMBERSHIP_GRANT", reason: "Plan credit" });
+    expect(await clientAddToCartAction(SLUG, "service", serviceId, 1)).toMatchObject({ ok: true });
 
-    expect(await clientCartExtrasAction()).toEqual({ creditCents: 2_500, memberDiscountTitle: "Glow Monthly member price" });
+    expect(await clientCartExtrasAction()).toEqual({
+      creditCents: 2_500,
+      discount: { title: "Glow Monthly member price", source: "MEMBERSHIP", discountCents: 2_000 },
+      memberDiscountNotApplicable: null,
+    });
   });
 
   it("offers no member price to a client with no membership", async () => {
-    expect(await clientCartExtrasAction()).toEqual({ creditCents: 0, memberDiscountTitle: null });
+    expect(await clientCartExtrasAction()).toEqual({ creditCents: 0, discount: null, memberDiscountNotApplicable: null });
+  });
+
+  /**
+   * The bug this pair was written for. A plan whose only rate is for products
+   * used to have the cart announce a member price on a basket of treatments,
+   * and then charge the full amount — the cart was reporting that the client
+   * *has* a plan, while checkout asked the question that matters, which is
+   * whether the plan covers what they are buying.
+   */
+  describe("a plan whose discount doesn't cover what's in the basket", () => {
+    beforeEach(async () => {
+      await rawDb.membershipPlan.update({
+        where: { id: planId },
+        data: { serviceDiscountPercent: null, productDiscountPercent: 50 },
+      });
+      await member("ACTIVE");
+    });
+
+    afterAll(async () => {
+      await rawDb.membershipPlan.update({
+        where: { id: planId },
+        data: { serviceDiscountPercent: 20, productDiscountPercent: 5 },
+      });
+    });
+
+    it("charges the full price for a treatment, and says why", async () => {
+      expect(await clientAddToCartAction(SLUG, "service", serviceId, 1)).toMatchObject({ ok: true });
+
+      const extras = await clientCartExtrasAction();
+      expect(extras.discount).toBeNull();
+      expect(extras.memberDiscountNotApplicable).toMatch(/applies to products/i);
+
+      const res = await clientCheckoutAction(SLUG, null);
+      if ("error" in res) throw new Error(res.error);
+      expect(await rawDb.order.findFirstOrThrow({ where: { orderNumber: res.orderNumber } })).toMatchObject({
+        discountCents: 0,
+        totalCents: 10_000,
+      });
+    });
+
+    it("gives the member price on the shelf, where the plan's rate does apply", async () => {
+      expect(await clientAddToCartAction(SLUG, "product", productId, 1)).toMatchObject({ ok: true });
+
+      const extras = await clientCartExtrasAction();
+      expect(extras.discount).toMatchObject({ source: "MEMBERSHIP", discountCents: 1_000 });
+      expect(extras.memberDiscountNotApplicable).toBeNull();
+    });
+  });
+});
+
+/**
+ * The shop's struck-through prices come from the same candidates checkout
+ * resolves, so a member sees their own price while deciding rather than
+ * discovering it at the till.
+ */
+describe("member prices in the shop", () => {
+  const stamp = Date.now();
+  const SLUG = `shopmem-${stamp}`;
+  let clinic: string;
+  let clientProfileId: string;
+  let planId: string;
+  let serviceId: string;
+  let serviceCategoryId: string;
+  let productId: string;
+  let productCategoryId: string;
+
+  beforeAll(async () => {
+    clinic = (await rawDb.tenant.create({ data: { slug: SLUG, name: "Shop Member Clinic" } })).id;
+    const user = await rawDb.user.create({ data: { tenantId: clinic, email: `s-${stamp}@x.com`, passwordHash: "x", role: "CUSTOMER" } });
+    clientProfileId = (await rawDb.customerProfile.create({ data: { tenantId: clinic, userId: user.id, firstName: "Shop", lastName: "Per" } })).id;
+
+    serviceCategoryId = (await rawDb.serviceCategory.create({ data: { tenantId: clinic, name: "Treatments" } })).id;
+    serviceId = (await rawDb.service.create({
+      data: { tenantId: clinic, categoryId: serviceCategoryId, name: "Bleaching", priceCents: 5_000, durationMinutes: 30 },
+    })).id;
+    productCategoryId = (await rawDb.productCategory.create({ data: { tenantId: clinic, name: "Shelf" } })).id;
+    productId = (await rawDb.product.create({
+      data: { tenantId: clinic, categoryId: productCategoryId, name: "Gel", sku: `GEL-${stamp}`, priceCents: 2_000, inventoryQuantity: 10 },
+    })).id;
+
+    planId = (
+      await rawDb.membershipPlan.create({
+        data: { tenantId: clinic, name: "Bright Plan", billingFrequency: "MONTHLY", priceCents: 3_000, serviceDiscountPercent: 50 },
+      })
+    ).id;
+    await rawDb.customerMembership.create({
+      data: {
+        tenantId: clinic,
+        customerProfileId: clientProfileId,
+        membershipPlanId: planId,
+        status: "ACTIVE",
+        currentPeriodEnd: new Date(Date.now() + 30 * 86_400_000),
+      } as never,
+    });
+  });
+
+  afterAll(async () => {
+    await deleteTenantCompletely(clinic);
+  });
+
+  it("strikes through the member's price on a treatment the plan covers", async () => {
+    const candidates = await shopDiscountsFor(clinic, clientProfileId);
+    const offer = discountedUnitPrice(
+      { kind: "SERVICE", id: serviceId, categoryId: serviceCategoryId, unitPriceCents: 5_000, quantity: 1 },
+      candidates,
+    );
+    expect(offer).toEqual({ priceCents: 2_500, promotionTitle: "Bright Plan member price" });
+  });
+
+  it("leaves a product at its list price when the plan has no product rate", async () => {
+    const candidates = await shopDiscountsFor(clinic, clientProfileId);
+    const offer = discountedUnitPrice(
+      { kind: "PRODUCT", id: productId, categoryId: productCategoryId, unitPriceCents: 2_000, quantity: 1 },
+      candidates,
+    );
+    expect(offer).toEqual({ priceCents: 2_000, promotionTitle: null });
+  });
+
+  it("shows nothing to a client who isn't a member", async () => {
+    const other = await rawDb.user.create({ data: { tenantId: clinic, email: `n-${stamp}@x.com`, passwordHash: "x", role: "CUSTOMER" } });
+    const outsider = await rawDb.customerProfile.create({ data: { tenantId: clinic, userId: other.id, firstName: "Non", lastName: "Member" } });
+
+    const candidates = await shopDiscountsFor(clinic, outsider.id);
+    const offer = discountedUnitPrice(
+      { kind: "SERVICE", id: serviceId, categoryId: serviceCategoryId, unitPriceCents: 5_000, quantity: 1 },
+      candidates,
+    );
+    expect(offer).toEqual({ priceCents: 5_000, promotionTitle: null });
+  });
+
+  it("the production diagnostic reports what each rate covers and what it is worth", async () => {
+    // The tool that answers "why did this member pay full price?" has to be
+    // right about the two things that decide it: the rate, and the kind.
+    const report = await membershipDebug(rawDb, SLUG, "Bleaching");
+
+    expect(report.plans[0]).toMatchObject({ name: "Bright Plan", serviceDiscountPercent: 50, productDiscountPercent: null });
+    expect(report.plans[0]!.covers).toBe("50% off treatments");
+    expect(report.members[0]).toMatchObject({ status: "ACTIVE", benefitsNow: true, candidates: [{ kind: "SERVICE", percent: 50 }] });
+
+    expect(report.item).toMatchObject({ name: "Bleaching", kind: "SERVICE" });
+    expect(report.item!.outcomes[0]).toMatchObject({ discountCents: 2_500, source: "MEMBERSHIP" });
+  });
+
+  it("the diagnostic shows nothing taken off an item the plan's rate doesn't cover", async () => {
+    const report = await membershipDebug(rawDb, SLUG, "Gel");
+    expect(report.item).toMatchObject({ kind: "PRODUCT" });
+    expect(report.item!.outcomes[0]).toMatchObject({ discountCents: 0, source: null });
+  });
+
+  it("stops advertising the member price once the membership is suspended", async () => {
+    await rawDb.customerMembership.updateMany({ where: { tenantId: clinic, customerProfileId: clientProfileId }, data: { status: "SUSPENDED" } });
+    try {
+      const candidates = await shopDiscountsFor(clinic, clientProfileId);
+      expect(
+        discountedUnitPrice({ kind: "SERVICE", id: serviceId, categoryId: serviceCategoryId, unitPriceCents: 5_000, quantity: 1 }, candidates),
+      ).toEqual({ priceCents: 5_000, promotionTitle: null });
+    } finally {
+      await rawDb.customerMembership.updateMany({ where: { tenantId: clinic, customerProfileId: clientProfileId }, data: { status: "ACTIVE" } });
+    }
   });
 });

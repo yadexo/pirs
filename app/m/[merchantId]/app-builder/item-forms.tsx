@@ -325,8 +325,29 @@ export function MembershipPlanForm({ currency, item, errors }: ItemFormProps) {
       </FormSection>
       <FormSection title="Member perks">
         <div className="grid grid-cols-2 gap-3">
-          <TextField label="Treatment discount %" name="serviceDiscountPercent" type="number" min={1} max={100} defaultValue={str(item.serviceDiscountPercent)} errors={errors} />
-          <TextField label="Product discount %" name="productDiscountPercent" type="number" min={1} max={100} defaultValue={str(item.productDiscountPercent)} errors={errors} />
+          {/* Each rate covers its own half of the catalogue and nothing else,
+              which is the easiest thing here to get wrong: a treatment
+              discount does nothing for a member buying from the shelf. */}
+          <TextField
+            label="Treatment discount %"
+            name="serviceDiscountPercent"
+            type="number"
+            min={1}
+            max={100}
+            defaultValue={str(item.serviceDiscountPercent)}
+            errors={errors}
+            hint="Members pay this much less for treatments. It does not apply to shop products."
+          />
+          <TextField
+            label="Product discount %"
+            name="productDiscountPercent"
+            type="number"
+            min={1}
+            max={100}
+            defaultValue={str(item.productDiscountPercent)}
+            errors={errors}
+            hint="Members pay this much less for shop products. It does not apply to treatments."
+          />
         </div>
         <MoneyField label="Credit included each period" name="includedCredit" currency={currency} defaultValue={centsToInput(item.includedCreditCents as number)} errors={errors} />
         <CheckboxField name="priorityAccess" label="Priority booking" defaultChecked={Boolean(item.priorityAccess)} />

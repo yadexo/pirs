@@ -19,9 +19,10 @@ to delete and nothing that could be committed by accident.
   npm run prod:client -- --clinic testclinic --email client@you.com
   npm run prod:clinic-login -- --clinic testclinic   # who can open a clinic's portal
   npm run prod:push-debug -- --clinic testclinic     # why notifications did or didn't arrive
+  npm run prod:membership-debug -- --clinic testclinic --item "Bleken Sessie"   # why a member price did or didn't apply
 
 .PARAMETER Task
-status | migrate | stripe | apple-pay | items | admin | reset-admin | client | clinic-login | push-debug
+status | migrate | stripe | apple-pay | items | admin | reset-admin | client | clinic-login | push-debug | membership-debug
 
 .PARAMETER Url
 The connection string, for automation. Prefer the prompt: an argument is saved
@@ -33,7 +34,7 @@ Skip the confirmation. Intended for scripts, not for day-to-day use.
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("status", "migrate", "stripe", "apple-pay", "items", "admin", "reset-admin", "client", "clinic-login", "push-debug")]
+  [ValidateSet("status", "migrate", "stripe", "apple-pay", "items", "admin", "reset-admin", "client", "clinic-login", "push-debug", "membership-debug")]
   [string]$Task = "status",
 
   [string]$Url,
@@ -76,6 +77,7 @@ $commands = @{
   "client"       = @("npx", "tsx", "prisma/create-client-login.ts")
   "clinic-login" = @("npx", "tsx", "prisma/clinic-login.ts")
   "push-debug"   = @("npx", "tsx", "prisma/push-debug.ts")
+  "membership-debug" = @("npx", "tsx", "prisma/membership-debug.ts")
 }
 $command = $commands[$Task]
 $exe = $command[0]
@@ -83,7 +85,7 @@ $exe = $command[0]
 $commandArgs = @($command[1..($command.Length - 1)]) + @($Rest | Where-Object { $_ })
 
 # "stripe" only writes when asked to store what Stripe says.
-$readOnly = $Task -eq "status" -or ($Task -eq "stripe" -and -not ($Rest -contains "--sync"))
+$readOnly = $Task -in @("status", "push-debug", "membership-debug") -or ($Task -eq "stripe" -and -not ($Rest -contains "--sync"))
 Write-Host ""
 Write-Host "Task:     $Task" -ForegroundColor Cyan
 Write-Host "Database: $target" -ForegroundColor Cyan

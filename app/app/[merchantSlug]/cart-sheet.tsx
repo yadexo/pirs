@@ -12,6 +12,7 @@ import {
   clientCartExtrasAction,
 } from "@/lib/actions/client-app";
 import { useCart, type CartLine } from "./cart-context";
+import { cartTotals } from "@/lib/cart-totals";
 import { CardPayment, type PaymentHandoff } from "./card-payment";
 import { PaymentResult } from "./payment-result";
 
@@ -49,12 +50,32 @@ export function CartSheet({
   /** The client's spendable credit, and whether this order should use it. */
   const [credit, setCredit] = React.useState(0);
   const [useCredit, setUseCredit] = React.useState(true);
-  const [memberTitle, setMemberTitle] = React.useState<string | null>(null);
+  /** What the server says this basket is discounted by, if anything. */
+  const [autoDiscount, setAutoDiscount] = React.useState<{ title: string; source: string; discountCents: number } | null>(null);
+  const [memberNote, setMemberNote] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<{ orderNumber: string; pointsEarned: number } | null>(null);
   /** Set when the clinic takes real cards: the client confirms in the Payment Element. */
   const [handoff, setHandoff] = React.useState<{ payment: PaymentHandoff; orderNumber: string; totalCents: number } | null>(null);
+
+  /**
+   * The discount depends on what is in the basket, so this is re-read after
+   * every change to it rather than once when the sheet opens — a client who
+   * adds the treatment their plan covers should see the price change.
+   */
+  const loadExtras = React.useCallback(async () => {
+    try {
+      const extras = await clientCartExtrasAction();
+      setCredit(extras.creditCents);
+      setAutoDiscount(extras.discount);
+      setMemberNote(extras.memberDiscountNotApplicable);
+    } catch {
+      setCredit(0);
+      setAutoDiscount(null);
+      setMemberNote(null);
+    }
+  }, []);
 
   React.useEffect(() => {
     if (!open) return;
@@ -66,16 +87,8 @@ export function CartSheet({
     setUseCredit(true);
     void refresh();
     clientRedeemableRewardsAction().then(setRewards).catch(() => setRewards([]));
-    clientCartExtrasAction()
-      .then((extras) => {
-        setCredit(extras.creditCents);
-        setMemberTitle(extras.memberDiscountTitle);
-      })
-      .catch(() => {
-        setCredit(0);
-        setMemberTitle(null);
-      });
-  }, [open, refresh]);
+    void loadExtras();
+  }, [open, refresh, loadExtras]);
 
   const subtotal = items.reduce((s, i) => s + i.unitPriceCents * i.quantity, 0);
   const reward = rewards.find((r) => r.id === rewardId) ?? null;
@@ -84,16 +97,23 @@ export function CartSheet({
       ? Math.min(reward.discountAmountCents, subtotal)
       : Math.round((subtotal * (reward.discountPercent ?? 0)) / 100)
     : 0;
-  const beforeCredit = Math.max(0, subtotal - discount);
-  // Shown, not decided: the server reads the balance again and takes at most
-  // what is really there.
-  const creditUsed = useCredit ? Math.min(credit, beforeCredit) : 0;
-  const total = Math.max(0, beforeCredit - creditUsed);
+  // Promotions and the member price are resolved on the server; the reward
+  // is chosen here. Both come off before credit does.
+  // Shown, not decided: the server works the same sums out again from the
+  // database at checkout, and that is what the client is charged.
+  const { creditUsedCents: creditUsed, totalCents: total, settledByCreditAlone } = cartTotals({
+    subtotalCents: subtotal,
+    rewardDiscountCents: discount,
+    autoDiscountCents: autoDiscount?.discountCents ?? 0,
+    creditAvailableCents: credit,
+    useCredit,
+  });
 
   async function setQty(id: string, qty: number) {
     const res = await clientSetCartQtyAction(merchantSlug, id, qty);
     if ("error" in res) setError(res.error);
     await refresh();
+    await loadExtras();
   }
 
   async function pay() {
@@ -232,6 +252,14 @@ export function CartSheet({
             )
           )}
 
+          {autoDiscount && (
+            <div className="optrow">
+              <span>{autoDiscount.title}</span>
+              <span style={{ flex: 1 }} />
+              <b className="tabular">−{money(autoDiscount.discountCents, currency)}</b>
+            </div>
+          )}
+
           {credit > 0 && (
             <div className="optrow">
               <span>{creditUsed > 0 ? "Account credit" : `Account credit (${money(credit, currency)} available)`}</span>
@@ -251,28 +279,37 @@ export function CartSheet({
             </div>
           )}
 
-          {memberTitle && (
-            <p style={{ fontSize: 13, color: "var(--muted)", padding: "0 2px" }}>
-              {memberTitle} is applied at checkout, or a promotion if that saves you more.
-            </p>
+          {memberNote && (
+            <p style={{ fontSize: 13, color: "var(--muted)", padding: "0 2px" }}>{memberNote}</p>
           )}
 
-          {stage === "pay" && (
-            <>
-              <div className="grouplab">Payment</div>
-              <button className={`optrow ${method === "card" ? "on" : ""}`} onClick={() => setMethod("card")}>
-                <span className="rad" />
-                <Icon name="card" size={20} /> Card on file
-              </button>
-              <button className={`optrow ${method === "later" ? "on" : ""}`} onClick={() => setMethod("later")}>
-                <span className="rad" />
-                <span className="klarna" style={{ width: 32, height: 32, borderRadius: 8, fontSize: 10 }}>
-                  Klarna.
-                </span>
-                Pay later in 3 instalments
-              </button>
-            </>
-          )}
+          {stage === "pay" &&
+            (settledByCreditAlone ? (
+              // There is nothing left to charge, so offering a card would be
+              // asking for something that will not be used.
+              <>
+                <div className="grouplab">Payment</div>
+                <div className="optrow" style={{ gap: 8 }}>
+                  <Icon name="check" size={20} />
+                  <span>Paid with account credit</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="grouplab">Payment</div>
+                <button className={`optrow ${method === "card" ? "on" : ""}`} onClick={() => setMethod("card")}>
+                  <span className="rad" />
+                  <Icon name="card" size={20} /> Card on file
+                </button>
+                <button className={`optrow ${method === "later" ? "on" : ""}`} onClick={() => setMethod("later")}>
+                  <span className="rad" />
+                  <span className="klarna" style={{ width: 32, height: 32, borderRadius: 8, fontSize: 10 }}>
+                    Klarna.
+                  </span>
+                  Pay later in 3 instalments
+                </button>
+              </>
+            ))}
 
           <div className="optrow" style={{ border: 0 }}>
             <span style={{ fontWeight: 600 }}>Total</span>
