@@ -24,6 +24,7 @@ import {
 } from "@/lib/actions/app-builder";
 import { describeActionFailure } from "@/lib/action-failure";
 import { NO_USAGE, warnBeforeDelete, whyHidden, type PromotionUsage } from "@/lib/promotion-usage";
+import { defaultFilterFor } from "@/lib/app-builder-filters";
 import { FORMS, type FormOptions } from "./item-forms";
 
 export interface CatalogItem {
@@ -132,7 +133,7 @@ export function CatalogTab({
     const merged = { q, type: typeFilter, ...next };
     const sp = new URLSearchParams({ tab });
     if (merged.q) sp.set("q", merged.q);
-    if (merged.type !== "all") sp.set("type", merged.type);
+    if (merged.type !== defaultFilterFor(tab)) sp.set("type", merged.type);
     router.push(`/m/${merchantId}/app-builder?${sp}`);
   }
 

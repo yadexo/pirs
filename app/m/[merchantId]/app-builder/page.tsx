@@ -12,6 +12,7 @@ import { loadSettingsSection } from "./settings/load";
 import { viewerCan } from "@/lib/viewer";
 import type { MerchantRequirement } from "@/lib/merchant-action";
 import type { SettingsSection } from "@/lib/nav";
+import { defaultFilterFor } from "@/lib/app-builder-filters";
 
 /** What saving each Settings section requires — mirrors lib/actions/clinic-settings.ts. */
 const SECTION_NEEDS: Record<SettingsSection, MerchantRequirement> = {
@@ -40,7 +41,7 @@ export default async function AppBuilderPage({
   const tab = isAppBuilderTab(sp.tab) ? sp.tab : DEFAULT_APP_BUILDER_TAB;
   const section = isSettingsSection(sp.section) ? sp.section : DEFAULT_SETTINGS_SECTION;
   const q = sp.q ?? "";
-  const typeFilter = sp.type ?? "all";
+  const typeFilter = sp.type ?? defaultFilterFor(tab);
 
   const merchant = await rawDb.tenant.findUnique({ where: { id: merchantId }, select: { slug: true } });
   const branding = await ctx.db.tenantBranding.findFirst({ where: {} });
