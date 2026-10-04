@@ -194,3 +194,105 @@ function periodDate(subscription: Stripe.Subscription, field: "current_period_st
   if (typeof fromItem === "number") return new Date(fromItem * 1000);
   return new Date();
 }
+
+/**
+ * Changing a subscription that already exists.
+ *
+ * Every one of these asks Stripe first and lets the webhook write our side:
+ * Stripe owns the schedule and the money, so our row is a copy of its answer
+ * rather than a second opinion. The actions below still write what they know
+ * immediately, because a clinic should see the result of its own click — but
+ * if the two ever disagree, the webhook's version is the one that stands.
+ */
+
+/** The subscription as Stripe has it, or null when it is gone. */
+export async function readSubscription(stripeAccountId: string, subscriptionId: string): Promise<Stripe.Subscription | null> {
+  return stripe()
+    .subscriptions.retrieve(subscriptionId, { stripeAccount: stripeAccountId })
+    .catch(() => null);
+}
+
+/**
+ * Ends the membership when the period the client has paid for runs out,
+ * rather than taking away something they are still paying for.
+ */
+export async function cancelAtPeriodEnd(stripeAccountId: string, subscriptionId: string, cancel: boolean): Promise<Stripe.Subscription> {
+  return stripe().subscriptions.update(subscriptionId, { cancel_at_period_end: cancel }, { stripeAccount: stripeAccountId });
+}
+
+/**
+ * Stops the invoices without ending the membership.
+ *
+ * `void` is the behaviour that matters: invoices raised while paused are
+ * voided rather than piling up to be collected when it resumes, which is what
+ * a clinic means by "pause billing" and never what a client expects to come
+ * back to.
+ */
+export async function pauseCollection(stripeAccountId: string, subscriptionId: string, paused: boolean): Promise<Stripe.Subscription> {
+  return stripe().subscriptions.update(
+    subscriptionId,
+    paused ? { pause_collection: { behavior: "void" } } : { pause_collection: null },
+    { stripeAccount: stripeAccountId },
+  );
+}
+
+/**
+ * Moves a subscription onto another price from its next period.
+ *
+ * `proration_behavior: "none"` is the whole point: nothing is charged or
+ * credited in the middle of a period the client has already paid for. They
+ * keep what they bought until it runs out, and the new price starts when the
+ * next one would have.
+ */
+export async function switchSubscriptionPrice(
+  stripeAccountId: string,
+  subscriptionId: string,
+  priceId: string,
+): Promise<Stripe.Subscription> {
+  const subscription = await stripe().subscriptions.retrieve(subscriptionId, { stripeAccount: stripeAccountId });
+  const item = subscription.items?.data?.[0];
+  if (!item) throw new Error("That subscription has nothing on it to change.");
+
+  return stripe().subscriptions.update(
+    subscriptionId,
+    {
+      items: [{ id: item.id, price: priceId }],
+      proration_behavior: "none",
+      // The client keeps the day of the month they signed up on.
+      billing_cycle_anchor: "unchanged",
+    },
+    { stripeAccount: stripeAccountId },
+  );
+}
+
+/**
+ * Gives the client free time by pushing the next payment back.
+ *
+ * Stripe calls this a trial, which is the right machinery under a different
+ * name: the subscription stays live, benefits continue, and nothing is
+ * charged until the date given. Proration is off so the gift costs the client
+ * nothing and refunds them nothing.
+ */
+export async function skipBillingUntil(stripeAccountId: string, subscriptionId: string, until: Date): Promise<Stripe.Subscription> {
+  return stripe().subscriptions.update(
+    subscriptionId,
+    { trial_end: Math.floor(until.getTime() / 1000), proration_behavior: "none" },
+    { stripeAccount: stripeAccountId },
+  );
+}
+
+/** The end of the period this subscription is currently in. */
+export function currentPeriodEndOf(subscription: Stripe.Subscription): Date {
+  return periodDate(subscription, "current_period_end");
+}
+
+/**
+ * The date that is `periods` whole billing periods after `from`, which is what
+ * "skip the next two months" means on a monthly plan.
+ */
+export function addBillingPeriods(from: Date, periods: number, frequency: string): Date {
+  const out = new Date(from);
+  if (frequency === "MONTHLY") out.setMonth(out.getMonth() + periods);
+  else out.setFullYear(out.getFullYear() + periods);
+  return out;
+}

@@ -197,6 +197,25 @@ export async function notifyMembershipPaymentFailed(membershipId: string, benefi
   });
 }
 
+/**
+ * A staff member changed this client's membership.
+ *
+ * `what` is already a sentence addressed to the client, because what they
+ * need to know differs with the change: ending, pausing, moving plan and
+ * being given free time are not variations of one message.
+ */
+export async function notifyMembershipChanged(membershipId: string, what: string, reason: string): Promise<void> {
+  const to = await recipientForMembership(membershipId);
+  if (!to) return;
+  await notifyClientQuietly(to.userId, {
+    title: to.clinicName,
+    body: `${what} — ${reason}`,
+    url: clinicPath(to.slug, "/profile?tab=settings"),
+    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    tag: `membership-changed-${membershipId}-${Date.now()}`,
+  });
+}
+
 /** The grace period ran out and the membership has stopped. */
 export async function notifyMembershipSuspended(membershipId: string): Promise<void> {
   const to = await recipientForMembership(membershipId);

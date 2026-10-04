@@ -8,6 +8,7 @@ import { ClientItems } from "./client-items";
 import { PersonalDiscount } from "./personal-discount";
 import { ClientOrders } from "./client-orders";
 import { ClientAccountPanel } from "./client-account";
+import { ClientMembershipPanel } from "./client-membership";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatMoney } from "@/lib/utils";
 
@@ -32,6 +33,7 @@ export function ClientsTable({
   canRefund,
   canEditAccount,
   canAdjustPoints,
+  canManageMembership,
   currency,
   rows,
   q,
@@ -46,6 +48,7 @@ export function ClientsTable({
   /** Whether this staff member may move a client's balances. */
   canEditAccount: boolean;
   canAdjustPoints: boolean;
+  canManageMembership: boolean;
   currency: string;
   rows: ClientRow[];
   q: string;
@@ -155,6 +158,7 @@ export function ClientsTable({
         canRefund={canRefund}
         canEditAccount={canEditAccount}
         canAdjustPoints={canAdjustPoints}
+        canManageMembership={canManageMembership}
         currency={currency}
         client={selected}
         onClose={() => setSelected(null)}
@@ -168,6 +172,7 @@ function ClientDrawer({
   canRefund,
   canEditAccount,
   canAdjustPoints,
+  canManageMembership,
   currency,
   client,
   onClose,
@@ -177,11 +182,12 @@ function ClientDrawer({
   canRefund: boolean;
   canEditAccount: boolean;
   canAdjustPoints: boolean;
+  canManageMembership: boolean;
   currency: string;
   client: ClientRow | null;
   onClose: () => void;
 }) {
-  const [tab, setTab] = React.useState<"profile" | "account" | "orders" | "items" | "messages">("profile");
+  const [tab, setTab] = React.useState<"profile" | "account" | "membership" | "orders" | "items" | "messages">("profile");
 
   React.useEffect(() => {
     if (client) setTab("profile");
@@ -192,7 +198,7 @@ function ClientDrawer({
       {client && (
         <>
           <div className="mb-4 flex gap-4 border-b border-border">
-            {(["profile", "account", "orders", "items", "messages"] as const).map((t) => (
+            {(["profile", "account", "membership", "orders", "items", "messages"] as const).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -224,6 +230,8 @@ function ClientDrawer({
               canEdit={canEditAccount}
               canAdjustPoints={canAdjustPoints}
             />
+          ) : tab === "membership" ? (
+            <ClientMembershipPanel merchantId={merchantId} customerProfileId={client.id} canManage={canManageMembership} />
           ) : tab === "orders" ? (
             <ClientOrders merchantId={merchantId} customerProfileId={client.id} canRefund={canRefund} />
           ) : tab === "items" ? (

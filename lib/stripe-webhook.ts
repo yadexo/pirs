@@ -459,10 +459,19 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
                         : membership.status
                       : membership.status;
 
+      // Stripe keeps a paused subscription "active" and records the pause
+      // separately, so our own status has to read both — a clinic that paused
+      // the billing means the membership is paused, whatever the status says.
+      const paused = Boolean(sub.pause_collection);
+
       await rawDb.customerMembership.update({
         where: { id: membership.id },
         data: {
-          status,
+          status: paused && status !== "CANCELLED" ? "PAUSED" : status,
+          // Whether the client has asked to be let go at the end of what they
+          // have paid for. Stripe is the one keeping that promise.
+          cancelAtPeriodEnd: sub.cancel_at_period_end ?? false,
+          ...(paused ? { pausedAt: membership.pausedAt ?? new Date(event.created * 1000) } : { pausedAt: null, resumesAt: null }),
           // A membership that is no longer behind has no grace left to count.
           ...(status === "ACTIVE" || status === "TRIAL" ? { pastDueSince: null, failedAttempts: 0, dunningState: null } : {}),
           ...(status === "PAST_DUE" && !membership.pastDueSince ? { pastDueSince: new Date(event.created * 1000) } : {}),
