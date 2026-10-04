@@ -1,5 +1,5 @@
 import { getClientAppContext } from "@/lib/client-app-context";
-import { getClientSummary, getRedeemableItems } from "@/lib/client-app-data";
+import { getBalanceHistory, getClientSummary, getRedeemableItems } from "@/lib/client-app-data";
 import { ProfileView } from "./profile-view";
 
 export default async function ProfilePage({
@@ -16,7 +16,7 @@ export default async function ProfilePage({
 
   const tab = sp.tab === "membership" || sp.tab === "settings" || sp.tab === "items" ? sp.tab : "treatments";
 
-  const [summary, orders, appointments, items, billing] = await Promise.all([
+  const [summary, orders, appointments, items, billing, balanceHistory] = await Promise.all([
     getClientSummary(ctx.db, ctx.customerProfileId),
     ctx.db.order.findMany({
       // A refunded order belongs in the history too — it is the one a client
@@ -41,6 +41,7 @@ export default async function ProfilePage({
       orderBy: { occurredAt: "desc" },
       take: 12,
     }),
+    getBalanceHistory(ctx.db, ctx.customerProfileId),
   ]);
   if (!summary) return null;
 
@@ -81,6 +82,7 @@ export default async function ProfilePage({
           refundedAt: last ? last.toISOString() : null,
         };
       })}
+      balanceHistory={balanceHistory}
       billing={billing.map((b) => ({
         id: b.id,
         description: b.description ?? b.type,

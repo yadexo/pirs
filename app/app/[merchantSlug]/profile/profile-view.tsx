@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useBasePath, useFinderPath } from "../base-path";
 import { NotificationSettings } from "@/components/client-app/push";
 import { MyItems, type ClientItem } from "./my-items";
+import type { BalanceChange } from "@/lib/client-app-data";
 import { Sheet, Icon, EmptyState, money, useToast } from "@/components/client-app/ui";
 import { signOutOfClinicAction } from "@/lib/actions/session";
 import {
@@ -66,6 +67,7 @@ type SettingsSheet =
   | "language"
   | "help"
   | "legal"
+  | "balances"
   | "delete";
 
 export function ProfileView({
@@ -79,6 +81,7 @@ export function ProfileView({
   appointments,
   orders,
   billing,
+  balanceHistory,
   appVersion,
 }: {
   merchantSlug: string;
@@ -92,6 +95,8 @@ export function ProfileView({
   appointments: ApptRow[];
   orders: OrderRow[];
   billing: BillingRow[];
+  /** Credit and points the clinic moved, with the reason they gave. */
+  balanceHistory: BalanceChange[];
   appVersion: string;
 }) {
   const router = useRouter();
@@ -306,6 +311,7 @@ export function ProfileView({
             <SettingRow label="Notification preferences" onClick={() => setSheet("notifications")} />
             <SettingRow label="Payment methods" onClick={() => setSheet("payment")} />
             <SettingRow label="Order history" onClick={() => setSheet("orders")} />
+            <SettingRow label="Credit & points history" onClick={() => setSheet("balances")} />
             <SettingRow label="Referral link" onClick={() => setSheet("referral")} />
             <SettingRow label="Language" onClick={() => setSheet("language")} />
             <SettingRow label="Help & support" onClick={() => setSheet("help")} />
@@ -360,6 +366,37 @@ export function ProfileView({
         <button className="optrow" onClick={() => setSheet(null)}>
           <Icon name="card" size={20} /> Manage at checkout
         </button>
+      </Sheet>
+
+      {/* Where a client finds out why their balance changed. The clinic's
+          own words are shown as they were written, because a push
+          notification scrolls away and this does not. */}
+      <Sheet open={sheet === "balances"} onClose={() => setSheet(null)} title="Credit & points history">
+        {balanceHistory.length === 0 ? (
+          <EmptyState text="Nothing yet" sub="Changes your clinic makes to your credit or points show up here." />
+        ) : (
+          balanceHistory.map((row) => (
+            <div key={row.id} className="optrow">
+              <span style={{ flex: 1 }}>
+                <b style={{ fontSize: 15 }}>
+                  {row.headline} by {merchantName}
+                </b>
+                {row.reason && (
+                  <>
+                    <br />
+                    <span style={{ color: "var(--muted)", fontSize: 14 }}>{row.reason}</span>
+                  </>
+                )}
+                <br />
+                <span style={{ color: "var(--muted)", fontSize: 14 }}>{date(row.at)}</span>
+              </span>
+              <b className="tabular" style={{ color: row.amount < 0 ? "var(--danger)" : undefined }}>
+                {row.amount < 0 ? "−" : "+"}
+                {row.kind === "credit" ? money(Math.abs(row.amount), currency) : `${Math.abs(row.amount)} pts`}
+              </b>
+            </div>
+          ))
+        )}
       </Sheet>
 
       <Sheet open={sheet === "orders"} onClose={() => setSheet(null)} title="Order history">

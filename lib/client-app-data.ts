@@ -189,3 +189,64 @@ export async function getRewardsData(db: TenantDb, currency: string): Promise<Re
     earnRules,
   };
 }
+
+export interface BalanceChange {
+  id: string;
+  kind: "credit" | "points";
+  /** Signed: negative is leaving the client's balance. */
+  amount: number;
+  /** What the clinic said when they did it. */
+  reason: string | null;
+  /** "Credit added", "Points removed" — the client's side of the story. */
+  headline: string;
+  at: string;
+}
+
+/**
+ * The changes to a client's balances that somebody at the clinic decided.
+ *
+ * Deliberately not every movement: points earned and credit spent are already
+ * on the orders that caused them, and repeating those here would bury the
+ * ones worth explaining. What is left is what a client would otherwise have
+ * no account of — a balance that moved because the clinic moved it.
+ */
+export async function getBalanceHistory(db: TenantDb, customerProfileId: string): Promise<BalanceChange[]> {
+  const [credit, points] = await Promise.all([
+    db.accountCreditTransaction.findMany({
+      where: { customerProfileId, type: { in: ["MANUAL_ADJUSTMENT", "MEMBERSHIP_GRANT", "REFUND", "EXPIRED"] } },
+      orderBy: { createdAt: "desc" },
+      take: 25,
+      select: { id: true, amountCents: true, reason: true, type: true, createdAt: true },
+    }),
+    db.loyaltyTransaction.findMany({
+      where: { customerProfileId, type: { in: ["MANUAL_ADJUSTMENT", "EXPIRED"] } },
+      orderBy: { createdAt: "desc" },
+      take: 25,
+      select: { id: true, points: true, reason: true, type: true, createdAt: true },
+    }),
+  ]);
+
+  const headline = (noun: string, amount: number, type: string) =>
+    type === "EXPIRED" ? `${noun} expired` : type === "MEMBERSHIP_GRANT" ? `${noun} from your membership` : amount >= 0 ? `${noun} added` : `${noun} removed`;
+
+  const rows: BalanceChange[] = [
+    ...credit.map((c) => ({
+      id: `credit-${c.id}`,
+      kind: "credit" as const,
+      amount: c.amountCents,
+      reason: c.reason,
+      headline: headline("Credit", c.amountCents, c.type),
+      at: c.createdAt.toISOString(),
+    })),
+    ...points.map((p) => ({
+      id: `points-${p.id}`,
+      kind: "points" as const,
+      amount: p.points,
+      reason: p.reason,
+      headline: headline("Points", p.points, p.type),
+      at: p.createdAt.toISOString(),
+    })),
+  ];
+
+  return rows.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 30);
+}
