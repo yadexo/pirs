@@ -280,7 +280,7 @@ export function CartSheet({
           )}
 
           {memberNote && (
-            <p style={{ fontSize: 13, color: "var(--muted)", padding: "0 2px" }}>{memberNote}</p>
+            <p style={{ fontSize: 14, color: "var(--muted)", padding: "0 2px" }}>{memberNote}</p>
           )}
 
           {stage === "pay" &&
@@ -340,7 +340,7 @@ export function CartSheet({
                 <span style={{ flex: 1 }}>
                   {r.name}
                   <br />
-                  <span style={{ color: "var(--muted)", fontSize: 13 }}>{r.pointsCost} points</span>
+                  <span style={{ color: "var(--muted)", fontSize: 14 }}>{r.pointsCost} points</span>
                 </span>
                 <b>
                   −
@@ -400,7 +400,7 @@ function CartRow({
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <b style={{ fontSize: 15, display: "block" }}>{line.name}</b>
-          <span className="tabular" style={{ fontSize: 13, color: "var(--muted)" }}>
+          <span className="tabular" style={{ fontSize: 14, color: "var(--muted)" }}>
             {money(line.unitPriceCents, currency)}
           </span>
         </div>

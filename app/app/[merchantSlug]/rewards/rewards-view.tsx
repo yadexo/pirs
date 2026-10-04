@@ -90,7 +90,7 @@ export function RewardsView({
           <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12 }}>
             <div>
               <div style={{ fontSize: 16, fontWeight: 600, color: "var(--on-black)" }}>{summary.firstName}</div>
-              <div style={{ fontSize: 13, color: "var(--on-black-muted)" }}>Joined {summary.joinedDaysAgo} days ago</div>
+              <div style={{ fontSize: 14, color: "var(--on-black-muted)" }}>Joined {summary.joinedDaysAgo} days ago</div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
               <span className="pill-light tabular">{money(summary.cashBalanceCents, currency)}</span>
@@ -129,7 +129,7 @@ export function RewardsView({
                 </Gloss>
                 <span style={{ padding: "10px 12px 12px", display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
                   <b style={{ fontSize: 14, fontWeight: 600, color: "var(--ink-strong)" }}>{r.name}</b>
-                  <span className="tabular" style={{ fontSize: 12, color: "var(--muted)" }}>
+                  <span className="tabular" style={{ fontSize: 14, color: "var(--muted)" }}>
                     {r.pointsCost} points
                   </span>
                   {affordable ? (
@@ -160,7 +160,7 @@ export function RewardsView({
                 </span>
                 <span style={{ flex: 1 }}>
                   <b style={{ fontSize: 16, fontWeight: 500, color: "var(--ink)", display: "block" }}>{r.title}</b>
-                  {r.subtitle && <span style={{ fontSize: 13, color: "var(--muted)" }}>{r.subtitle}</span>}
+                  {r.subtitle && <span style={{ fontSize: 14, color: "var(--muted)" }}>{r.subtitle}</span>}
                 </span>
                 <span className="pill-badge">{r.badge}</span>
               </button>
@@ -227,7 +227,7 @@ export function RewardsView({
               <span style={{ flex: 1 }}>
                 <b style={{ fontSize: 15 }}>{r.name}</b>
                 <br />
-                <span className="tabular" style={{ color: "var(--muted)", fontSize: 13 }}>
+                <span className="tabular" style={{ color: "var(--muted)", fontSize: 14 }}>
                   {r.pointsCost} points
                 </span>
               </span>

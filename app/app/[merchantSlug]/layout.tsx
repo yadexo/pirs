@@ -4,6 +4,8 @@ import { headers } from "next/headers";
 import { clientBasePath, currentClientBasePath, getPublicClinic, shortAppName } from "@/lib/public-clinic";
 import { clientAppScope } from "@/lib/portal-hosts";
 import { InstallPrompt, ServiceWorker } from "@/components/client-app/pwa";
+import { ZoomLock } from "@/components/client-app/zoom-lock";
+import { clientAppViewport } from "@/lib/client-app-viewport";
 import { getClientSummary, getRewardsData } from "@/lib/client-app-data";
 import { Onboarding } from "./onboarding";
 import { ClientAppShell } from "./shell";
@@ -35,12 +37,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   };
 }
 
-export const viewport: Viewport = {
-  themeColor: "#f4f5f7",
-  viewportFit: "cover",
-  width: "device-width",
-  initialScale: 1,
-};
+export const viewport: Viewport = clientAppViewport;
 
 export default async function ClientAppLayout({
   children,
@@ -69,6 +66,7 @@ export default async function ClientAppLayout({
       <div className="client-app" style={style}>
         <Onboarding merchantSlug={merchantSlug} merchantName={ctx.merchant.name} logoUrl={ctx.merchant.logoUrl} />
         <ServiceWorker scope={scope} />
+        <ZoomLock />
       </div>
     );
   }
@@ -94,6 +92,7 @@ export default async function ClientAppLayout({
         {children}
       </ClientAppShell>
       <ServiceWorker scope={scope} />
+      <ZoomLock />
       <InstallPrompt base={base} merchantSlug={merchantSlug} merchantName={ctx.merchant.name} />
     </div>
   );

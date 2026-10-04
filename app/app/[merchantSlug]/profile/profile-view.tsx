@@ -180,7 +180,7 @@ export function ProfileView({
                   </span>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <b style={{ fontSize: 15, fontWeight: 600, color: "var(--ink-strong)", display: "block" }}>{a.serviceName}</b>
-                    <span style={{ fontSize: 13, color: "var(--muted)" }}>
+                    <span style={{ fontSize: 14, color: "var(--muted)" }}>
                       {date(a.startAt)} · {time(a.startAt)} · {a.location}
                     </span>
                   </div>
@@ -190,14 +190,14 @@ export function ProfileView({
                       <span style={{ display: "flex", gap: 10 }}>
                         <button
                           onClick={() => setReschedule({ appt: a })}
-                          style={{ color: "var(--muted)", fontSize: 13, fontWeight: 500 }}
+                          style={{ color: "var(--muted)", fontSize: 14, fontWeight: 500 }}
                         >
                           Reschedule
                         </button>
                         <button
                           disabled={pending}
                           onClick={() => cancelAppt(a.id)}
-                          style={{ color: "var(--danger)", fontSize: 13, fontWeight: 500 }}
+                          style={{ color: "var(--danger)", fontSize: 14, fontWeight: 500 }}
                         >
                           Cancel
                         </button>
@@ -217,13 +217,13 @@ export function ProfileView({
                       {o.itemNames[0] ?? o.number}
                       {o.itemNames.length > 1 && ` +${o.itemNames.length - 1}`}
                     </b>
-                    <span className="tabular" style={{ fontSize: 13, color: "var(--muted)" }}>
+                    <span className="tabular" style={{ fontSize: 14, color: "var(--muted)" }}>
                       {date(o.placedAt)} · {money(o.totalCents, currency)}
                     </span>
                   </div>
                   <span style={{ marginLeft: "auto", flex: "none", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
                     <span className="status-pill">Paid</span>
-                    <button onClick={() => setReceipt(o)} style={{ color: "var(--muted)", fontSize: 13, fontWeight: 500 }}>
+                    <button onClick={() => setReceipt(o)} style={{ color: "var(--muted)", fontSize: 14, fontWeight: 500 }}>
                       View receipt
                     </button>
                   </span>
@@ -274,7 +274,7 @@ export function ProfileView({
                   <div key={b.id} className="optrow">
                     <span>{b.description}</span>
                     <span style={{ flex: 1 }} />
-                    <span style={{ color: "var(--muted)", fontSize: 13 }}>{date(b.occurredAt)}</span>
+                    <span style={{ color: "var(--muted)", fontSize: 14 }}>{date(b.occurredAt)}</span>
                     {b.amountCents != null && <b className="tabular">{money(b.amountCents, currency)}</b>}
                   </div>
                 ))
@@ -322,7 +322,7 @@ export function ProfileView({
               </button>
             </form>
           </div>
-          <p style={{ textAlign: "center", color: "var(--faint)", fontSize: 14, padding: "24px 0 6px" }}>Version {appVersion}</p>
+          <p style={{ textAlign: "center", color: "var(--muted)", fontSize: 14, padding: "24px 0 6px" }}>Version {appVersion}</p>
         </>
       )}
 
@@ -371,11 +371,11 @@ export function ProfileView({
               <span style={{ flex: 1 }}>
                 <b style={{ fontSize: 15 }}>{o.number}</b>
                 <br />
-                <span style={{ color: "var(--muted)", fontSize: 13 }}>{date(o.placedAt)}</span>
+                <span style={{ color: "var(--muted)", fontSize: 14 }}>{date(o.placedAt)}</span>
                 {!!o.refundedCents && o.refundedCents > 0 && (
                   <>
                     <br />
-                    <span style={{ color: "var(--danger)", fontSize: 13 }}>
+                    <span style={{ color: "var(--danger)", fontSize: 14 }}>
                       Refunded {money(o.refundedCents, currency)}
                       {o.refundedAt ? ` on ${date(o.refundedAt)}` : ""}
                     </span>
@@ -669,7 +669,7 @@ function PersonalSheet({
             style={{ flex: 1.2 }}
           />
         </div>
-        <p style={{ color: "var(--muted)", fontSize: 13, margin: "6px 0 0" }}>
+        <p style={{ color: "var(--muted)", fontSize: 14, margin: "6px 0 0" }}>
           The year is optional — the clinic only needs the day to wish you a happy birthday.
         </p>
       </div>

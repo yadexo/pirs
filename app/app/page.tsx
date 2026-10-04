@@ -7,9 +7,14 @@ import { LAST_CLINIC_COOKIE, isClinicSlug } from "@/lib/clinic-link";
 import { isClientHost } from "@/lib/portal-hosts";
 import { headers } from "next/headers";
 import { ClinicFinder } from "./clinic-finder";
+import { ZoomLock } from "@/components/client-app/zoom-lock";
+import { clientAppViewport } from "@/lib/client-app-viewport";
 import "./[merchantSlug]/client-app.css";
 
 export const metadata: Metadata = { title: "Find your clinic" };
+
+// The front door is part of the client app, so it holds its scale too.
+export const viewport = clientAppViewport;
 
 /**
  * The general client app's front door. A returning client goes straight back
@@ -29,6 +34,7 @@ export default async function ClientAppEntry({ searchParams }: { searchParams: P
   return (
     <div className="client-app">
       <ClinicFinder appName={agency?.name ?? "Your clinic app"} prefix={onRootDomain ? "" : "/app"} />
+      <ZoomLock />
     </div>
   );
 }

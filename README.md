@@ -277,6 +277,17 @@ A membership is a Stripe subscription **on the clinic's own connected account**:
 - It is taken before the card is charged and given back if the payment fails, exactly like reserved loyalty points and stock.
 - When credit covers the whole bill there is no card step: the order is settled with a `Payment` row whose provider is `ACCOUNT_CREDIT`, and refunding that payment puts the credit back rather than touching a bank.
 
+## The client app is an app, not a page
+
+Installed from the Home Screen, the client app is held at one scale so it reads as a native app: no pinch-zoom, no double-tap zoom, no lurch when a field is focused. Four things do that, and they only apply under `.client-app` — the clinic dashboard and the agency panel are desktop tools where zooming is a normal thing to want.
+
+- **The viewport** is one definition, `clientAppViewport` in `lib/client-app-viewport.ts`, exported by both client-app routes: `initial-scale=1, maximum-scale=1, user-scalable=no`, with `viewport-fit=cover` kept because the safe-area insets (`--sat`/`--sab`) are zero without it.
+- **Pinch** needs more than `user-scalable=no`, which Safari has ignored in a browser tab since iOS 10. `ZoomLock` refuses WebKit's `gesturestart`/`gesturechange`/`gestureend` — events that fire only for a two-finger zoom, so scrolling, sheet swipes and the QR camera are untouched. The listeners must be non-passive or `preventDefault` does nothing, which a test pins down.
+- **Double-tap** is `touch-action: manipulation` on `.client-app` and on every control inside it. The browser intersects `touch-action` down the ancestor chain, so the app-level rule covers everything while `.grab` (`none`, for dragging a sheet closed) and `.cin` (`pan-y`, for swiping a cart row) still narrow it where they need to.
+- **Focus zoom** is why every `input`, `select` and `textarea` in the app is at least 16px: iOS zooms in on a smaller field and never zooms back out.
+
+Taking the zoom away is only defensible if nothing needed zooming into, so `tests/client-app-zoom.test.ts` also enforces the consequences: nothing in the client app's stylesheet or components sets text below **14px** (the Klarna wordmark is exempt — a logo in a tile, not a sentence), and `--ink`, `--ink-strong`, `--muted` and `--danger` all clear WCAG AA (4.5:1) against every background they are used on. `--muted` and `--danger` were darkened to `#626a7a` and `#bd3b40` to reach it; `--faint` stays as it is and is barred from text, because at 1.9:1 it is a page dot, not a word.
+
 ## Notification provider architecture
 
 `lib/providers/notifications/{email,sms,push}.ts` are documented, ready-to-implement integration points (Resend, Twilio, Web Push respectively) — each currently throws with instructions if selected without being implemented. Until then, `EMAIL_PROVIDER`/`SMS_PROVIDER`/`PUSH_PROVIDER=mock` (the default) logs the send and records a normal `NotificationDelivery` row, so campaign creation, targeting, and delivery-status UI all work today without any external account.

@@ -59,7 +59,7 @@ export function ClinicFinder({ appName, prefix }: { appName: string; prefix: str
 
   return (
     <div style={{ minHeight: "100dvh", maxWidth: 480, margin: "0 auto", padding: "calc(var(--sat) + 40px) var(--pad-x) 40px" }}>
-      <p style={{ fontSize: 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--muted)", margin: 0 }}>{appName}</p>
+      <p style={{ fontSize: 14, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--muted)", margin: 0 }}>{appName}</p>
       <h1 style={{ fontSize: 32, fontWeight: 700, lineHeight: 1.15, color: "var(--ink-strong)", margin: "8px 0" }}>Find your clinic</h1>
       <p style={{ fontSize: 16, color: "var(--muted)", margin: "0 0 28px" }}>Scan the QR code at your clinic, or search for it by name.</p>
 
@@ -67,7 +67,7 @@ export function ClinicFinder({ appName, prefix }: { appName: string; prefix: str
         <Icon name="scan" size={22} /> Scan clinic QR code
       </button>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "24px 0", color: "var(--faint)", fontSize: 13 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "24px 0", color: "var(--muted)", fontSize: 14 }}>
         <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
         or
         <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
@@ -107,7 +107,7 @@ export function ClinicFinder({ appName, prefix }: { appName: string; prefix: str
                 )}
                 <span style={{ flex: 1, textAlign: "left" }}>
                   <b style={{ fontSize: 15, display: "block" }}>{c.name}</b>
-                  {c.city && <span style={{ fontSize: 13, color: "var(--muted)" }}>{c.city}</span>}
+                  {c.city && <span style={{ fontSize: 14, color: "var(--muted)" }}>{c.city}</span>}
                 </span>
                 <Icon name="chevR" size={18} />
               </button>

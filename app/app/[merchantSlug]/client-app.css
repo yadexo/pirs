@@ -11,14 +11,17 @@
   --bg-surface: #ffffff;
   --ink: #1b2233;
   --ink-strong: #0b0d12;
-  --muted: #7a8598;
+  /* 4.5:1 or better on every background it is used on — measured, because
+     a client who cannot zoom in cannot rescue text that is too pale. */
+  --muted: #626a7a;
+  /* Decoration only: page dots, inactive bars, hairlines. Never text. */
   --faint: #b4bcc9;
   --pill-bg: #e8eaee;
   --black: #0b0d12;
   --on-black: #ffffff;
   --on-black-muted: rgba(255, 255, 255, 0.6);
   --hairline: #eceef2;
-  --danger: #e5484d;
+  --danger: #bd3b40;
   --klarna: #ffb3c7;
   --backdrop: #dee1e6;
   --gloss-hi: #33363c;
@@ -45,6 +48,20 @@
 
   font-family: var(--font-client);
   font-size: 16px;
+  /*
+   * Fixed scale, because this is an app rather than a page: see
+   * lib/client-app-viewport.ts.
+   *
+   * "manipulation" drops the double-tap-to-zoom gesture and keeps everything
+   * else — scrolling, swiping a sheet away, dragging a cart row. The browser
+   * works out what a touch may do by intersecting this with every ancestor,
+   * so declaring it here covers the whole app, and the stricter rules further
+   * down (.grab, .cin) still narrow it where they need to.
+   */
+  touch-action: manipulation;
+  /* Rotating the phone must not resize the text under a fixed scale. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   line-height: 1.45;
   color: var(--ink);
   background: var(--backdrop);
@@ -59,6 +76,26 @@
 .client-app *::after {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
+}
+.client-app button,
+.client-app a,
+.client-app label,
+.client-app summary,
+.client-app [role="button"],
+.client-app input,
+.client-app select,
+.client-app textarea {
+  touch-action: manipulation;
+}
+/*
+ * iOS zooms the page in when a field with text under 16px is focused, and
+ * never zooms back out. Every field in the app is at least 16px so that
+ * cannot happen — which is also why this is a floor rather than a default.
+ */
+.client-app input,
+.client-app select,
+.client-app textarea {
+  font-size: 16px;
 }
 .client-app h1,
 .client-app h2,
@@ -131,12 +168,13 @@
   position: absolute;
   top: 8px;
   right: 7px;
-  min-width: 16px;
-  height: 16px;
+  /* Big enough for 14px digits: a count nobody can read is not a count. */
+  min-width: 20px;
+  height: 20px;
   border-radius: 999px;
   background: var(--black);
   color: var(--on-black);
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 600;
   display: grid;
   place-items: center;
@@ -180,7 +218,7 @@
   stroke-width: 1.7;
 }
 .ca-tabbtn .tlab {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
 }
 .ca-tabbtn.on,
@@ -341,7 +379,7 @@
   background: var(--pill-bg);
   color: var(--muted);
   border-radius: var(--r-pill);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -377,7 +415,7 @@
   border: 1.5px solid var(--hairline);
   border-radius: var(--r-pill);
   padding: 6px 14px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--muted);
 }
@@ -671,7 +709,7 @@
   left: 10px;
   background: var(--bg-surface);
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.06em;
   padding: 5px 11px;
@@ -780,7 +818,7 @@
 }
 .rwcard .pill-badge,
 .rwcard .pill-light {
-  font-size: 12px;
+  font-size: 14px;
   padding: 6px 12px;
   width: 100%;
   text-align: center;
@@ -910,7 +948,7 @@
   margin-bottom: 14px;
 }
 .frm label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--muted);
 }
@@ -978,7 +1016,7 @@
   color: var(--on-black);
 }
 .grouplab {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1235,7 +1273,7 @@
 }
 .ca-install-body {
   margin: 2px 0 0;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--muted);
 }
 .ca-install-body span {
@@ -1267,7 +1305,7 @@
 }
 .ca-pushcard-body {
   margin: 2px 0 0;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.35;
   color: var(--muted);
 }
@@ -1361,12 +1399,12 @@
 .ca-itemmeta {
   display: block;
   margin-top: 2px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--muted);
 }
 .ca-itemhead {
   margin: 10px 0 0;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;

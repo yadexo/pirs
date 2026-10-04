@@ -120,7 +120,7 @@ export function SearchSheet({
                   <span style={{ flex: 1 }}>
                     <b style={{ fontSize: 15, display: "block" }}>{r.name}</b>
                     {r.priceCents != null && (
-                      <span className="tabular" style={{ fontSize: 13, color: "var(--muted)" }}>
+                      <span className="tabular" style={{ fontSize: 14, color: "var(--muted)" }}>
                         {money(r.priceCents, currency)}
                       </span>
                     )}

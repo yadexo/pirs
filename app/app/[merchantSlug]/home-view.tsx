@@ -133,7 +133,7 @@ export function HomeView({
                 )}
                 <span style={{ display: "block", padding: "12px 14px 14px" }}>
                   <b style={{ fontSize: 15, fontWeight: 600, color: "var(--ink-strong)", display: "block" }}>{o.title}</b>
-                  <span style={{ fontSize: 13, color: "var(--muted)" }}>
+                  <span style={{ fontSize: 14, color: "var(--muted)" }}>
                     Ends {new Date(o.endsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
                   </span>
                 </span>

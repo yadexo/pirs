@@ -66,9 +66,9 @@ export function ScanView({
           <div className="qwhite">{token ? (
             <QrCode value={token} label="Your check-in code" />
           ) : failed ? (
-            <span style={{ fontSize: 12, color: "var(--muted)", textAlign: "center" }}>Couldn&apos;t load your code. Check your connection, or sign in again.</span>
+            <span style={{ fontSize: 14, color: "var(--muted)", textAlign: "center" }}>Couldn&apos;t load your code. Check your connection, or sign in again.</span>
           ) : (
-            <span style={{ fontSize: 12, color: "var(--faint)" }}>Loading…</span>
+            <span style={{ fontSize: 14, color: "var(--muted)" }}>Loading…</span>
           )}</div>
         </Gloss>
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px" }}>
