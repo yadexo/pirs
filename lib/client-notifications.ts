@@ -100,6 +100,45 @@ export async function notifyRefundProcessed(orderId: string, amountCents: number
   });
 }
 
+/** Who to tell about their own balance, and how to address them. */
+async function recipientForClient(customerProfileId: string) {
+  const profile = await rawDb.customerProfile.findUnique({
+    where: { id: customerProfileId },
+    select: {
+      userId: true,
+      tenant: { select: { name: true, slug: true, branding: { select: { businessName: true, currency: true } } } },
+    },
+  });
+  if (!profile?.userId) return null;
+  return {
+    userId: profile.userId,
+    clinicName: profile.tenant.branding?.businessName ?? profile.tenant.name,
+    slug: profile.tenant.slug,
+    currency: profile.tenant.branding?.currency ?? "EUR",
+  };
+}
+
+/**
+ * A staff member changed this client's credit.
+ *
+ * A service notification, not marketing: it is about money the client holds
+ * at the clinic, so it goes to them whatever they have said about offers.
+ * The reason the staff member gave is included, because "your balance
+ * changed" with no explanation is worse than saying nothing.
+ */
+export async function notifyCreditChanged(customerProfileId: string, amountCents: number, reason: string): Promise<void> {
+  const to = await recipientForClient(customerProfileId);
+  if (!to) return;
+  const added = amountCents > 0;
+  await notifyClientQuietly(to.userId, {
+    title: to.clinicName,
+    body: `${added ? "Credit added" : "Credit removed"}: ${amount(Math.abs(amountCents), to.currency)} — ${reason}`,
+    url: clinicPath(to.slug, "/profile?tab=settings"),
+    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    tag: `credit-${customerProfileId}-${Date.now()}`,
+  });
+}
+
 /** Who to tell about a membership, and how to address them. */
 async function recipientForMembership(membershipId: string) {
   const membership = await rawDb.customerMembership.findUnique({

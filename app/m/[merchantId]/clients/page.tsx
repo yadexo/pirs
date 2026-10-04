@@ -1,4 +1,6 @@
 import { requireMerchantContext } from "@/lib/merchant-context";
+import { DEFAULT_CURRENCY } from "@/lib/currency";
+import type { PermissionKey } from "@/lib/permissions";
 import { MerchantPageHeader } from "@/components/merchant/page-header";
 import { ClientsTable } from "./clients-table";
 
@@ -16,6 +18,8 @@ export default async function ClientsPage({
   const ctx = await requireMerchantContext(merchantId);
 
   const pageNum = Math.max(1, Number(page) || 1);
+  const can = (permission: PermissionKey) => ctx.viewer.permissions === "ALL" || ctx.viewer.permissions.includes(permission);
+  const branding = await ctx.db.tenantBranding.findFirst({ where: {}, select: { currency: true } });
 
   // Leads are clients with no completed activity — the old Leads page is now
   // a filter here rather than a second table.
@@ -62,7 +66,9 @@ export default async function ClientsPage({
       <div className="mt-5">
         <ClientsTable
           merchantId={merchantId}
-          canRefund={ctx.viewer.permissions === "ALL" || ctx.viewer.permissions.includes("sales.manage")}
+          canRefund={can("sales.manage")}
+          canEditAccount={can("customers.edit")}
+          currency={branding?.currency ?? DEFAULT_CURRENCY}
           q={q}
           sort={sort}
           status={status}
