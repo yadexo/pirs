@@ -1,5 +1,5 @@
 import { randomBytes, randomInt } from "node:crypto";
-import type { PrismaClient, RedeemableStatus, RedemptionMethod } from "@prisma/client";
+import type { PrismaClient, RedeemableSource, RedeemableStatus, RedemptionMethod } from "@prisma/client";
 import { rawDb } from "@/lib/db";
 import { CODE_ALPHABET, CODE_LENGTH, normaliseCode } from "@/lib/redeemable-shared";
 
@@ -159,6 +159,11 @@ export interface ItemView {
   redeemedByName: string | null;
   redemptionMethod: RedemptionMethod | null;
   refundedAfterUse: boolean;
+  /** Bought, given by the clinic, or a replacement code for an earlier one. */
+  source: RedeemableSource;
+  /** Why a staff member gave it or took it back, when one did. */
+  issuedReason: string | null;
+  voidedReason: string | null;
   client: { name: string; email: string | null };
 }
 
@@ -181,6 +186,9 @@ const VIEW_SELECT = {
   redeemedAt: true,
   redemptionMethod: true,
   refundedAfterUse: true,
+  source: true,
+  issuedReason: true,
+  voidedReason: true,
   redeemedBy: { select: { staffProfile: { select: { firstName: true, lastName: true } }, email: true } },
   customerProfile: { select: { firstName: true, lastName: true, user: { select: { email: true } } } },
 } as const;
@@ -196,6 +204,9 @@ type RowWithView = {
   redeemedAt: Date | null;
   redemptionMethod: RedemptionMethod | null;
   refundedAfterUse: boolean;
+  source: RedeemableSource;
+  issuedReason: string | null;
+  voidedReason: string | null;
   redeemedBy: { email: string; staffProfile: { firstName: string; lastName: string } | null } | null;
   customerProfile: { firstName: string; lastName: string; user: { email: string } | null };
 };
@@ -214,6 +225,9 @@ export function toView(row: RowWithView): ItemView {
     redeemedByName: staff ? `${staff.firstName} ${staff.lastName}`.trim() : (row.redeemedBy?.email ?? null),
     redemptionMethod: row.redemptionMethod,
     refundedAfterUse: row.refundedAfterUse,
+    source: row.source,
+    issuedReason: row.issuedReason,
+    voidedReason: row.voidedReason,
     client: {
       name: `${row.customerProfile.firstName} ${row.customerProfile.lastName}`.trim(),
       email: row.customerProfile.user?.email ?? null,

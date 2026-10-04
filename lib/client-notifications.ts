@@ -158,6 +158,40 @@ export async function notifyPointsChanged(customerProfileId: string, points: num
   });
 }
 
+/**
+ * A staff member gave this client something, or replaced a code.
+ *
+ * `headline` differs because the two are not the same news: a gift is a
+ * surprise, a replacement is the answer to a problem they already had.
+ */
+export async function notifyItemIssued(customerProfileId: string, itemName: string, headline: string, reason: string): Promise<void> {
+  const to = await recipientForClient(customerProfileId);
+  if (!to) return;
+  await notifyClientQuietly(to.userId, {
+    title: to.clinicName,
+    body: `${headline}: ${itemName} — ${reason}`,
+    url: clinicPath(to.slug, "/profile?tab=items"),
+    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    tag: `item-issued-${customerProfileId}-${Date.now()}`,
+  });
+}
+
+/**
+ * An item the client had is no longer theirs to collect. Told plainly and
+ * with the reason, because they can see it change in their own app.
+ */
+export async function notifyItemVoided(customerProfileId: string, itemName: string, reason: string): Promise<void> {
+  const to = await recipientForClient(customerProfileId);
+  if (!to) return;
+  await notifyClientQuietly(to.userId, {
+    title: to.clinicName,
+    body: `${itemName} is no longer available — ${reason}`,
+    url: clinicPath(to.slug, "/profile?tab=items"),
+    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    tag: `item-voided-${customerProfileId}-${Date.now()}`,
+  });
+}
+
 /** Who to tell about a membership, and how to address them. */
 async function recipientForMembership(membershipId: string) {
   const membership = await rawDb.customerMembership.findUnique({

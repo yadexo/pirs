@@ -401,6 +401,8 @@ model StaffProfile {
   creditAdjustments AccountCreditTransaction[]
   refundsCreated    Refund[]
   campaignsCreated  NotificationCampaign[]
+  itemsIssued       RedeemableItem[] @relation("IssuedItems")
+  itemsVoided       RedeemableItem[] @relation("VoidedItems")
 
   @@index([tenantId])
 }
@@ -1447,6 +1449,16 @@ enum RedemptionMethod {
   MANUAL
 }
 
+/// How a client came to have an item.
+enum RedeemableSource {
+  /// Bought and paid for: the usual case, with an order behind it.
+  PURCHASE
+  /// Given by the clinic — a gift, or compensation. No money changed hands.
+  GIFT
+  /// A replacement code for one that was voided or lost.
+  REISSUE
+}
+
 enum RedeemableStatus {
   AVAILABLE
   REDEEMED
@@ -1468,10 +1480,15 @@ model RedeemableItem {
   tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   customerProfileId String
   customerProfile   CustomerProfile   @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
-  orderId           String
-  order             Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderItemId       String
-  orderItem         OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  /// Null for an item the clinic gave rather than sold: a gift has no order,
+  /// and inventing one would put a sale that never happened in the client's
+  /// history and the clinic's figures.
+  orderId           String?
+  order             Order?            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItemId       String?
+  orderItem         OrderItem?        @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  source            RedeemableSource  @default(PURCHASE)
 
   /// Which unit of that order line this is: 0 and 1 for a quantity of two.
   /// With the unique below, creating the items twice cannot duplicate them.
@@ -1493,6 +1510,19 @@ model RedeemableItem {
   redemptionNote    String?
   /// Refunded after it had already been used — the clinic decides what to do.
   refundedAfterUse  Boolean           @default(false)
+
+  /// Who gave or replaced this item, and why they said they did. Only set
+  /// when a staff member issued it rather than a purchase creating it.
+  issuedByStaffProfileId String?
+  issuedByStaffProfile   StaffProfile? @relation("IssuedItems", fields: [issuedByStaffProfileId], references: [id], onDelete: SetNull)
+  issuedReason           String?
+
+  /// Why a staff member took it back, and who did. A voided item is kept
+  /// rather than deleted: the client saw it, and may ask about it.
+  voidedAt               DateTime?
+  voidedReason           String?
+  voidedByStaffProfileId String?
+  voidedByStaffProfile   StaffProfile? @relation("VoidedItems", fields: [voidedByStaffProfileId], references: [id], onDelete: SetNull)
 
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
