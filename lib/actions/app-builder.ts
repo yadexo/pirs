@@ -16,6 +16,7 @@ import {
 } from "@/lib/merchant-action";
 import type { TenantDb } from "@/lib/tenant-db";
 import { isPromotionUsed, NO_USAGE, type PromotionUsage } from "@/lib/promotion-usage";
+import { rolloutPlanPrice, type RolloutResult } from "@/lib/membership-price-rollout";
 import { pricingOptionsSchema, toStoredPricingOptions, EMPTY_PRICING } from "@/lib/pricing-options";
 import { sendCampaignNow } from "@/lib/campaign-send";
 import { marketingAudience, marketingWindowFor } from "@/lib/marketing";
@@ -917,7 +918,7 @@ export async function saveMembershipPlanAction(
   merchantId: string,
   id: string | null,
   fd: FormData,
-): Promise<ActionResult<{ id: string }>> {
+): Promise<ActionResult<{ id: string; priceRollout?: RolloutResult }>> {
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, NEEDS.membershipPlan);
     const data = planSchema.parse({
@@ -953,17 +954,35 @@ export async function saveMembershipPlanAction(
     };
 
     let savedId: string;
+    let priceChanged = false;
+    let moveExisting = false;
+    let oldPriceCents = 0;
     if (id) {
       const existing = assertFound(await ctx.db.membershipPlan.findFirst({ where: { id, archivedAt: null } }));
-      // Members agreed to a price. Changing it underneath them — and, once
-      // Stripe is connected, underneath their subscriptions — is not an edit.
       const members = await ctx.db.customerMembership.count({ where: { membershipPlanId: id, status: { in: [...LIVE_MEMBERSHIP] } } });
-      if (members > 0 && (existing.priceCents !== values.priceCents || existing.billingFrequency !== values.billingFrequency)) {
-        throw fieldError(
-          "price",
-          `${members} client${members === 1 ? " is" : "s are"} on this plan. Create a new plan for a different price, then hide this one.`,
-        );
+      priceChanged = existing.priceCents !== values.priceCents;
+
+      // How often somebody is billed is the shape of the agreement, not a
+      // number in it: moving a member from monthly to yearly is a different
+      // deal, so it stays locked while anybody is on the plan.
+      if (members > 0 && existing.billingFrequency !== values.billingFrequency) {
+        throw fieldError("billingFrequency", `${members} client${members === 1 ? " is" : "s are"} on this plan, so the billing period can't change.`);
       }
+
+      /**
+       * A new price reaches new members by default. Moving the people already
+       * on the plan is a separate decision, and a bigger one — it changes what
+       * somebody already agreed to pay — so it is asked for explicitly rather
+       * than following from the price field.
+       *
+       * No extra permission is checked here: editing a membership plan is
+       * already governed by memberships.manage (see NEEDS), which is exactly
+       * the permission this would call for. A second check would read as
+       * though two were involved.
+       */
+      moveExisting = members > 0 && priceChanged && formBool(fd, "applyToExistingMembers");
+
+      oldPriceCents = existing.priceCents;
       await ctx.db.membershipPlan.updateMany({ where: { id }, data: values });
       savedId = id;
       await rawDb.membershipBenefit.deleteMany({ where: { membershipPlanId: id } });
@@ -977,8 +996,34 @@ export async function saveMembershipPlanAction(
     }
 
     await ctx.audit(id ? "membership_plan.updated" : "membership_plan.created", "MembershipPlan", savedId, { name: data.name });
+
+    // After the plan itself is saved, so a rollout that fails halfway cannot
+    // leave the clinic with the old price on the plan and a new one at Stripe.
+    let priceRollout: RolloutResult | undefined;
+    if (moveExisting) {
+      priceRollout = await rolloutPlanPrice({
+        tenantId: merchantId,
+        planId: savedId,
+        oldPriceCents,
+        newPriceCents: values.priceCents,
+        reason: `Price changed from ${(oldPriceCents / 100).toFixed(2)} to ${(values.priceCents / 100).toFixed(2)}`,
+        staffProfileId: ctx.user.staffProfileId ?? null,
+      });
+      await ctx.audit("membership_plan.price_rollout", "MembershipPlan", savedId, {
+        oldPriceCents,
+        newPriceCents: values.priceCents,
+        ...priceRollout,
+      });
+    } else if (priceChanged) {
+      await ctx.audit("membership_plan.price_changed", "MembershipPlan", savedId, {
+        oldPriceCents,
+        newPriceCents: values.priceCents,
+        appliesTo: "new members only",
+      });
+    }
+
     await revalidateMerchant(merchantId);
-    return { id: savedId };
+    return { id: savedId, ...(priceRollout ? { priceRollout } : {}) };
   });
 }
 

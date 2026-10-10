@@ -54,6 +54,41 @@ function clinicPath(slug: string, rest = ""): string {
   return `${short ? "" : "/app"}/${encodeURIComponent(slug)}${rest}`;
 }
 
+/**
+ * The same path as a link somebody can click in an email, where a path on its
+ * own means nothing.
+ */
+function absoluteClientUrl(path: string): string {
+  const base = (process.env.CLIENT_APP_URL ?? process.env.APP_URL ?? "").replace(/\/$/, "");
+  return base ? `${base}${path}` : path;
+}
+
+/**
+ * An email the client can keep, for the things a push is too small to carry.
+ *
+ * Quiet like its push counterpart: these are sent from actions that have
+ * already changed something, and a mail server having a bad afternoon must
+ * not undo it. Without an email provider configured this does nothing, which
+ * is the mock provider's job to report in development.
+ */
+async function emailClientQuietly(customerProfileId: string, message: { subject: string; body: string }): Promise<void> {
+  try {
+    const profile = await rawDb.customerProfile.findUnique({
+      where: { id: customerProfileId },
+      select: { user: { select: { email: true } }, emailConsent: true },
+    });
+    const to = profile?.user?.email;
+    if (!to) return;
+    // Service mail about their own money, so emailConsent (which is about
+    // marketing) is deliberately not consulted — the same rule the push side
+    // follows.
+    const { getEmailProvider } = await import("@/lib/providers/notifications");
+    await getEmailProvider().send({ to, subject: message.subject, body: message.body });
+  } catch (err) {
+    console.error(`[client-notifications] email to ${customerProfileId} not sent:`, err instanceof Error ? err.message : err);
+  }
+}
+
 /** Same wording as the app: whole amounts without decimals. */
 function amount(cents: number, currency: string): string {
   return new Intl.NumberFormat("en", {
@@ -189,6 +224,46 @@ export async function notifyItemVoided(customerProfileId: string, itemName: stri
     url: clinicPath(to.slug, "/profile?tab=items"),
     icon: clinicPath(to.slug, "/app-icon/192.png"),
     tag: `item-voided-${customerProfileId}-${Date.now()}`,
+  });
+}
+
+/**
+ * A member's price is going up.
+ *
+ * Both channels, because this one costs them money: a push they may miss and
+ * an email they can keep. It says the new price, the date it first applies,
+ * and that they can leave before then — with the link to do it, since telling
+ * somebody they may cancel while making them hunt for the button is not
+ * really telling them.
+ */
+export async function notifyPriceChange(
+  customerProfileId: string,
+  change: { planName: string; newPriceCents: number; currency: string; effectiveAt: Date },
+): Promise<void> {
+  const to = await recipientForClient(customerProfileId);
+  if (!to) return;
+
+  const when = change.effectiveAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  const price = amount(change.newPriceCents, change.currency);
+  const manage = clinicPath(to.slug, "/profile?tab=membership");
+  const line = `${change.planName} becomes ${price} from ${when}. You can cancel any time before then.`;
+
+  await notifyClientQuietly(to.userId, {
+    title: to.clinicName,
+    body: line,
+    url: manage,
+    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    tag: `price-change-${customerProfileId}-${change.effectiveAt.getTime()}`,
+  });
+
+  await emailClientQuietly(customerProfileId, {
+    subject: `Your ${change.planName} price is changing`,
+    body: [
+      line,
+      "",
+      `Nothing changes before ${when}, and the payments until then stay at the price you signed up on.`,
+      `To cancel, open your membership: ${absoluteClientUrl(manage)}`,
+    ].join("\n"),
   });
 }
 

@@ -246,7 +246,7 @@ describe("App Builder actions", () => {
       expect(after.updatedAt.getTime()).toBeGreaterThanOrEqual(before.updatedAt.getTime());
     });
 
-    it("protects members: no silent price change, no archiving a plan in use", async () => {
+    it("protects members: a price change leaves them alone, and a plan in use isn't archived", async () => {
       signIn("owner");
       const plan = await A.saveMembershipPlanAction(clinic, null, fd({ name: "Gold", price: "49", billingFrequency: "MONTHLY", benefits: "Free consult\n10% off products", active: true }));
       const planId = (plan as { id: string }).id;
@@ -256,12 +256,22 @@ describe("App Builder actions", () => {
       const profile = await rawDb.customerProfile.create({ data: { tenantId: clinic, userId: user.id, firstName: "M", lastName: "B" } });
       await rawDb.customerMembership.create({ data: { tenantId: clinic, customerProfileId: profile.id, membershipPlanId: planId, currentPeriodEnd: new Date(Date.now() + 864e5) } });
 
+      // A new price is for people who join from now on. The member already
+      // on the plan is left alone unless the clinic asks for them to be
+      // moved, which is its own tick and its own notice period.
       const repriced = await A.saveMembershipPlanAction(clinic, planId, fd({ name: "Gold", price: "59", billingFrequency: "MONTHLY", active: true }));
-      expect((repriced as { fieldErrors: Record<string, string> }).fieldErrors.price).toMatch(/1 client is on this plan/);
-      expect((await rawDb.membershipPlan.findUnique({ where: { id: planId } }))!.priceCents).toBe(4900);
+      expect(repriced).toMatchObject({ ok: true });
+      expect((await rawDb.membershipPlan.findUnique({ where: { id: planId } }))!.priceCents).toBe(5900);
+      expect(await rawDb.membershipPriceChange.count({ where: { tenantId: clinic } })).toBe(0);
+
+      // How often they are billed is the shape of the agreement, not a number
+      // in it, so that stays locked while anybody is on the plan.
+      const reschedule = await A.saveMembershipPlanAction(clinic, planId, fd({ name: "Gold", price: "59", billingFrequency: "ANNUAL", active: true }));
+      expect((reschedule as { fieldErrors: Record<string, string> }).fieldErrors.billingFrequency).toMatch(/1 client is on this plan/);
+      expect((await rawDb.membershipPlan.findUnique({ where: { id: planId } }))!.billingFrequency).toBe("MONTHLY");
 
       // Renaming is fine.
-      expect(await A.saveMembershipPlanAction(clinic, planId, fd({ name: "Gold Plus", price: "49", billingFrequency: "MONTHLY", active: true }))).toMatchObject({ ok: true });
+      expect(await A.saveMembershipPlanAction(clinic, planId, fd({ name: "Gold Plus", price: "59", billingFrequency: "MONTHLY", active: true }))).toMatchObject({ ok: true });
 
       expect(await A.archiveItemAction(clinic, "membershipPlan", planId)).toMatchObject({ error: expect.stringMatching(/still on this plan/) });
       expect(await A.setItemActiveAction(clinic, "membershipPlan", planId, false)).toMatchObject({ ok: true });

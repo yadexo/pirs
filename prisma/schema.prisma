@@ -94,6 +94,7 @@ model Tenant {
   customerPackages     CustomerPackage[]
   membershipPlans      MembershipPlan[]
   customerMemberships  CustomerMembership[]
+  membershipPriceChanges MembershipPriceChange[]
   loyaltyProgramme     LoyaltyProgramme?
   loyaltyTransactions  LoyaltyTransaction[]
   accountCreditTx      AccountCreditTransaction[]
@@ -403,6 +404,7 @@ model StaffProfile {
   campaignsCreated  NotificationCampaign[]
   itemsIssued       RedeemableItem[] @relation("IssuedItems")
   itemsVoided       RedeemableItem[] @relation("VoidedItems")
+  priceChanges      MembershipPriceChange[] @relation("PriceChanges")
 
   @@index([tenantId])
 }
@@ -954,6 +956,7 @@ model MembershipPlan {
 
   benefits               MembershipBenefit[]
   customerMemberships    CustomerMembership[]
+  priceChanges           MembershipPriceChange[]
   orderItems             OrderItem[]
   promotionEligibility   PromotionEligibility[]
 
@@ -1022,10 +1025,49 @@ model CustomerMembership {
   updatedAt           DateTime          @updatedAt
 
   billingEvents       MembershipBillingEvent[]
+  priceChanges        MembershipPriceChange[]
   payments            Payment[]
 
   @@index([tenantId, customerProfileId])
   @@index([tenantId, status])
+}
+
+/// A price change a clinic has promised one member, waiting for the date it
+/// was promised for.
+///
+/// A member must get at least a month's warning, so the new price starts at
+/// their first billing date 30 days or more after they were told. When that is
+/// their next one, the change is made at Stripe immediately and this row is
+/// only the record of it. When their next payment comes sooner, the change has
+/// to wait until after that invoice — `applyAfter` is when it is safe to tell
+/// Stripe, and the memberships cron does it.
+model MembershipPriceChange {
+  id                   String             @id @default(cuid())
+  tenantId             String
+  tenant               Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerMembershipId String
+  customerMembership   CustomerMembership @relation(fields: [customerMembershipId], references: [id], onDelete: Cascade)
+  membershipPlanId     String
+  membershipPlan       MembershipPlan     @relation(fields: [membershipPlanId], references: [id], onDelete: Cascade)
+
+  oldPriceCents        Int
+  newPriceCents        Int
+  /// The date the client was told the new price starts.
+  effectiveAt          DateTime
+  /// When it is safe to switch the price at Stripe without catching an
+  /// invoice the client was not warned about.
+  applyAfter           DateTime
+  appliedAt            DateTime?
+  noticeSentAt         DateTime?
+
+  reason                  String?
+  createdByStaffProfileId String?
+  createdByStaffProfile   StaffProfile? @relation("PriceChanges", fields: [createdByStaffProfileId], references: [id], onDelete: SetNull)
+
+  createdAt            DateTime           @default(now())
+
+  @@index([tenantId, appliedAt])
+  @@index([applyAfter])
 }
 
 enum MembershipBillingEventType {

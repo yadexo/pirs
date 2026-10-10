@@ -7,6 +7,7 @@ import { releaseFailedOrder } from "@/lib/order-completion";
 import { runMarketing } from "@/lib/cron/marketing";
 import { PAST_DUE_GRACE_MS } from "@/lib/membership-status";
 import { notifyMembershipSuspended } from "@/lib/client-notifications";
+import { applyDuePriceChanges } from "@/lib/membership-price-rollout";
 
 /** How long an unpaid order may hold stock and redeemed points. */
 const ABANDONED_ORDER_MS = 60 * 60 * 1000;
@@ -140,6 +141,21 @@ export const CRON_JOBS: Record<string, () => Promise<CronResult>> = {
       data: { status: "CANCELLED", cancelledAt: new Date(), dunningState: "First payment never completed" },
     });
 
-    return { suspended, considered: expired.length, abandonedSignups: stale.count };
+    /**
+     * Price changes that had to wait for an invoice to go out.
+     *
+     * A member whose next payment came too soon to warn them about pays the
+     * old price that one last time; the switch is made at Stripe afterwards,
+     * so the bill they were told about is the first one at the new price.
+     */
+    const prices = await applyDuePriceChanges(new Date());
+
+    return {
+      suspended,
+      considered: expired.length,
+      abandonedSignups: stale.count,
+      priceChangesApplied: prices.applied,
+      priceChangesFailed: prices.failed,
+    };
   },
 };

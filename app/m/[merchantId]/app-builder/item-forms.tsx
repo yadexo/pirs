@@ -298,15 +298,15 @@ export function MembershipPlanForm({ currency, item, errors }: ItemFormProps) {
     <div className="space-y-5">
       {members > 0 && (
         <p className="rounded-[10px] bg-[var(--accent-amber)]/10 px-3 py-2 text-[12px] text-ink">
-          {members} client{members === 1 ? " is" : "s are"} on this plan, so its price and billing period are locked. To change them, create a new plan
-          and hide this one.
+          {members} client{members === 1 ? " is" : "s are"} on this plan. A new price applies to people who join from now on; the billing period is
+          locked while anybody is on it.
         </p>
       )}
       <FormSection title="Plan">
         <TextField label="Name" name="name" defaultValue={str(item.name)} errors={errors} required />
         <TextAreaField label="Description" name="description" defaultValue={str(item.description)} errors={errors} />
         <div className="grid grid-cols-2 gap-3">
-          <MoneyField label="Price" name="price" currency={currency} defaultValue={centsToInput(item.priceCents as number)} errors={errors} required readOnly={members > 0} />
+          <MoneyField label="Price" name="price" currency={currency} defaultValue={centsToInput(item.priceCents as number)} errors={errors} required />
           <SelectField
             label="Billed"
             name="billingFrequency"
@@ -350,6 +350,16 @@ export function MembershipPlanForm({ currency, item, errors }: ItemFormProps) {
           />
         </div>
         <MoneyField label="Credit included each period" name="includedCredit" currency={currency} defaultValue={centsToInput(item.includedCreditCents as number)} errors={errors} />
+        {members > 0 && (
+          <div className="rounded-[10px] border border-border p-3">
+            <CheckboxField
+              name="applyToExistingMembers"
+              label="Also move existing members to the new price"
+              description="Only has an effect if you changed the price. Each member keeps their current price until their first billing date at least 30 days from now, and is told straight away what the new price is, when it starts, and how to cancel before then."
+              defaultChecked={false}
+            />
+          </div>
+        )}
         <CheckboxField name="priorityAccess" label="Priority booking" defaultChecked={Boolean(item.priorityAccess)} />
       </FormSection>
       <FormSection title="Terms">
