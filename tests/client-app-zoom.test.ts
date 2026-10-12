@@ -17,6 +17,8 @@ import { blockPinchZoom } from "@/components/client-app/zoom-lock";
 
 const CLIENT_APP_DIRS = ["app/app", "components/client-app"];
 const CSS = "app/app/[merchantSlug]/client-app.css";
+/** The shared v2 roles; the client app's own names are aliases onto these. */
+const TOKENS = "app/design-tokens.css";
 
 /** The smallest text a client should ever be asked to read without zooming. */
 const TYPE_FLOOR_PX = 14;
@@ -171,7 +173,7 @@ describe("text a client cannot zoom into", () => {
   });
 
   it("colours text only with tokens that clear WCAG AA", () => {
-    const css = readFileSync(CSS, "utf8");
+    const css = readFileSync(TOKENS, "utf8");
     const token = (name: string) => {
       const match = new RegExp(`--${name}: (#[0-9a-f]{6});`).exec(css);
       if (!match) throw new Error(`no --${name} token`);
@@ -188,18 +190,54 @@ describe("text a client cannot zoom into", () => {
       return (hi! + 0.05) / (lo! + 0.05);
     };
 
-    // Every background these sit on, worst case included.
-    const backgrounds = ["bg-surface", "bg-app", "pill-bg"].map(token);
-    for (const name of ["ink", "ink-strong", "muted", "danger"]) {
-      for (const background of backgrounds) {
+    const bg = token("bg");
+    const surface2 = token("surface-2");
+    const surface3 = token("surface-3");
+
+    // The reading roles, on all three surfaces.
+    for (const name of ["ink", "text-2"]) {
+      for (const background of [bg, surface2, surface3]) {
         expect(contrast(token(name), background), `--${name} on ${background}`).toBeGreaterThanOrEqual(4.5);
       }
     }
+
+    // A status colour is read on a plain surface or on its own tint.
+    for (const name of ["danger", "warning"]) {
+      for (const background of [bg, surface2, surface3, token(`${name}-tint`)]) {
+        expect(contrast(token(name), background), `--${name} on ${background}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+
+    /**
+     * Two of the handoff's own values do not clear AA everywhere the design
+     * puts them. Both are pinned here so the shortfall cannot be forgotten,
+     * and both are written up with the minimal correction in
+     * docs/design/handoff-gaps.md — changing a design token's value is not a
+     * decision to make inside a test.
+     *
+     * --text-3, the palest text role: white 5.12, surface-2 4.69, but
+     * surface-3 4.29. The design's segmented control puts inactive labels on
+     * a surface-3 track; they use text-2 until the value is settled.
+     */
+    for (const background of [bg, surface2]) {
+      expect(contrast(token("text-3"), background), `--text-3 on ${background}`).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(contrast(token("text-3"), surface3), "--text-3 is not for surface-3").toBeLessThan(4.5);
+
+    /**
+     * --success: white 4.98, surface-2 4.57, but its own tint 4.36 and
+     * surface-3 4.18. The tint pairing is the PAID badge, so this one is not
+     * a corner case — #137D49 would clear the tint at 4.53.
+     */
+    for (const background of [bg, surface2]) {
+      expect(contrast(token("success"), background), `--success on ${background}`).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(contrast(token("success"), token("success-tint")), "--success on its tint is the known shortfall").toBeLessThan(4.5);
   });
 
   it("keeps --faint for decoration, never for words", () => {
-    // 1.9:1 against white: fine for a page dot or a hairline, unreadable as
-    // text, and there is no zoom to rescue it with.
+    // It aliases --line-strong: fine for a hairline or a page dot, far too
+    // pale to read, and there is no zoom to rescue it with.
     for (const file of sourceFiles()) {
       const content = readFileSync(file, "utf8");
       for (const line of content.split("\n")) {

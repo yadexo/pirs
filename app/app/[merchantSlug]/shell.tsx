@@ -3,7 +3,7 @@
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Icon, ToastProvider } from "@/components/client-app/ui";
+import { Icon, ToastProvider, money } from "@/components/client-app/ui";
 import { BasePathProvider, useBasePath } from "./base-path";
 import { isStandalone } from "@/components/client-app/pwa";
 import { PaymentResult } from "./payment-result";
@@ -89,7 +89,10 @@ function Frame({
     if (!returnedOrder) return;
     setOutsideApp(!isStandalone());
   }, [returnedOrder]);
-  const { count, open, openCart, closeCart } = useCart();
+  const { count, items, open, openCart, closeCart } = useCart();
+  // What is in the cart, VAT included. Credit and rewards are chosen inside
+  // the sheet, so the bar shows the lines rather than a total it cannot know.
+  const subtotal = items.reduce((sum, i) => sum + i.unitPriceCents * i.quantity, 0);
   const [searchOpen, setSearchOpen] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
@@ -150,31 +153,64 @@ function Frame({
         </header>
       )}
 
-      <div ref={scrollRef} style={{ paddingBottom: "calc(var(--tabh) + 40px)" }}>
+      <div ref={scrollRef} style={{ paddingBottom: "calc(var(--tabh) + var(--space-8))" }}>
         {children}
       </div>
 
-      <nav className="ca-tabbar" role="tablist" aria-label="Main">
-        {TABS.map((t) => {
-          const on = t.key === active;
-          return (
-            <button
-              key={t.key}
-              type="button"
-              role="tab"
-              aria-selected={on}
-              aria-label={t.label}
-              className={cn("ca-tabbtn", on && "on")}
-              onClick={() => selectTab(t.key)}
-            >
-              <span className="tic">
-                <Icon name={t.icon} size={26} />
-                {t.key === "rewards" && rewardsDot && <span className="ca-rdot" />}
-              </span>
-              <span className="tlab">{t.label}</span>
-            </button>
-          );
-        })}
+      {count > 0 && !open && (
+        <button type="button" className="ca-cartbar" onClick={openCart}>
+          <span className="lab">
+            View cart <span className="count tabular">· {count} {count === 1 ? "item" : "items"}</span>
+          </span>
+          <span className="total tabular">{money(subtotal, currency)}</span>
+        </button>
+      )}
+
+      <nav className="ca-tabbar" aria-label="Main">
+        {/* The white bar is its own layer: the notch is a mask, and a mask
+            would cut the raised Scan button in half along with it. */}
+        <span className="bar" aria-hidden="true" />
+        <div className="row" role="tablist" aria-label="Main">
+          {TABS.map((t) => {
+            const on = t.key === active;
+            // Scan keeps only its label in the bar; its control is the raised
+            // button, which sits over the notch rather than in a column.
+            if (t.key === "scan") {
+              return (
+                <span key={t.key} className={cn("ca-tabbtn", "ca-tabscan", on && "on")} aria-hidden="true">
+                  <span className="tlab">{t.label}</span>
+                </span>
+              );
+            }
+            return (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                aria-label={t.label}
+                className={cn("ca-tabbtn", on && "on")}
+                onClick={() => selectTab(t.key)}
+              >
+                <span className="tic">
+                  <Icon name={t.icon} size={24} />
+                  {t.key === "rewards" && rewardsDot && <span className="ca-rdot" />}
+                </span>
+                <span className="tlab">{t.label}</span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={active === "scan"}
+            aria-label="Scan"
+            className="ca-scanbtn"
+            onClick={() => selectTab("scan")}
+          >
+            <Icon name="scan" size={28} />
+          </button>
+        </div>
       </nav>
 
       {returnedOrder && (

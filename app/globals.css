@@ -3,8 +3,26 @@
 @tailwind utilities;
 
 /**
- * Design tokens. Every colour in the product comes from here — components
- * must never hardcode a hex value. Agency and merchant levels share one set.
+ * Clinic portal and agency panel tokens. Every colour here comes from this
+ * block — components must never hardcode a hex value.
+ *
+ * These are the v1 names with the v1 values, and the portal deliberately still
+ * looks exactly as it did: it moves to the Pirs v2 system in its own stage.
+ * The shared v2 roles live in app/design-tokens.css and are imported before
+ * this file; the two sets share no names, so neither overrides the other.
+ * When the portal switches, the mapping is:
+ *
+ *   --bg-app       -> --surface-2      --text-primary -> --ink
+ *   --bg-surface   -> --bg             --text-muted   -> --text-2
+ *   --border       -> --line           --text-faint   -> --text-3
+ *   --primary      -> --brand          --accent-green -> --success
+ *   --primary-soft -> --brand-soft     --accent-amber -> --warning
+ *   --radius-card  -> --radius-md      --accent-red   -> --danger
+ *   --shadow-card  -> --elev-raised    --font-sans    -> --font-ui
+ *
+ * The one thing that already crosses over is the typeface: the root layout
+ * loads Hanken Grotesk for both apps, and --font-sans keeps Inter here until
+ * the portal's stage.
  */
 :root {
   --bg-app: #f7f9fc;

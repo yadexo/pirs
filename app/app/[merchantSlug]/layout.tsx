@@ -7,6 +7,7 @@ import { InstallPrompt, ServiceWorker } from "@/components/client-app/pwa";
 import { ZoomLock } from "@/components/client-app/zoom-lock";
 import { clientAppViewport } from "@/lib/client-app-viewport";
 import { getClientSummary, getRewardsData } from "@/lib/client-app-data";
+import { brandCssVars, brandTokens } from "@/lib/brand-tokens";
 import { Onboarding } from "./onboarding";
 import { ClientAppShell } from "./shell";
 import "./client-app.css";
@@ -56,10 +57,14 @@ export default async function ClientAppLayout({
   const scope = clientAppScope(requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"));
 
   // The merchant's own brand colour is the only colour the client app takes
-  // from configuration; everything else is the fixed monochrome palette.
-  const style = ctx.merchant.accentColor
-    ? ({ "--merchant-accent": ctx.merchant.accentColor } as React.CSSProperties)
-    : undefined;
+  // from configuration; everything else is the fixed monochrome palette. The
+  // one hex becomes the seven brand roles here — see lib/brand-tokens.ts for
+  // why a single colour cannot be used for all of them — and the roles are set
+  // on the wrapper so every component below reads them as plain CSS variables.
+  const style = {
+    ...brandCssVars(brandTokens(ctx.merchant.accentColor)),
+    "--merchant-accent": ctx.merchant.accentColor ?? undefined,
+  } as React.CSSProperties;
 
   if (!ctx.customerProfileId) {
     return (
