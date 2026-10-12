@@ -11,8 +11,7 @@ const rbacMocks = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/rbac", () => rbacMocks);
 
-const { clientCheckoutAction } = await import("@/lib/actions/client-app");
-const { joinMembershipAction } = await import("@/lib/actions/memberships");
+const { clientCheckoutAction, clientJoinPlanAction } = await import("@/lib/actions/client-app");
 const { adjustAccountCreditAction } = await import("@/lib/actions/customers");
 const { manualLoyaltyAdjustmentAction } = await import("@/lib/actions/loyalty");
 const { getAvailableSlots } = await import("@/lib/availability");
@@ -21,10 +20,6 @@ function formData(fields: Record<string, string>) {
   const fd = new FormData();
   for (const [k, v] of Object.entries(fields)) fd.set(k, v);
   return fd;
-}
-
-async function expectRedirect(promise: Promise<unknown>) {
-  await expect(promise).rejects.toThrow(/^NEXT_REDIRECT:/);
 }
 
 describe("business-critical workflows", () => {
@@ -294,16 +289,20 @@ describe("business-critical workflows", () => {
   });
 
   /**
-   * Pausing, resuming and cancelling moved to
-   * tests/integration/client-membership.test.ts with the actions themselves.
-   * Those go through Stripe and are tested against it — cancelling now versus
-   * at the end of the period, pausing voiding the invoices rather than
-   * queueing them, and our row never claiming something Stripe refused. The
-   * versions tested here only ever wrote to our own database.
+   * Joining goes through clientJoinPlanAction, which is what the client app
+   * calls. The rest of the lifecycle — pausing, resuming, cancelling now
+   * versus at the end of the period — is in client-membership.test.ts
+   * against the actions a clinic uses, and the Stripe side of joining is in
+   * memberships-stripe.test.ts. The versions that used to be tested here only
+   * ever wrote to our own database, and are gone.
    */
   describe("membership lifecycle", () => {
     it("joins a plan", async () => {
-      await expectRedirect(joinMembershipAction("test-tenant", membershipPlanId));
+      await rawDb.customerMembership.deleteMany({ where: { customerProfileId } });
+
+      // No Stripe keys in this suite, so the mock provider settles it and the
+      // membership is active straight away.
+      expect(await clientJoinPlanAction("test-tenant", membershipPlanId)).toMatchObject({ ok: true, paid: true });
 
       const membership = await rawDb.customerMembership.findFirst({ where: { customerProfileId }, orderBy: { createdAt: "desc" } });
       expect(membership?.status).toBe("ACTIVE");
@@ -312,13 +311,11 @@ describe("business-critical workflows", () => {
     it("refuses to join a second membership while one is already active", async () => {
       const active = await rawDb.customerMembership.findFirst({ where: { customerProfileId, status: "ACTIVE" } });
       if (!active) {
-        // (Re-)establish an active membership if the previous test's cancel already ran.
         await rawDb.customerMembership.create({
           data: { tenantId, customerProfileId, membershipPlanId, status: "ACTIVE", currentPeriodEnd: new Date(Date.now() + 30 * 86400000) },
         });
       }
-      const result = await joinMembershipAction("test-tenant", membershipPlanId);
-      expect(result).toEqual({ error: "You already have an active membership." });
+      expect(await clientJoinPlanAction("test-tenant", membershipPlanId)).toMatchObject({ error: expect.stringMatching(/already have an active membership/i) });
     });
   });
 
