@@ -87,18 +87,6 @@ describe("moving existing members to a new price", () => {
     return { profile, membership, userId: user.id, nextBillingAt };
   }
 
-  const planForm = (priceCents: number, applyToExisting: boolean) => {
-    const fd = new FormData();
-    fd.set("name", "Standard");
-    fd.set("billingFrequency", "MONTHLY");
-    fd.set("price", (priceCents / 100).toFixed(2));
-    fd.set("includedCredit", "0");
-    fd.set("benefits", "");
-    fd.set("active", "on");
-    if (applyToExisting) fd.set("applyToExistingMembers", "on");
-    return fd;
-  };
-
   beforeAll(async () => {
     process.env.AUTH_SECRET ??= "test-secret";
     clinic = (

@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireStaffContext, requirePermission, requireCustomerContext } from "@/lib/rbac";
 import { getPaymentProvider } from "@/lib/providers/payments";
-import { writeAuditLog } from "@/lib/audit";
 import { tenantCurrency } from "@/lib/currency";
 
 const planSchema = z.object({
@@ -137,72 +136,10 @@ export async function joinMembershipAction(tenantSlug: string, planId: string): 
   redirect(`/${tenantSlug}/memberships?joined=1`);
 }
 
-export async function pauseMembershipAction(tenantSlug: string, membershipId: string) {
-  const { db, user } = await requireCustomerContext();
-  const membership = await db.customerMembership.findFirst({
-    where: { id: membershipId, customerProfileId: user.customerProfileId! },
-    include: { membershipPlan: true },
-  });
-  if (!membership || !membership.membershipPlan.pauseAllowed) throw new Error("Pausing is not available for this plan.");
-
-  const maxMonths = membership.membershipPlan.maxPauseMonths ?? 1;
-  const resumesAt = new Date();
-  resumesAt.setMonth(resumesAt.getMonth() + maxMonths);
-
-  await db.customerMembership.updateMany({
-    where: { id: membershipId },
-    data: { status: "PAUSED", pausedAt: new Date(), resumesAt },
-  });
-  await db.membershipBillingEvent.create({
-    data: { customerMembershipId: membershipId, type: "STATUS_CHANGE", description: "Membership paused" } as never,
-  });
-  revalidatePath(`/${tenantSlug}/memberships`);
-}
-
-export async function resumeMembershipAction(tenantSlug: string, membershipId: string) {
-  const { db, user } = await requireCustomerContext();
-  const membership = await db.customerMembership.findFirst({
-    where: { id: membershipId, customerProfileId: user.customerProfileId! },
-  });
-  if (!membership) throw new Error("Membership not found.");
-
-  await db.customerMembership.updateMany({
-    where: { id: membershipId },
-    data: { status: "ACTIVE", pausedAt: null, resumesAt: null },
-  });
-  await db.membershipBillingEvent.create({
-    data: { customerMembershipId: membershipId, type: "STATUS_CHANGE", description: "Membership resumed" } as never,
-  });
-  revalidatePath(`/${tenantSlug}/memberships`);
-}
-
-export async function cancelMembershipAction(tenantSlug: string, membershipId: string) {
-  const { db, user } = await requireCustomerContext();
-  const membership = await db.customerMembership.findFirst({
-    where: { id: membershipId, customerProfileId: user.customerProfileId! },
-  });
-  if (!membership) throw new Error("Membership not found.");
-
-  if (membership.stripeSubscriptionId) {
-    await getPaymentProvider().cancelSubscription(membership.stripeSubscriptionId);
-  }
-
-  await db.customerMembership.updateMany({
-    where: { id: membershipId },
-    data: { status: "CANCELLED", cancelledAt: new Date() },
-  });
-  await db.membershipBillingEvent.create({
-    data: { customerMembershipId: membershipId, type: "STATUS_CHANGE", description: "Membership cancelled" } as never,
-  });
-
-  await writeAuditLog({
-    tenantId: user.tenantId,
-    actorUserId: user.id,
-    actorType: "SYSTEM",
-    action: "membership.cancelled_by_customer",
-    entityType: "CustomerMembership",
-    entityId: membershipId,
-  });
-
-  revalidatePath(`/${tenantSlug}/memberships`);
-}
+/**
+ * Pausing, resuming and cancelling a membership used to live here. They wrote
+ * only to our own database and never told Stripe, which is the drift the
+ * actions in lib/actions/client-membership.ts exist to prevent — those ask
+ * Stripe first and let the webhook settle any disagreement. Nothing called
+ * these, so they are gone rather than kept as a second way to be wrong.
+ */

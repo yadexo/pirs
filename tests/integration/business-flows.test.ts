@@ -12,9 +12,7 @@ const rbacMocks = vi.hoisted(() => ({
 vi.mock("@/lib/rbac", () => rbacMocks);
 
 const { clientCheckoutAction } = await import("@/lib/actions/client-app");
-const { joinMembershipAction, pauseMembershipAction, resumeMembershipAction, cancelMembershipAction } = await import(
-  "@/lib/actions/memberships"
-);
+const { joinMembershipAction } = await import("@/lib/actions/memberships");
 const { adjustAccountCreditAction } = await import("@/lib/actions/customers");
 const { manualLoyaltyAdjustmentAction } = await import("@/lib/actions/loyalty");
 const { getAvailableSlots } = await import("@/lib/availability");
@@ -295,24 +293,20 @@ describe("business-critical workflows", () => {
     });
   });
 
+  /**
+   * Pausing, resuming and cancelling moved to
+   * tests/integration/client-membership.test.ts with the actions themselves.
+   * Those go through Stripe and are tested against it — cancelling now versus
+   * at the end of the period, pausing voiding the invoices rather than
+   * queueing them, and our row never claiming something Stripe refused. The
+   * versions tested here only ever wrote to our own database.
+   */
   describe("membership lifecycle", () => {
-    it("moves a membership through join -> pause -> resume -> cancel", async () => {
+    it("joins a plan", async () => {
       await expectRedirect(joinMembershipAction("test-tenant", membershipPlanId));
 
-      let membership = await rawDb.customerMembership.findFirst({ where: { customerProfileId }, orderBy: { createdAt: "desc" } });
+      const membership = await rawDb.customerMembership.findFirst({ where: { customerProfileId }, orderBy: { createdAt: "desc" } });
       expect(membership?.status).toBe("ACTIVE");
-
-      await pauseMembershipAction("test-tenant", membership!.id);
-      membership = await rawDb.customerMembership.findUnique({ where: { id: membership!.id } });
-      expect(membership?.status).toBe("PAUSED");
-
-      await resumeMembershipAction("test-tenant", membership!.id);
-      membership = await rawDb.customerMembership.findUnique({ where: { id: membership!.id } });
-      expect(membership?.status).toBe("ACTIVE");
-
-      await cancelMembershipAction("test-tenant", membership!.id);
-      membership = await rawDb.customerMembership.findUnique({ where: { id: membership!.id } });
-      expect(membership?.status).toBe("CANCELLED");
     });
 
     it("refuses to join a second membership while one is already active", async () => {
