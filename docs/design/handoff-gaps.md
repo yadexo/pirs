@@ -4,49 +4,28 @@ Everything here was found while building stage 1 (the design system). None of it
 is a stage 1 change; each entry says which stage it belongs to and what the
 decision is. Nothing on this list is lost by shipping stage 1.
 
-## Contrast: two values in the handoff palette fail WCAG AA
+## Contrast: two handoff values were darkened (resolved)
 
-Measured with the WCAG 2.1 formula against the handoff's own neutrals
-(`--bg` #FFFFFF, `--surface-2` #F5F5F4, `--surface-3` #EBEBEA). The client app
-takes a client's zoom away, so a pale pairing cannot be rescued by pinching —
-which is why these are tested, in `tests/client-app-zoom.test.ts`.
+Measured with the WCAG 2.1 formula against the handoff's neutrals (`--bg`
+#FFFFFF, `--surface-2` #F5F5F4, `--surface-3` #EBEBEA). The client app takes a
+client's zoom away, so a pale pairing cannot be rescued by pinching — which is
+why these are tested, in `tests/client-app-zoom.test.ts`.
 
-### `--success` #13804A on `--success-tint` #E3F4EA — 4.36:1
+Both values were changed to the smallest darkening that clears AA. Neither is
+distinguishable from the handoff's colour side by side.
 
-This is the PAID badge, the colour's headline use, so it is not a corner case.
+| token | handoff | now | what forced it |
+| --- | --- | --- | --- |
+| `--success` | #13804A | **#137D49** | the PAID badge on `--success-tint`: 4.36 -> 4.53 |
+| `--text-3` | #6E6E6A | **#6A6A67** | segmented-control labels on `--surface-3`: 4.29 -> 4.55 |
 
-| on | ratio | |
-|---|---|---|
-| white | 4.98 | pass |
-| surface-2 | 4.57 | pass |
-| success-tint | **4.36** | **fail** |
-| surface-3 | **4.18** | **fail** |
+One pairing is still out and is forbidden rather than fixed: `--success` on
+`--surface-3` measures 4.34, so a success label does not go on a grey track.
+Darkening further to clear it would have pushed the green visibly towards
+black. The test pins this.
 
-Minimal correction: **`#137D49`** — tint 4.53, white 5.18, surface-2 4.74. Visually
-indistinguishable from the handoff value. Still 4.34 on surface-3, so a success
-label on a surface-3 track needs a darker value again.
-
-For comparison the other two status colours are fine on their tints:
-warning #8A4D00 on #FDF0DB = 5.94, danger #C42B1C on #FCE9E7 = 4.84.
-
-### `--text-3` #6E6E6A on `--surface-3` #EBEBEA — 4.29:1
-
-| on | ratio | |
-|---|---|---|
-| white | 5.12 | pass |
-| surface-2 | 4.69 | pass |
-| surface-3 | **4.29** | **fail** |
-
-The design's segmented control puts inactive labels on a surface-3 track, which
-is exactly this pairing. Until the value is settled those labels use `--text-2`
-(6.38 on surface-3).
-
-Minimal correction: **`#6A6A67`** — surface-3 4.55, surface-2 4.97, white 5.43.
-
-**Decision needed:** adjust the two token values as above, or keep the handoff's
-hexes and forbid the two failing pairings in the design. The tokens are
-unchanged in stage 1 either way; the test pins both shortfalls so they cannot
-drift out of sight.
+For the record, the other status colours were always fine: warning #8A4D00 on
+#FDF0DB = 5.94, danger #C42B1C on #FCE9E7 = 4.84.
 
 ## Naming: "Credit"
 

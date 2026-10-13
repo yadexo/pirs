@@ -194,8 +194,10 @@ describe("text a client cannot zoom into", () => {
     const surface2 = token("surface-2");
     const surface3 = token("surface-3");
 
-    // The reading roles, on all three surfaces.
-    for (const name of ["ink", "text-2"]) {
+    // Every text role, on every surface it is allowed on. --text-3 is the
+    // palest of them and is why the handoff's #6E6E6A was darkened to
+    // #6A6A67: on surface-3 the original measured 4.29.
+    for (const name of ["ink", "text-2", "text-3"]) {
       for (const background of [bg, surface2, surface3]) {
         expect(contrast(token(name), background), `--${name} on ${background}`).toBeGreaterThanOrEqual(4.5);
       }
@@ -209,30 +211,15 @@ describe("text a client cannot zoom into", () => {
     }
 
     /**
-     * Two of the handoff's own values do not clear AA everywhere the design
-     * puts them. Both are pinned here so the shortfall cannot be forgotten,
-     * and both are written up with the minimal correction in
-     * docs/design/handoff-gaps.md — changing a design token's value is not a
-     * decision to make inside a test.
-     *
-     * --text-3, the palest text role: white 5.12, surface-2 4.69, but
-     * surface-3 4.29. The design's segmented control puts inactive labels on
-     * a surface-3 track; they use text-2 until the value is settled.
+     * --success carries the PAID badge, which sits on its own tint — the
+     * pairing that forced #13804A down to #137D49 (4.36 to 4.53). On
+     * surface-3 it still measures 4.34, so a success label does not go on a
+     * grey track. See docs/design/handoff-gaps.md.
      */
-    for (const background of [bg, surface2]) {
-      expect(contrast(token("text-3"), background), `--text-3 on ${background}`).toBeGreaterThanOrEqual(4.5);
-    }
-    expect(contrast(token("text-3"), surface3), "--text-3 is not for surface-3").toBeLessThan(4.5);
-
-    /**
-     * --success: white 4.98, surface-2 4.57, but its own tint 4.36 and
-     * surface-3 4.18. The tint pairing is the PAID badge, so this one is not
-     * a corner case — #137D49 would clear the tint at 4.53.
-     */
-    for (const background of [bg, surface2]) {
+    for (const background of [bg, surface2, token("success-tint")]) {
       expect(contrast(token("success"), background), `--success on ${background}`).toBeGreaterThanOrEqual(4.5);
     }
-    expect(contrast(token("success"), token("success-tint")), "--success on its tint is the known shortfall").toBeLessThan(4.5);
+    expect(contrast(token("success"), surface3), "--success is not for surface-3").toBeLessThan(4.5);
   });
 
   it("keeps --faint for decoration, never for words", () => {

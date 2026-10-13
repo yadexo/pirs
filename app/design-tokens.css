@@ -18,12 +18,12 @@
   --line: #e6e6e4;
   --line-strong: #cfcfcc;
   --disabled: #a8a8a4;
-  --text-3: #6e6e6a;
+  --text-3: #6a6a67;
   --text-2: #545450;
   --ink: #0d0d0d;
 
   /* Status is never colour alone — every one of these ships with a label. */
-  --success: #13804a;
+  --success: #137d49;
   --success-tint: #e3f4ea;
   --warning: #8a4d00;
   --warning-tint: #fdf0db;
