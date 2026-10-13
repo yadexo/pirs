@@ -1,0 +1,61 @@
+# Working on this repo
+
+White-label, multi-tenant clinic SaaS (branded "Pirs"). Three surfaces, one
+codebase: agency admin (`/agency`), clinic portal (`/m/:merchantId`), client
+app (`/app/:merchantSlug`). See `README.md` for the architecture.
+
+**Never use the name "Dermis"**; **do not position for medspas**; **do not
+claim regulatory compliance**; **never store card information**; tenant
+isolation is enforced at the data layer (`lib/tenant-db.ts`) — don't bypass it
+with the raw client except in platform-admin code paths.
+
+## Local environment
+
+- The repo lives at `C:\dev\deza`. If a tool reports a different cwd (an
+  OneDrive path), that's a stale pre-move copy — switch back to `C:\dev\deza`.
+- No GNU `make` on this Windows box — use the `.ps1` scripts directly or via
+  their `npm run` wrappers, never a `Makefile` target.
+- Leave the production build running via `npm run serve` for manual checks —
+  **never `next dev`** for anything that needs to look real (dev mode and prod
+  mode render differently enough to matter here). Don't add `loading.tsx`.
+- Run the full suite with Docker (and `next build`) before every commit:
+  `npm run lint && npm test && npm run build`.
+- Commit with `git -c user.name=dev -c user.email=dev@example.com` and end
+  commit messages with the `Co-Authored-By` line the session gives you.
+
+## Deployment: staging first, always
+
+There are three environments:
+
+| | Database | Where it runs | Branch |
+|---|---|---|---|
+| Local dev | Docker Postgres (`app_dev` / `app_test`) | your machine | any |
+| **Staging** | Neon branch `staging` | Vercel Preview, fixed URL (see `docs/deployment/staging-setup.md`) | `staging` |
+| **Production** | Neon `production` branch (`ep-frosty-cloud-zal3mzce`) | Vercel Production, `pirs.io` / `clinic.pirs.io` | `main` |
+
+**New work goes to `staging` first.** Branch off `staging` (or push directly
+to it for small changes), let it deploy, test it at the staging URL —
+including on a real phone — and only then merge `staging` into `main` to ship
+to production:
+
+```bash
+git checkout staging
+git pull
+# ...work, commit...
+git push                      # deploys to the staging URL automatically
+# once it looks right on staging:
+git checkout main
+git pull
+git merge staging
+git push                      # deploys to pirs.io / clinic.pirs.io
+```
+
+**Never touch the production database or production Vercel env vars without
+asking first.** Production database tasks go through `npm run prod:*`
+(`scripts/prod.ps1`), which prompts for the connection string and never
+writes it to disk. The equivalent staging tasks are `npm run stg:*`
+(`scripts/staging.ps1`), which additionally refuses outright if it's ever
+handed the production connection string — `stg:wipe` deletes every row in
+every table, so that guard isn't optional.
+
+First-time staging/Vercel/Neon/Stripe setup: `docs/deployment/staging-setup.md`.
