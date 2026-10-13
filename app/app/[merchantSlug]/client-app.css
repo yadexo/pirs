@@ -3197,3 +3197,666 @@
   color: var(--text-2);
   text-align: center;
 }
+
+/* ======================================================================== */
+/* Scan and Rewards — Pirs v2.                                              */
+/* ======================================================================== */
+
+/* ------------------------------------------------------------------ scan */
+.client-app .v2-scan {
+  padding: var(--space-5) var(--app-gutter) var(--space-6);
+  background: var(--bg);
+}
+.client-app .v2-scan h1 {
+  font-size: var(--display-size);
+  line-height: var(--display-line);
+  font-weight: 800;
+  color: var(--ink);
+}
+.client-app .v2-scan .lead {
+  margin-top: var(--space-2);
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  color: var(--text-2);
+}
+
+/* The card is the point of the screen, so it gets the whole width and the
+   code gets the whole card. */
+.client-app .v2-scan .card {
+  margin-top: var(--space-5);
+  padding: var(--space-5);
+  border-radius: var(--radius-xl);
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--line);
+  text-align: center;
+}
+.client-app .v2-scan .qr {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1 / 1;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: #ffffff;
+  box-shadow: inset 0 0 0 2px var(--brand-fill-white);
+}
+.client-app .v2-scan .qr svg,
+.client-app .v2-scan .qr img {
+  width: 100%;
+  height: 100%;
+}
+.client-app .v2-scan .qr .msg {
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-2);
+  padding: 0 var(--space-4);
+}
+.client-app .v2-scan .who {
+  display: block;
+  margin-top: var(--space-4);
+  font-size: var(--title-3-size);
+  line-height: var(--title-3-line);
+  font-weight: 700;
+  color: var(--ink);
+}
+.client-app .v2-scan .num {
+  display: block;
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  color: var(--text-2);
+  letter-spacing: 0.04em;
+}
+.client-app .v2-scan .tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+.client-app .v2-scan .tile {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  text-align: left;
+}
+.client-app .v2-scan .tile span {
+  display: block;
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-2);
+}
+.client-app .v2-scan .tile b {
+  font-size: var(--title-3-size);
+  line-height: var(--title-3-line);
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.client-app .v2-scan .ready {
+  margin-top: var(--space-8);
+}
+.client-app .v2-scan .ready h2 {
+  font-size: var(--title-2-size);
+  line-height: var(--title-2-line);
+  font-weight: 800;
+  color: var(--ink);
+  margin-bottom: var(--space-3);
+}
+.client-app .v2-scan .list {
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.client-app .v2-scan .list .row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+.client-app .v2-scan .list .row + .row {
+  border-top: 1px solid var(--line);
+}
+.client-app .v2-scan .thumb {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  display: grid;
+  place-items: center;
+}
+.client-app .v2-scan .thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.client-app .v2-scan .list .txt {
+  flex: 1;
+  min-width: 0;
+}
+.client-app .v2-scan .list .txt b {
+  display: block;
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  font-weight: 600;
+  color: var(--ink);
+}
+.client-app .v2-scan .list .txt span {
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-2);
+}
+.client-app .v2-scan .tip {
+  margin-top: var(--space-5);
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-3);
+  text-align: center;
+}
+
+/* --------------------------------------------------------------- rewards */
+.client-app .v2-rewards {
+  padding: var(--space-5) var(--app-gutter) var(--space-6);
+  background: var(--bg);
+}
+.client-app .v2-rewards .head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.client-app .v2-rewards .head h1 {
+  font-size: var(--display-size);
+  line-height: var(--display-line);
+  font-weight: 800;
+  color: var(--ink);
+}
+.client-app .v2-rewards .head button {
+  font-size: var(--small-size);
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+/* The balance card: what they have, and how far to the next thing. */
+.client-app .v2-balance {
+  margin-top: var(--space-4);
+  padding: var(--space-5);
+  border-radius: var(--radius-xl);
+  background: var(--ink);
+  color: #ffffff;
+}
+.client-app .v2-balance .top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.client-app .v2-balance .lab {
+  display: block;
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: rgba(255, 255, 255, 0.72);
+}
+.client-app .v2-balance .big {
+  display: block;
+  font-size: var(--display-size);
+  line-height: var(--display-line);
+  font-weight: 800;
+}
+.client-app .v2-balance .right {
+  text-align: right;
+}
+.client-app .v2-balance .right b {
+  font-size: var(--title-3-size);
+  line-height: var(--title-3-line);
+  font-weight: 800;
+}
+.client-app .v2-balance .bar {
+  display: block;
+  height: 8px;
+  margin-top: var(--space-4);
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.22);
+  overflow: hidden;
+}
+.client-app .v2-balance .bar span {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--brand);
+}
+.client-app .v2-balance .note {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: var(--small-size);
+  line-height: var(--small-line);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.client-app .v2-rewards .sec {
+  margin-top: var(--space-8);
+}
+.client-app .v2-rewards .sec h2 {
+  font-size: var(--title-2-size);
+  line-height: var(--title-2-line);
+  font-weight: 800;
+  color: var(--ink);
+  margin-bottom: var(--space-3);
+}
+
+.client-app .v2-rewardlist {
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.client-app .v2-rewardlist .row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+.client-app .v2-rewardlist .row + .row {
+  border-top: 1px solid var(--line);
+}
+.client-app .v2-rewardlist .ic {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--brand-fill-white);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+}
+/* Something still out of reach is not advertised in the clinic's colour. */
+.client-app .v2-rewardlist .row.goal .ic {
+  background: var(--bg);
+  color: var(--ink);
+}
+.client-app .v2-rewardlist .txt {
+  flex: 1;
+  min-width: 0;
+}
+.client-app .v2-rewardlist .txt b {
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  font-weight: 700;
+  color: var(--ink);
+}
+.client-app .v2-rewardlist .row .txt > span {
+  display: block;
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-2);
+}
+.client-app .v2-rewardlist .line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.client-app .v2-rewardlist .cost {
+  font-size: var(--caption-size);
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.client-app .v2-rewardlist .bar {
+  display: block;
+  height: 6px;
+  margin: var(--space-2) 0;
+  border-radius: var(--radius-full);
+  background: var(--line-strong);
+  overflow: hidden;
+}
+.client-app .v2-rewardlist .bar span {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--brand-strong);
+}
+.client-app .v2-rewardlist .take {
+  flex: none;
+  background: var(--ink);
+  color: #ffffff;
+}
+
+.client-app .v2-earn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.client-app .v2-earn .row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 0 1px var(--line);
+  text-align: left;
+  color: var(--ink);
+}
+.client-app .v2-earn .ic {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  display: grid;
+  place-items: center;
+}
+.client-app .v2-earn .txt {
+  flex: 1;
+  min-width: 0;
+}
+.client-app .v2-earn .txt b {
+  display: block;
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  font-weight: 600;
+}
+.client-app .v2-earn .txt span {
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-2);
+}
+.client-app .v2-earn .badge {
+  flex: none;
+  font-size: var(--caption-size);
+  font-weight: 700;
+  color: var(--brand-strong);
+  white-space: nowrap;
+}
+
+.client-app .v2-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-left: var(--space-5);
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  color: var(--text-2);
+}
+.client-app .v2-confirm p {
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  color: var(--text-2);
+}
+.client-app .v2-confirm p + p {
+  margin-top: var(--space-3);
+  color: var(--ink);
+}
+.client-app .v2-redeemed {
+  text-align: center;
+}
+.client-app .v2-redeemed p {
+  font-size: var(--small-size);
+  line-height: var(--small-line);
+  color: var(--text-2);
+}
+.client-app .v2-redeemed .code {
+  width: 60%;
+  margin: var(--space-5) auto;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.client-app .v2-redeemed .digits {
+  font-size: var(--title-3-size);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+
+/* ======================================================================== */
+/* Profile — Pirs v2: My items, Membership, Account.                        */
+/* ======================================================================== */
+
+.client-app .v2-profile {
+  background: var(--bg);
+  padding-bottom: var(--space-6);
+}
+
+/* --------------------------------------------------------------- header */
+.client-app .v2-profile .who {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--app-gutter) 0;
+}
+.client-app .v2-profile .avatar {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-full);
+  background: var(--ink);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  font-size: var(--title-2-size);
+  font-weight: 800;
+}
+.client-app .v2-profile .info {
+  min-width: 0;
+  flex: 1;
+}
+.client-app .v2-profile h1 {
+  font-size: var(--title-1-size);
+  line-height: var(--title-1-line);
+  font-weight: 800;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.client-app .v2-profile .meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.client-app .v2-profile .points {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--caption-size);
+  font-weight: 700;
+  color: var(--brand-strong);
+}
+.client-app .v2-profile .tabs {
+  padding: var(--space-5) var(--app-gutter) 0;
+}
+
+/* ------------------------------------------------------------- my items */
+.client-app .v2-items {
+  padding: var(--space-6) var(--app-gutter) 0;
+}
+.client-app .v2-items section + section {
+  margin-top: var(--space-6);
+}
+.client-app .v2-items h2 {
+  font-size: var(--title-2-size);
+  line-height: var(--title-2-line);
+  font-weight: 800;
+  color: var(--ink);
+  margin-bottom: var(--space-3);
+}
+.client-app .v2-items .list {
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.client-app .v2-items .row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  color: var(--ink);
+}
+.client-app .v2-items .row + .row {
+  border-top: 1px solid var(--line);
+}
+/* Used up or expired: still readable, visibly finished. */
+.client-app .v2-items .list.past .row .txt b {
+  color: var(--text-2);
+}
+.client-app .v2-items .thumb {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  display: grid;
+  place-items: center;
+}
+.client-app .v2-items .list.past .thumb {
+  background: var(--bg);
+  color: var(--text-3);
+}
+.client-app .v2-items .txt {
+  flex: 1;
+  min-width: 0;
+}
+.client-app .v2-items .txt b {
+  display: block;
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  font-weight: 600;
+}
+.client-app .v2-items .txt span {
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-2);
+}
+.client-app .v2-items .none {
+  padding: var(--space-10) 0;
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  color: var(--text-2);
+  text-align: center;
+}
+
+/* The two rows the board puts under My items. */
+.client-app .v2-profilelinks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--app-gutter) 0;
+}
+.client-app .v2-profilelinks .row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  color: var(--ink);
+  text-align: left;
+}
+.client-app .v2-profilelinks .ic {
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+.client-app .v2-profilelinks .txt {
+  flex: 1;
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------------- account */
+.client-app .v2-account {
+  padding: var(--space-6) var(--app-gutter) 0;
+}
+.client-app .v2-account h2 {
+  font-size: var(--title-3-size);
+  line-height: var(--title-3-line);
+  font-weight: 700;
+  color: var(--text-2);
+  margin-bottom: var(--space-3);
+}
+.client-app .v2-account h2 + .group {
+  margin-bottom: var(--space-6);
+}
+.client-app .v2-account .group {
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.client-app .v2-account .row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  color: var(--ink);
+}
+.client-app .v2-account .row + .row {
+  border-top: 1px solid var(--line);
+}
+.client-app .v2-account .ic {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+}
+.client-app .v2-account .txt {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  font-weight: 600;
+}
+.client-app .v2-account .val {
+  flex: none;
+  font-size: var(--small-size);
+  color: var(--text-2);
+}
+
+/* Both destructive, and both saying so rather than hiding at the bottom. */
+.client-app .v2-logout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 56px;
+  margin-top: var(--space-6);
+  border-radius: var(--radius-md);
+  background: var(--danger-tint);
+  color: var(--danger);
+  font-size: 17px;
+  font-weight: 700;
+}
+.client-app .v2-delete {
+  width: 100%;
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  font-size: var(--small-size);
+  font-weight: 600;
+  color: var(--text-2);
+}
+.client-app .v2-poweredby {
+  margin-top: var(--space-5);
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-3);
+  text-align: center;
+}
+
+/* The membership tab keeps its current cards: the clinic portal stage has not
+   reached it, and its aliases still resolve. Only its gutter is aligned with
+   the other two tabs. */

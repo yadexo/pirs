@@ -8,6 +8,7 @@ import { NotificationSettings } from "@/components/client-app/push";
 import { MyItems, type ClientItem } from "./my-items";
 import type { BalanceChange } from "@/lib/client-app-data";
 import { Sheet, Icon, EmptyState, money, useToast } from "@/components/client-app/ui";
+import { SegmentedControl } from "@/components/client-app/v2";
 import { signOutOfClinicAction } from "@/lib/actions/session";
 import {
   clientSaveProfileAction,
@@ -52,12 +53,17 @@ export interface BillingRow {
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
+/**
+ * Three tabs, as the handoff draws them. Appointments and orders used to be a
+ * fourth; they are now sheets opened from the bottom of My items, which is
+ * where the board puts "Orders and receipts" — nothing was dropped, it just
+ * stopped competing for a tab with the things a client came here to use.
+ */
 const SEGMENTS = [
-  { key: "treatments", label: "Treatments" },
-  { key: "items", label: "My items" },
-  { key: "membership", label: "Membership" },
-  { key: "settings", label: "Settings" },
-];
+  { value: "items", label: "My items" },
+  { value: "membership", label: "Membership" },
+  { value: "settings", label: "Account" },
+] as const;
 
 type SettingsSheet =
   | null
@@ -70,7 +76,22 @@ type SettingsSheet =
   | "help"
   | "legal"
   | "balances"
+  | "appointments"
   | "delete";
+
+/** One row in the Account list: icon tile, label, optional value, chevron. */
+function AccountRow({ icon, label, value, onClick }: { icon: string; label: string; value?: string; onClick: () => void }) {
+  return (
+    <button type="button" className="row" onClick={onClick}>
+      <span className="ic" aria-hidden="true">
+        <Icon name={icon} size={20} />
+      </span>
+      <span className="txt">{label}</span>
+      {value && <span className="val">{value}</span>}
+      <Icon name="chevR" size={20} />
+    </button>
+  );
+}
 
 export function ProfileView({
   merchantSlug,
@@ -85,6 +106,7 @@ export function ProfileView({
   billing,
   balanceHistory,
   appVersion,
+  platformName,
 }: {
   merchantSlug: string;
   merchantName: string;
@@ -100,13 +122,14 @@ export function ProfileView({
   /** Credit and points the clinic moved, with the reason they gave. */
   balanceHistory: BalanceChange[];
   appVersion: string;
+  /** The agency's own white-label name — never a hardcoded one. */
+  platformName: string;
 }) {
   const router = useRouter();
   const timeZone = useClinicTimeZone();
   const { toast } = useToast();
   const base = useBasePath();
   const finder = useFinderPath();
-  const segRef = React.useRef<HTMLDivElement>(null);
 
   const [sheet, setSheet] = React.useState<SettingsSheet>(null);
   const [pending, setPending] = React.useState(false);
@@ -115,18 +138,12 @@ export function ProfileView({
   const [confirmCancelPlan, setConfirmCancelPlan] = React.useState(false);
   const [deleteText, setDeleteText] = React.useState("");
 
-  const [indicator, setIndicator] = React.useState({ left: 0, width: 0 });
-  React.useLayoutEffect(() => {
-    const active = segRef.current?.querySelector<HTMLButtonElement>("button.on");
-    if (active) setIndicator({ left: active.offsetLeft, width: active.offsetWidth });
-  }, [tab]);
-
   // Both pinned to one locale and the clinic's zone — see lib/client-format.ts.
   const date = (iso: string) => formatDay(iso, timeZone);
   const time = (iso: string) => formatTime(iso, timeZone);
 
   function go(next: string) {
-    router.push(`${base}/profile${next === "treatments" ? "" : `?tab=${next}`}`);
+    router.push(`${base}/profile${next === "items" ? "" : `?tab=${next}`}`);
   }
 
   async function cancelAppt(id: string) {
@@ -154,20 +171,34 @@ export function ProfileView({
 
   const hasTreatments = appointments.length > 0 || orders.length > 0;
 
+  const initials = `${summary.firstName.charAt(0)}${summary.lastName.charAt(0)}`.toUpperCase();
+
   return (
-    <div>
-      <div className="seg" ref={segRef}>
-        {SEGMENTS.map((s) => (
-          <button key={s.key} className={tab === s.key ? "on" : undefined} onClick={() => go(s.key)}>
-            {s.label}
-          </button>
-        ))}
-        <i className="ind" style={{ left: indicator.left, width: indicator.width }} />
+    <div className="v2-profile">
+      <header className="who">
+        <span className="avatar" aria-hidden="true">
+          {initials}
+        </span>
+        <div className="info">
+          <h1>
+            {summary.firstName} {summary.lastName}
+          </h1>
+          <div className="meta">
+            <span className="v2-tag v2-tag-soft">{summary.isMember ? (summary.membershipPlanName ?? "MEMBER") : "NOT A MEMBER"}</span>
+            <span className="points tabular">
+              <Icon name="star" size={14} /> {summary.loyaltyPoints} points
+            </span>
+          </div>
+        </div>
+      </header>
+
+      <div className="tabs">
+        <SegmentedControl label="Profile sections" value={tab} onChange={(next: string) => go(next)} options={SEGMENTS.map((s) => ({ value: s.value as string, label: s.label }))} />
       </div>
 
-      {/* ------------------------------------------------------ treatments */}
-      {tab === "treatments" && (
-        <div style={{ padding: "var(--gap) var(--pad-x) 0", display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Appointments and orders, opened from the bottom of My items. */}
+      <Sheet open={sheet === "appointments"} onClose={() => setSheet(null)} title="Appointments">
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {!hasTreatments ? (
             <div className="ca-card">
               <EmptyState
@@ -241,7 +272,7 @@ export function ProfileView({
             </>
           )}
         </div>
-      )}
+      </Sheet>
 
       {/* ------------------------------------------------------ membership */}
       {tab === "membership" && (
@@ -305,35 +336,75 @@ export function ProfileView({
         </div>
       )}
 
-      {tab === "items" && <MyItems items={items} />}
+      {tab === "items" && (
+        <>
+          <MyItems items={items} />
+          <div className="v2-profilelinks">
+            <button type="button" className="row" onClick={() => setSheet("appointments")}>
+              <span className="ic" aria-hidden="true">
+                <Icon name="calendar" size={20} />
+              </span>
+              <span className="txt">Appointments</span>
+              <Icon name="chevR" size={20} />
+            </button>
+            <button type="button" className="row" onClick={() => setSheet("orders")}>
+              <span className="ic" aria-hidden="true">
+                <Icon name="bag" size={20} />
+              </span>
+              <span className="txt">Orders and receipts</span>
+              <Icon name="chevR" size={20} />
+            </button>
+          </div>
+        </>
+      )}
 
       {/* -------------------------------------------------------- settings */}
+      {/* Account: grouped as the board groups it — the client's own details,
+          then the app, then the clinic, then the two destructive ones. */}
       {tab === "settings" && (
-        <>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "var(--gap) var(--pad-x)" }}>
-            <SettingRow label="Personal details" onClick={() => setSheet("personal")} />
-            <SettingRow label="Notification preferences" onClick={() => setSheet("notifications")} />
-            <SettingRow label="Payment methods" onClick={() => setSheet("payment")} />
-            <SettingRow label="Order history" onClick={() => setSheet("orders")} />
-            <SettingRow label="Credit & points history" onClick={() => setSheet("balances")} />
-            <SettingRow label="Referral link" onClick={() => setSheet("referral")} />
-            <SettingRow label="Language" onClick={() => setSheet("language")} />
-            <SettingRow label="Help & support" onClick={() => setSheet("help")} />
-            <SettingRow label="Terms & privacy" onClick={() => setSheet("legal")} />
-            <Link className="setrow" href={`${finder}?switch=1`} prefetch={false}>
-              <span>Switch clinic</span>
+        <div className="v2-account">
+          <h2>Your details</h2>
+          <div className="group">
+            <AccountRow icon="user" label="Personal details" onClick={() => setSheet("personal")} />
+            <AccountRow icon="card" label="Saved payment methods" onClick={() => setSheet("payment")} />
+            <AccountRow icon="tag" label="Credit and points history" onClick={() => setSheet("balances")} />
+            <AccountRow icon="globe" label="Language" value="English" onClick={() => setSheet("language")} />
+          </div>
+
+          <h2>App</h2>
+          <div className="group">
+            <AccountRow icon="bell" label="Notifications" onClick={() => setSheet("notifications")} />
+            <AccountRow icon="users" label="Referral link" onClick={() => setSheet("referral")} />
+            <Link className="row" href={`${finder}?switch=1`} prefetch={false}>
+              <span className="ic" aria-hidden="true">
+                <Icon name="pin" size={20} />
+              </span>
+              <span className="txt">Switch clinic</span>
               <Icon name="chevR" size={20} />
             </Link>
-            <SettingRow label="Delete account" danger onClick={() => setSheet("delete")} />
-            <form action={signOutOfClinicAction.bind(null, merchantSlug)}>
-              <button type="submit" className="setrow" style={{ justifyContent: "space-between" }}>
-                <span>Log out</span>
-                <Icon name="exit" size={20} />
-              </button>
-            </form>
           </div>
-          <p style={{ textAlign: "center", color: "var(--muted)", fontSize: 14, padding: "24px 0 6px" }}>Version {appVersion}</p>
-        </>
+
+          <h2>Clinic</h2>
+          <div className="group">
+            <AccountRow icon="help" label="Contact the clinic" onClick={() => setSheet("help")} />
+            <AccountRow icon="shield" label="Terms and privacy" onClick={() => setSheet("legal")} />
+          </div>
+
+          <form action={signOutOfClinicAction.bind(null, merchantSlug)}>
+            <button type="submit" className="v2-logout">
+              <Icon name="exit" size={20} /> Log out
+            </button>
+          </form>
+          <button type="button" className="v2-delete" onClick={() => setSheet("delete")}>
+            Delete account
+          </button>
+
+          {/* A platform that has not named itself says nothing, rather than
+              leaving a gap where a name should be. */}
+          <p className="v2-poweredby">
+            {platformName ? `Powered by ${platformName} · ` : ""}Version {appVersion}
+          </p>
+        </div>
       )}
 
       {/* ---------------------------------------------------------- sheets */}
@@ -590,15 +661,6 @@ export function ProfileView({
         }}
       />
     </div>
-  );
-}
-
-function SettingRow({ label, danger, onClick }: { label: string; danger?: boolean; onClick: () => void }) {
-  return (
-    <button className={`setrow ${danger ? "danger" : ""}`} onClick={onClick}>
-      <span>{label}</span>
-      {danger ? <Icon name="trash" size={20} /> : <Icon name="chevR" size={20} />}
-    </button>
   );
 }
 

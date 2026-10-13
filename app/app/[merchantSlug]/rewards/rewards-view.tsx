@@ -3,9 +3,27 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useBasePath } from "../base-path";
-import { Gloss, Sheet, Icon, EmptyState, QrCode, CountUp, money, useToast } from "@/components/client-app/ui";
-import { clientRedeemRewardAction, clientReferralAction, clientReviewAction } from "@/lib/actions/client-app";
+import { Sheet, Icon, EmptyState, QrCode, CountUp, money, useToast } from "@/components/client-app/ui";
+import { Button } from "@/components/client-app/v2";
+import { clientRedeemRewardAction, clientReviewAction, clientReferralAction } from "@/lib/actions/client-app";
 import type { ClientSummary, RewardsData } from "@/lib/client-app-data";
+
+/**
+ * Rewards, Pirs v2.
+ *
+ * Three questions in order: what the client has, what they can take now, and
+ * what they are working towards. The last one is a progress bar rather than a
+ * number, because "880 more points" means nothing without knowing how far that
+ * is.
+ */
+
+const EARN_ICONS: Record<string, string> = {
+  referral: "users",
+  purchase: "bag",
+  visit: "qr",
+  review: "star",
+  birthday: "sparkle",
+};
 
 export function RewardsView({
   merchantSlug,
@@ -23,9 +41,14 @@ export function RewardsView({
   const { toast } = useToast();
 
   const [selected, setSelected] = React.useState<RewardsData["rewards"][number] | null>(null);
-  const [seeAll, setSeeAll] = React.useState(false);
+  const [howOpen, setHowOpen] = React.useState(false);
   const [pending, setPending] = React.useState(false);
   const [redeemed, setRedeemed] = React.useState<{ code: string; name: string } | null>(null);
+
+  const points = summary.loyaltyPoints;
+  const affordable = data.rewards.filter((r) => r.pointsCost <= points);
+  const working = data.rewards.filter((r) => r.pointsCost > points);
+  const next = working[0] ?? null;
 
   async function redeem(id: string) {
     setPending(true);
@@ -53,15 +76,15 @@ export function RewardsView({
       return;
     }
     if (key === "referral") {
-      const url = typeof window !== "undefined" ? window.location.origin + base : "";
+      const link = typeof window !== "undefined" ? window.location.origin + base : "";
       if (typeof navigator !== "undefined" && navigator.share) {
         try {
-          await navigator.share({ title: "Join me", url });
+          await navigator.share({ title: "Join me", url: link });
         } catch {
           return; // user dismissed the share sheet — no points
         }
       } else if (typeof navigator !== "undefined" && navigator.clipboard) {
-        await navigator.clipboard.writeText(url).catch(() => {});
+        await navigator.clipboard.writeText(link).catch(() => {});
         toast("Referral link copied");
       }
       const res = await clientReferralAction(merchantSlug);
@@ -77,97 +100,123 @@ export function RewardsView({
   }
 
   return (
-    <div>
-      {/* Loyalty card */}
-      <div style={{ padding: "var(--pad-x) var(--pad-x) 4px" }}>
-        <Gloss className="loyal" bevel>
-          <div>
-            <div style={{ fontSize: 42, fontWeight: 700, color: "var(--on-black)", lineHeight: 1.05 }}>
-              <CountUp to={summary.loyaltyPoints} />
-            </div>
-            <div style={{ fontSize: 14, color: "var(--on-black-muted)" }}>Loyalty Points</div>
-          </div>
-          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12 }}>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 600, color: "var(--on-black)" }}>{summary.firstName}</div>
-              <div style={{ fontSize: 14, color: "var(--on-black-muted)" }}>Joined {summary.joinedDaysAgo} days ago</div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-              <span className="pill-light tabular">{money(summary.cashBalanceCents, currency)}</span>
-              <span style={{ fontSize: 19, color: "var(--on-black-muted)" }}>Patient App Cash</span>
-            </div>
-          </div>
-        </Gloss>
+    <div className="v2-rewards">
+      <div className="head">
+        <h1>Rewards</h1>
+        <button type="button" onClick={() => setHowOpen(true)}>
+          How it works
+        </button>
       </div>
 
-      {/* Rewards */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px var(--pad-x) 10px" }}>
-        <h2 className="h-sec">Rewards</h2>
-        {data.rewards.length > 0 && (
-          <button onClick={() => setSeeAll(true)} style={{ color: "var(--muted)", fontSize: 15, fontWeight: 500 }}>
-            See more ›
-          </button>
+      {/* What they have, and how far to the next thing. */}
+      <div className="v2-balance">
+        <div className="top">
+          <span>
+            <span className="lab">Your points</span>
+            <b className="big">
+              <CountUp to={points} />
+            </b>
+          </span>
+          <span className="right">
+            <span className="lab">Credit</span>
+            <b className="tabular">{money(summary.cashBalanceCents, currency)}</b>
+          </span>
+        </div>
+        {next && (
+          <>
+            <span className="bar" aria-hidden="true">
+              <span style={{ width: `${Math.min(100, Math.round((points / next.pointsCost) * 100))}%` }} />
+            </span>
+            <span className="note">
+              {next.pointsCost - points} more points for your next reward: {next.name}
+            </span>
+          </>
         )}
       </div>
 
       {data.rewards.length === 0 ? (
-        <div style={{ padding: "0 var(--pad-x)" }}>
-          <div className="ca-card">
-            <EmptyState text="No rewards available yet" sub="Your clinic hasn't published any rewards." />
-          </div>
+        <div className="v2-empty">
+          <EmptyState text="No rewards yet" sub="Your clinic hasn't published any. The points you earn now are kept for when they do." />
         </div>
       ) : (
-        <div className="rwrow no-scrollbar">
-          {data.rewards.map((r) => {
-            const affordable = summary.loyaltyPoints >= r.pointsCost;
-            return (
-              <div key={r.id} className="rwcard">
-                <Gloss style={{ height: 100 }}>
-                  <span style={{ display: "grid", placeItems: "center", height: "100%", color: "var(--on-black-muted)" }}>
-                    <Icon name="gift" size={30} />
-                  </span>
-                </Gloss>
-                <span style={{ padding: "10px 12px 12px", display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
-                  <b style={{ fontSize: 14, fontWeight: 600, color: "var(--ink-strong)" }}>{r.name}</b>
-                  <span className="tabular" style={{ fontSize: 14, color: "var(--muted)" }}>
-                    {r.pointsCost} points
-                  </span>
-                  {affordable ? (
-                    <button className="pill-badge" onClick={() => setSelected(r)}>
+        <>
+          {affordable.length > 0 && (
+            <section className="sec">
+              <h2>Ready to redeem</h2>
+              <div className="v2-rewardlist">
+                {affordable.map((r) => (
+                  <div className="row" key={r.id}>
+                    <span className="ic" aria-hidden="true">
+                      <Icon name="tag" size={22} />
+                    </span>
+                    <span className="txt">
+                      <b>{r.name}</b>
+                      <span className="tabular">{r.pointsCost} points</span>
+                    </span>
+                    <Button variant="pill" className="take" onClick={() => setSelected(r)}>
                       Redeem
-                    </button>
-                  ) : (
-                    <span className="pill-light dis tabular">{r.pointsCost - summary.loyaltyPoints} more points</span>
-                  )}
-                </span>
+                    </Button>
+                  </div>
+                ))}
               </div>
-            );
-          })}
-        </div>
+            </section>
+          )}
+
+          {working.length > 0 && (
+            <section className="sec">
+              <h2>Keep earning</h2>
+              <div className="v2-rewardlist">
+                {working.map((r) => (
+                  <div className="row goal" key={r.id}>
+                    <span className="ic" aria-hidden="true">
+                      <Icon name="gift" size={22} />
+                    </span>
+                    <span className="txt">
+                      <span className="line">
+                        <b>{r.name}</b>
+                        <span className="cost tabular">{r.pointsCost} pts</span>
+                      </span>
+                      <span className="bar" aria-hidden="true">
+                        <span style={{ width: `${Math.min(100, Math.round((points / r.pointsCost) * 100))}%` }} />
+                      </span>
+                      <span className="need">Need {r.pointsCost - points} more points</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
 
-      {/* Need more points? */}
       {data.earnRules.length > 0 && (
-        <>
-          <div style={{ padding: "20px var(--pad-x) 2px" }}>
-            <h2 className="h-sec">Need more points?</h2>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "10px var(--pad-x) 0" }}>
+        <section className="sec">
+          <h2>Earn faster</h2>
+          <div className="v2-earn">
             {data.earnRules.map((r) => (
-              <button key={r.key} className="needrow" onClick={() => onEarnRow(r.key, r.url)}>
-                <span style={{ color: "var(--ink-strong)", flex: "none", display: "grid", placeItems: "center" }}>
-                  <Icon name={r.key === "referral" ? "users" : r.key === "purchase" ? "bag" : r.key === "visit" ? "qr" : r.key === "review" ? "star" : "sparkle"} size={22} />
+              <button key={r.key} type="button" className="row" onClick={() => onEarnRow(r.key, r.url)}>
+                <span className="ic" aria-hidden="true">
+                  <Icon name={EARN_ICONS[r.key] ?? "sparkle"} size={20} />
                 </span>
-                <span style={{ flex: 1 }}>
-                  <b style={{ fontSize: 16, fontWeight: 500, color: "var(--ink)", display: "block" }}>{r.title}</b>
-                  {r.subtitle && <span style={{ fontSize: 14, color: "var(--muted)" }}>{r.subtitle}</span>}
+                <span className="txt">
+                  <b>{r.title}</b>
+                  {r.subtitle && <span>{r.subtitle}</span>}
                 </span>
-                <span className="pill-badge">{r.badge}</span>
+                <span className="badge">{r.badge}</span>
+                <Icon name="chevR" size={20} />
               </button>
             ))}
           </div>
-        </>
+        </section>
       )}
+
+      <Sheet open={howOpen} onClose={() => setHowOpen(false)} title="How rewards work" cta={<Button onClick={() => setHowOpen(false)}>Got it</Button>}>
+        <ol className="v2-steps">
+          <li>Earn points on what you spend, and every time you scan your code at the desk.</li>
+          <li>Watch the bar fill up towards the next reward.</li>
+          <li>Redeem it here and show the code at the desk.</li>
+        </ol>
+      </Sheet>
 
       {/* Confirm redemption */}
       <Sheet
@@ -176,77 +225,33 @@ export function RewardsView({
         title={selected?.name}
         cta={
           selected && (
-            <button className="btn-black" disabled={pending} onClick={() => redeem(selected.id)}>
-              {pending ? "Redeeming…" : `Redeem for ${selected.pointsCost} points`}
-            </button>
+            <Button loading={pending} onClick={() => redeem(selected.id)}>
+              Redeem for {selected.pointsCost} points
+            </Button>
           )
         }
       >
         {selected && (
-          <>
-            {selected.description && <p style={{ color: "var(--muted)", fontSize: 15, marginTop: -8 }}>{selected.description}</p>}
-            <p style={{ fontSize: 16, marginTop: 12 }}>
-              This costs <b>{selected.pointsCost} points</b>. You have {summary.loyaltyPoints}.
+          <div className="v2-confirm">
+            {selected.description && <p>{selected.description}</p>}
+            <p>
+              This costs <b>{selected.pointsCost} points</b>. You have {points}.
             </p>
-          </>
+          </div>
         )}
       </Sheet>
 
       {/* Redemption code */}
-      <Sheet
-        open={!!redeemed}
-        onClose={() => setRedeemed(null)}
-        title="Your reward"
-        cta={
-          <button className="btn-black" onClick={() => setRedeemed(null)}>
-            Done
-          </button>
-        }
-      >
+      <Sheet open={!!redeemed} onClose={() => setRedeemed(null)} title="Your reward" cta={<Button onClick={() => setRedeemed(null)}>Done</Button>}>
         {redeemed && (
-          <>
-            <p style={{ color: "var(--muted)", fontSize: 15, marginTop: -8 }}>
-              Show this at the desk. Single use.
-            </p>
-            <div style={{ display: "flex", justifyContent: "center", padding: "18px 0" }}>
-              <div className="qwhite" style={{ width: "56%", padding: 16, boxShadow: "var(--shadow-card)" }}>
-                <QrCode value={redeemed.code} />
-              </div>
+          <div className="v2-redeemed">
+            <p>Show this at the desk. Single use.</p>
+            <div className="code">
+              <QrCode value={redeemed.code} />
             </div>
-            <p style={{ textAlign: "center", fontWeight: 700, fontSize: 18, letterSpacing: "0.06em" }}>{redeemed.code}</p>
-          </>
+            <p className="digits">{redeemed.code}</p>
+          </div>
         )}
-      </Sheet>
-
-      {/* All rewards */}
-      <Sheet open={seeAll} onClose={() => setSeeAll(false)} title="All rewards">
-        {data.rewards.map((r) => {
-          const affordable = summary.loyaltyPoints >= r.pointsCost;
-          return (
-            <div key={r.id} className="optrow">
-              <span style={{ flex: 1 }}>
-                <b style={{ fontSize: 15 }}>{r.name}</b>
-                <br />
-                <span className="tabular" style={{ color: "var(--muted)", fontSize: 14 }}>
-                  {r.pointsCost} points
-                </span>
-              </span>
-              {affordable ? (
-                <button
-                  className="pill-badge"
-                  onClick={() => {
-                    setSeeAll(false);
-                    setSelected(r);
-                  }}
-                >
-                  Redeem
-                </button>
-              ) : (
-                <span className="pill-light dis tabular">{r.pointsCost - summary.loyaltyPoints} more</span>
-              )}
-            </div>
-          );
-        })}
       </Sheet>
     </div>
   );

@@ -19,7 +19,13 @@ const TABS = [
   { key: "profile", label: "Profile", icon: "user" },
 ] as const;
 
-const TITLES: Record<string, string> = { home: "Home", shop: "Shop", scan: "", rewards: "Rewards", profile: "Account" };
+/**
+ * Only Shop still puts its name in the header bar. Scan, Rewards and Profile
+ * open with a title of their own — the handoff draws them that way, and two
+ * headings saying the same word is one more than a screen needs. The bar stays
+ * for the search and cart buttons.
+ */
+const TITLES: Record<string, string> = { home: "Home", shop: "Shop", scan: "", rewards: "", profile: "" };
 
 export function ClientAppShell({
   base,

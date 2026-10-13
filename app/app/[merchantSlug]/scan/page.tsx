@@ -1,5 +1,7 @@
 import { getClientAppContext } from "@/lib/client-app-context";
-import { getClientSummary } from "@/lib/client-app-data";
+import { getClientSummary, getRedeemableItems } from "@/lib/client-app-data";
+import { clientNumberLabel } from "@/lib/client-number";
+import { rawDb } from "@/lib/db";
 import { ScanView } from "./scan-view";
 
 export default async function ScanPage({ params }: { params: Promise<{ merchantSlug: string }> }) {
@@ -7,15 +9,26 @@ export default async function ScanPage({ params }: { params: Promise<{ merchantS
   const ctx = await getClientAppContext(merchantSlug);
   if (!ctx.customerProfileId) return null;
 
-  const summary = await getClientSummary(ctx.db, ctx.customerProfileId);
+  const [summary, items, agency] = await Promise.all([
+    getClientSummary(ctx.db, ctx.customerProfileId),
+    getRedeemableItems(ctx.db, ctx.customerProfileId),
+    // The platform's own white-label name, so a client's number is not
+    // prefixed with a brand the clinic never agreed to.
+    rawDb.agencySettings.findFirst({ select: { name: true } }),
+  ]);
   if (!summary) return null;
 
   return (
     <ScanView
       firstName={summary.firstName}
       lastName={summary.lastName}
-      joinedDaysAgo={summary.joinedDaysAgo}
-      isMember={summary.isMember}
+      clientNumber={clientNumberLabel(ctx.customerProfileId, agency?.name ?? "")}
+      points={summary.loyaltyPoints}
+      creditCents={summary.cashBalanceCents}
+      currency={ctx.merchant.currency}
+      readyItems={items
+        .filter((i) => i.status === "AVAILABLE")
+        .map((i) => ({ id: i.id, name: i.name, detail: null, imageUrl: null }))}
     />
   );
 }

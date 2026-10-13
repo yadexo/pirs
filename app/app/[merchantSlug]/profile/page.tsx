@@ -1,4 +1,5 @@
 import { getClientAppContext } from "@/lib/client-app-context";
+import { rawDb } from "@/lib/db";
 import { getBalanceHistory, getClientSummary, getRedeemableItems } from "@/lib/client-app-data";
 import { ProfileView } from "./profile-view";
 
@@ -14,9 +15,11 @@ export default async function ProfilePage({
   const ctx = await getClientAppContext(merchantSlug);
   if (!ctx.customerProfileId) return null;
 
-  const tab = sp.tab === "membership" || sp.tab === "settings" || sp.tab === "items" ? sp.tab : "treatments";
+  // My items is where a client lands: it is the one tab with something of
+  // theirs on it. ?tab=treatments was the old fourth tab and is now a sheet.
+  const tab = sp.tab === "membership" || sp.tab === "settings" ? sp.tab : "items";
 
-  const [summary, orders, appointments, items, billing, balanceHistory] = await Promise.all([
+  const [summary, orders, appointments, items, billing, balanceHistory, agency] = await Promise.all([
     getClientSummary(ctx.db, ctx.customerProfileId),
     ctx.db.order.findMany({
       // A refunded order belongs in the history too — it is the one a client
@@ -42,6 +45,8 @@ export default async function ProfilePage({
       take: 12,
     }),
     getBalanceHistory(ctx.db, ctx.customerProfileId),
+    // "Powered by …" is the agency's own white-label name, not a fixed one.
+    rawDb.agencySettings.findFirst({ select: { name: true } }),
   ]);
   if (!summary) return null;
 
@@ -57,6 +62,7 @@ export default async function ProfilePage({
       summary={summary}
       items={items}
       appVersion="1.0.0"
+      platformName={agency?.name ?? ""}
       appointments={appointments.map((a) => ({
         id: a.id,
         serviceId: a.service.id,

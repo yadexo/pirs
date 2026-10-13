@@ -51,6 +51,15 @@ adds that tax the same way `clientCheckoutAction` does, so the figure under
 tax-on-top clinic should see a different label; "incl. VAT" is at least true
 for both.
 
+## The client number is not searchable
+
+Scan shows a client number, as the board does. It is derived from the profile
+id (`lib/client-number.ts`) rather than stored, so there is nothing to keep
+unique and nothing to backfill — but it also means nobody at the desk can look
+a client up by it. If that is wanted it needs a real column, a unique index and
+a search in the clinic portal. Until then it identifies a client on a screen
+somebody is already holding, next to the QR that does the actual work.
+
 ## Member points multiplier
 
 The handoff shows a points multiplier on the membership card. The app has no

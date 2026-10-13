@@ -72,46 +72,56 @@ export function MyItems({ items }: { items: ClientItem[] }) {
 
   if (items.length === 0) {
     return (
-      <div style={{ padding: "var(--gap) var(--pad-x)" }}>
-        <p style={{ color: "var(--muted)", fontSize: 15, textAlign: "center", padding: "32px 0" }}>
-          Anything you buy in the app appears here with its own code to show at the clinic.
-        </p>
+      <div className="v2-items">
+        <p className="none">Anything you buy in the app appears here with its own code to show at the clinic.</p>
       </div>
     );
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "var(--gap) var(--pad-x)" }}>
-      {available.map((item) => (
-        <button key={item.id} className="ca-itemrow" onClick={() => setOpen(item)}>
-          <span className="ca-itemqr" aria-hidden="true">
-            <Icon name="qr" size={22} />
-          </span>
-          <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-            <span className="ca-itemname">{item.name}</span>
-            <span className="ca-itemmeta">
-              Bought {day(item.purchasedAt, timeZone)} · code {item.code}
-            </span>
-          </span>
-          <Icon name="chevR" size={20} />
-        </button>
-      ))}
+    <div className="v2-items">
+      {available.length > 0 && (
+        <section>
+          <h2>Ready to use</h2>
+          <div className="list">
+            {available.map((item) => (
+              <button key={item.id} type="button" className="row" onClick={() => setOpen(item)}>
+                <span className="thumb" aria-hidden="true">
+                  <Icon name="qr" size={20} />
+                </span>
+                <span className="txt">
+                  <b>{item.name}</b>
+                  {/* Booking links come in a later stage; until then every item
+                      is collected the same way. */}
+                  <span>Show your code at the desk</span>
+                </span>
+                <Icon name="chevR" size={20} />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {past.length > 0 && (
-        <>
-          <p className="ca-itemhead">Used and expired</p>
-          {past.map((item) => (
-            <div key={item.id} className="ca-itemrow done">
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span className="ca-itemname">{item.name}</span>
-                <span className="ca-itemmeta">
-                  {STATUS_LABEL[statusOf(item)]}
-                  {item.redeemedAt ? ` · ${day(item.redeemedAt, timeZone)}` : ""}
+        <section>
+          <h2>Past items</h2>
+          <div className="list past">
+            {past.map((item) => (
+              <div key={item.id} className="row" >
+                <span className="thumb" aria-hidden="true">
+                  <Icon name="qr" size={20} />
                 </span>
-              </span>
-            </div>
-          ))}
-        </>
+                <span className="txt">
+                  <b>{item.name}</b>
+                  <span>
+                    {STATUS_LABEL[statusOf(item)]}
+                    {item.redeemedAt ? ` · ${day(item.redeemedAt, timeZone)}` : ""}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       <Sheet open={!!open} onClose={() => setOpen(null)} full title={open?.name}>
