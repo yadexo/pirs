@@ -19,6 +19,8 @@ import {
 import type { ClientSummary } from "@/lib/client-app-data";
 import { BookingSheet } from "../shop/booking-sheet";
 import type { BookableService } from "../shop/booking-sheet";
+import { formatDay, formatTime } from "@/lib/client-format";
+import { useClinicTimeZone } from "../base-path";
 
 export interface ApptRow {
   id: string;
@@ -100,6 +102,7 @@ export function ProfileView({
   appVersion: string;
 }) {
   const router = useRouter();
+  const timeZone = useClinicTimeZone();
   const { toast } = useToast();
   const base = useBasePath();
   const finder = useFinderPath();
@@ -118,8 +121,9 @@ export function ProfileView({
     if (active) setIndicator({ left: active.offsetLeft, width: active.offsetWidth });
   }, [tab]);
 
-  const date = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-  const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  // Both pinned to one locale and the clinic's zone — see lib/client-format.ts.
+  const date = (iso: string) => formatDay(iso, timeZone);
+  const time = (iso: string) => formatTime(iso, timeZone);
 
   function go(next: string) {
     router.push(`${base}/profile${next === "treatments" ? "" : `?tab=${next}`}`);

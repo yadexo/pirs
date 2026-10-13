@@ -25,6 +25,23 @@ export function useBasePath(): string {
 }
 
 /**
+ * The clinic's time zone, for every date and time the app prints.
+ *
+ * It comes from the server with the rest of the clinic, so the first render
+ * and the hydrated one agree — which the phone's own time zone could not
+ * promise. See lib/client-format.ts for why that matters.
+ */
+const TimeZone = React.createContext<string>("");
+
+export function ClinicTimeZoneProvider({ timeZone, children }: { timeZone: string; children: React.ReactNode }) {
+  return <TimeZone.Provider value={timeZone}>{children}</TimeZone.Provider>;
+}
+
+export function useClinicTimeZone(): string {
+  return React.useContext(TimeZone);
+}
+
+/**
  * "Find your clinic" — the one screen that is deliberately outside a clinic's
  * scope, because it belongs to no clinic. On the root domain it is the domain
  * itself; elsewhere it is /app.

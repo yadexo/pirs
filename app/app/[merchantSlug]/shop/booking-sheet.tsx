@@ -4,6 +4,8 @@ import * as React from "react";
 import { Sheet, useToast } from "@/components/client-app/ui";
 import { getBookingOptionsForServiceAction, getClientSlotsAction, clientBookAction, clientOrderStatusAction, clientAbandonOrderAction } from "@/lib/actions/client-app";
 import { CardPayment, type PaymentHandoff } from "../card-payment";
+import { formatTime, formatWeekday } from "@/lib/client-format";
+import { useClinicTimeZone } from "../base-path";
 /** All this sheet needs of a treatment; the shop's cards carry much more. */
 export interface BookableService {
   id: string;
@@ -40,11 +42,12 @@ export function BookingSheet({
   onClose: () => void;
   onBooked: () => void;
 }) {
+  const timeZone = useClinicTimeZone();
   const { toast } = useToast();
   const [options, setOptions] = React.useState<Options | null>(null);
   const [staffId, setStaffId] = React.useState("");
   const [locationId, setLocationId] = React.useState("");
-  const [date, setDate] = React.useState(() => nextDays()[0]!.iso);
+  const [date, setDate] = React.useState(() => nextDays(timeZone)[0]!.iso);
   const [slots, setSlots] = React.useState<string[]>([]);
   const [slot, setSlot] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -126,7 +129,7 @@ export function BookingSheet({
     setDeposit(null);
   }
 
-  const days = nextDays();
+  const days = nextDays(timeZone);
 
   return (
     <Sheet
@@ -187,7 +190,7 @@ export function BookingSheet({
             <div className="chipsel">
               {slots.map((s) => (
                 <button key={s} className={`schip ${slot === s ? "on" : ""}`} onClick={() => setSlot(s)}>
-                  {new Date(s).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  {formatTime(s, timeZone)}
                 </button>
               ))}
             </div>
@@ -228,14 +231,14 @@ export function BookingSheet({
   );
 }
 
-function nextDays() {
+function nextDays(timeZone: string) {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() + 1 + i);
     d.setHours(0, 0, 0, 0);
     return {
       iso: d.toISOString(),
-      label: d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" }),
+      label: formatWeekday(d, timeZone),
     };
   });
 }

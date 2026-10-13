@@ -5,6 +5,7 @@ import { rawDb } from "@/lib/db";
 import { getTenantDb, type TenantDb } from "@/lib/tenant-db";
 import { loadLiveAccount } from "@/lib/live-account";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
+import { FALLBACK_TIME_ZONE } from "@/lib/client-format";
 
 export interface ClientAppMerchant {
   id: string;
@@ -19,6 +20,8 @@ export interface ClientAppMerchant {
   latitude: number | null;
   longitude: number | null;
   supportUrl: string | null;
+  /** The clinic's own time zone: an appointment's time is its time, not the phone's. */
+  timeZone: string;
 }
 
 export interface ClientAppContext {
@@ -27,6 +30,8 @@ export interface ClientAppContext {
   /** Null when the visitor has not signed in yet — the shell renders onboarding instead. */
   customerProfileId: string | null;
   firstName: string | null;
+  /** The signed-in client's own sign-in address, shown back to them at checkout. */
+  email: string | null;
 }
 
 /**
@@ -58,6 +63,7 @@ export async function getClientAppContext(merchantSlug: string): Promise<ClientA
     latitude: null,
     longitude: null,
     supportUrl: null,
+    timeZone: branding?.timeZone || FALLBACK_TIME_ZONE,
   };
 
   // Support link falls back to the agency's white-label setting, so a merchant
@@ -77,5 +83,6 @@ export async function getClientAppContext(merchantSlug: string): Promise<ClientA
     db,
     customerProfileId: isThisMerchantsCustomer ? user!.customerProfileId! : null,
     firstName: null,
+    email: isThisMerchantsCustomer ? (user!.email ?? null) : null,
   };
 }

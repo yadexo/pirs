@@ -3,6 +3,8 @@
 import * as React from "react";
 import { Icon, QrCode, Sheet } from "@/components/client-app/ui";
 import { redeemQrValue } from "@/lib/redeemable-shared";
+import { formatDay } from "@/lib/client-format";
+import { useClinicTimeZone } from "../base-path";
 
 /**
  * "My items" — the things this client has paid for and can still collect.
@@ -33,9 +35,10 @@ const STATUS_LABEL: Record<ClientItem["status"], string> = {
   EXPIRED: "Expired",
 };
 
-const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+const day = (iso: string, timeZone: string) => formatDay(iso, timeZone);
 
 export function MyItems({ items }: { items: ClientItem[] }) {
+  const timeZone = useClinicTimeZone();
   const [open, setOpen] = React.useState<ClientItem | null>(null);
   const [live, setLive] = React.useState<Record<string, ClientItem["status"]>>({});
 
@@ -87,7 +90,7 @@ export function MyItems({ items }: { items: ClientItem[] }) {
           <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
             <span className="ca-itemname">{item.name}</span>
             <span className="ca-itemmeta">
-              Bought {day(item.purchasedAt)} · code {item.code}
+              Bought {day(item.purchasedAt, timeZone)} · code {item.code}
             </span>
           </span>
           <Icon name="chevR" size={20} />
@@ -103,7 +106,7 @@ export function MyItems({ items }: { items: ClientItem[] }) {
                 <span className="ca-itemname">{item.name}</span>
                 <span className="ca-itemmeta">
                   {STATUS_LABEL[statusOf(item)]}
-                  {item.redeemedAt ? ` · ${day(item.redeemedAt)}` : ""}
+                  {item.redeemedAt ? ` · ${day(item.redeemedAt, timeZone)}` : ""}
                 </span>
               </span>
             </div>
