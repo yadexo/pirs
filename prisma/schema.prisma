@@ -526,6 +526,7 @@ model CustomerProfile {
   notes                  CustomerNote[]
   leads                  Lead[]
   packages               CustomerPackage[]
+  packagesGiven          CustomerPackage[]          @relation("PackageGiver")
   memberships            CustomerMembership[]
   loyaltyTx              LoyaltyTransaction[]
   creditTx               AccountCreditTransaction[]
@@ -928,6 +929,17 @@ model CustomerPackage {
   purchasedAt   DateTime              @default(now())
   expiresAt     DateTime?
   status        CustomerPackageStatus @default(ACTIVE)
+
+  /// Set when these sessions were given by another client. The portal shows
+  /// the transfer on both clients' Items tab, and a received package may only
+  /// be given on again if the package itself is transferable.
+  receivedFromCustomerProfileId String?
+  receivedFrom                  CustomerProfile? @relation("PackageGiver", fields: [receivedFromCustomerProfileId], references: [id], onDelete: SetNull)
+  receivedAt                    DateTime?
+
+  /// When the client was told their sessions are about to run out, so the
+  /// reminder is sent once rather than on every cron run.
+  expiryReminderSentAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
