@@ -66,9 +66,22 @@ export function computeRewardDiscountCents(
   return 0; // FREE_SERVICE / FREE_PRODUCT are redeemed as a distinct line item, not a discount
 }
 
-export function computeTaxCents(taxableSubtotalCents: number, discountCents: number, taxRateBasisPoints: number): number {
+/**
+ * The VAT already inside a price, not a tax to add to it.
+ *
+ * Consumer prices in the Netherlands are quoted including VAT: the number a
+ * clinic types is the number the client pays, and the VAT is a share of it.
+ * So this divides rather than multiplies — €121 at 21% contains €21, not
+ * €25.41 — and nothing in checkout ever adds the result to a total. It exists
+ * to answer "of which VAT" on a receipt.
+ *
+ * Items marked not taxable contain no VAT, which is why the taxable subtotal
+ * is passed separately from the whole one.
+ */
+export function computeVatCents(taxableSubtotalCents: number, discountCents: number, vatRateBasisPoints: number): number {
+  if (vatRateBasisPoints <= 0) return 0;
   const taxableAfterDiscount = Math.max(taxableSubtotalCents - Math.min(discountCents, taxableSubtotalCents), 0);
-  return Math.round((taxableAfterDiscount * taxRateBasisPoints) / 10000);
+  return Math.round((taxableAfterDiscount * vatRateBasisPoints) / (10000 + vatRateBasisPoints));
 }
 
 export function computeCreditAppliedCents(requestedCents: number, availableCents: number, capCents: number): number {
@@ -79,6 +92,7 @@ export interface CheckoutTotals {
   subtotalCents: number;
   discountCents: number;
   loyaltyDiscountCents: number;
+  /** The VAT contained in what is being charged — never added to it. */
   taxCents: number;
   creditAppliedCents: number;
   totalCents: number;
@@ -88,7 +102,7 @@ export function computeCheckoutTotals(params: {
   items: LineItem[];
   promo?: { discountType: "PERCENT" | "FIXED_AMOUNT"; discountValue: number; eligibility: EligibilityRule[] };
   reward?: { rewardType: string; discountAmountCents: number | null; discountPercent: number | null };
-  taxRateBasisPoints: number;
+  vatRateBasisPoints: number;
   requestedCreditCents: number;
   availableCreditCents: number;
 }): CheckoutTotals {
@@ -103,9 +117,10 @@ export function computeCheckoutTotals(params: {
     : 0;
 
   const totalDiscountCents = discountCents + loyaltyDiscountCents;
-  const taxCents = computeTaxCents(taxableSubtotalCents, totalDiscountCents, params.taxRateBasisPoints);
+  // Shown on the receipt, and that is all. The client pays the price.
+  const taxCents = computeVatCents(taxableSubtotalCents, totalDiscountCents, params.vatRateBasisPoints);
 
-  const preCreditTotal = Math.max(subtotalCents - totalDiscountCents + taxCents, 0);
+  const preCreditTotal = Math.max(subtotalCents - totalDiscountCents, 0);
   const creditAppliedCents = computeCreditAppliedCents(params.requestedCreditCents, params.availableCreditCents, preCreditTotal);
   const totalCents = Math.max(preCreditTotal - creditAppliedCents, 0);
 

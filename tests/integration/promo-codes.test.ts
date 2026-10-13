@@ -142,7 +142,7 @@ describe("a promotion code at the counter", () => {
         { serviceId: null, productId, packageId: null, unitPriceCents: 2_000, quantity: 1, taxable: true },
       ],
       promo: result.promo,
-      taxRateBasisPoints: 0,
+      vatRateBasisPoints: 0,
       requestedCreditCents: 0,
       availableCreditCents: 0,
     });

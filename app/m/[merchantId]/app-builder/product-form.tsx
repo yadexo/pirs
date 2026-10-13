@@ -227,7 +227,7 @@ function Pricing({
 
       {tab === "individual" && (
         <div className="grid grid-cols-2 gap-3">
-          <MoneyField label="Price" name="price" currency={currency} defaultValue={centsToInput(item.priceCents as number)} errors={errors} required />
+          <MoneyField label="Price incl. VAT" name="price" currency={currency} defaultValue={centsToInput(item.priceCents as number)} errors={errors} required />
           <TextField
             label="Max quantity"
             name="maxQuantity"
@@ -300,7 +300,7 @@ function Pricing({
                 onChange={(e) => setOptions((o) => ({ ...o, variations: o.variations.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) }))}
               />
               <MoneyField
-                label="Price"
+                label="Price incl. VAT"
                 name={`__variationPrice${i}`}
                 currency={currency}
                 className="w-32"

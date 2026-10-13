@@ -64,7 +64,7 @@ describe("business-critical workflows", () => {
     tenantId = tenant.id;
     db = getTenantDb(tenantId);
 
-    await rawDb.tenantSettings.create({ data: { tenantId, taxRateBasisPoints: 1000 } }); // 10% flat for easy math
+    await rawDb.tenantSettings.create({ data: { tenantId, vatRateBasisPoints: 0 } }); // no VAT, so the figures below are the prices themselves
 
     const location = await rawDb.location.create({ data: { tenantId, name: "Main", isPrimary: true } });
     locationId = location.id;
@@ -133,17 +133,18 @@ describe("business-critical workflows", () => {
   }
 
   describe("checkout calculations + order placement", () => {
-    it("prices an order from the catalogue and the clinic's tax rate", async () => {
+    it("prices an order from the catalogue, and adds nothing to it", async () => {
       await clearOpenBaskets();
       await openBasketWithService();
 
       const res = await clientCheckoutAction("test-tenant", null);
-      expect(res).toMatchObject({ ok: true, totalCents: 11000 });
+      // Prices include VAT: the client pays what the clinic asked, €100.
+      expect(res).toMatchObject({ ok: true, totalCents: 10000 });
 
       const order = await rawDb.order.findFirst({ where: { tenantId, customerProfileId }, orderBy: { placedAt: "desc" } });
-      // Nothing the browser sent: the service's own price, plus the clinic's
-      // 10% from the fixture.
-      expect(order).toMatchObject({ subtotalCents: 10000, taxCents: 1000, totalCents: 11000 });
+      // Nothing the browser sent: the service's own price, and no tax on top.
+      // This fixture's clinic is on a zero rate, so no VAT is carved out either.
+      expect(order).toMatchObject({ subtotalCents: 10000, taxCents: 0, totalCents: 10000 });
     });
 
     it("places an order, decrements inventory, and awards loyalty points on success", async () => {
@@ -155,7 +156,7 @@ describe("business-critical workflows", () => {
 
       const order = await rawDb.order.findFirst({ where: { tenantId, customerProfileId }, orderBy: { placedAt: "desc" } });
       expect(order?.status).toBe("PAID");
-      expect(order?.totalCents).toBe(4400); // 4000 subtotal + 10% tax
+      expect(order?.totalCents).toBe(4000); // the price, with nothing added
 
       const product = await rawDb.product.findUnique({ where: { id: productId } });
       expect(product?.inventoryQuantity).toBe(3); // 5 - 2

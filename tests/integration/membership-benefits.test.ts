@@ -93,7 +93,7 @@ describe("membership benefits at checkout", () => {
     db = getTenantDb(clinic);
     await rawDb.tenantBranding.create({ data: { tenantId: clinic, businessName: "Benefit Clinic", currency: "EUR" } });
     // No tax, so every number below is the discount and nothing else.
-    await rawDb.tenantSettings.create({ data: { tenantId: clinic, taxRateBasisPoints: 0 } });
+    await rawDb.tenantSettings.create({ data: { tenantId: clinic, vatRateBasisPoints: 0 } });
 
     const user = await rawDb.user.create({ data: { tenantId: clinic, email: `c-${stamp}@x.com`, passwordHash: "x", role: "CUSTOMER" } });
     clientUserId = user.id;

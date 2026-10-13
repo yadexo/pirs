@@ -218,6 +218,12 @@ export function PaymentResult({
                 <b>Total paid, incl. VAT</b>
                 <b className="tabular">{money(receipt.totalCents, currency)}</b>
               </div>
+              {receipt.vatCents > 0 && (
+                <div className="line vat">
+                  <span>of which VAT</span>
+                  <span className="tabular">{money(receipt.vatCents, currency)}</span>
+                </div>
+              )}
               {method && <p className="paidwith">Paid with {method}</p>}
             </div>
           )}

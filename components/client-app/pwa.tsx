@@ -13,7 +13,11 @@ import { Icon } from "@/components/client-app/ui";
 export function ServiceWorker({ scope }: { scope: string }) {
   React.useEffect(() => {
     if (!("serviceWorker" in navigator) || process.env.NODE_ENV !== "production") return;
-    navigator.serviceWorker.register("/client-sw.js", { scope }).catch(() => {});
+    // The build id rides along in the URL: a changed script URL is what makes
+    // the browser install a new worker, and the worker reads it back out to
+    // name its cache. Without it, last release's chunks are served forever.
+    const url = `/client-sw.js?v=${encodeURIComponent(process.env.NEXT_PUBLIC_BUILD_ID ?? "dev")}`;
+    navigator.serviceWorker.register(url, { scope }).catch(() => {});
   }, [scope]);
   return null;
 }

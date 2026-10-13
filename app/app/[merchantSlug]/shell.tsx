@@ -29,7 +29,7 @@ export function ClientAppShell({
   currency,
   timeZone,
   pointsPerCents,
-  taxRateBasisPoints,
+  vatRateBasisPoints,
   clientName,
   clientEmail,
   clientPhone,
@@ -46,8 +46,8 @@ export function ClientAppShell({
   timeZone: string;
   /** Same rate checkout uses: points = floor(amount in cents × rate). */
   pointsPerCents: number;
-  /** Zero for a clinic whose prices already include VAT. See cart-totals.ts. */
-  taxRateBasisPoints: number;
+  /** The VAT already inside the prices, for the "of which VAT" line. */
+  vatRateBasisPoints: number;
   /** Shown back to the client at checkout, so they can check it before paying. */
   clientName: string;
   clientEmail: string | null;
@@ -67,7 +67,7 @@ export function ClientAppShell({
             logoUrl={logoUrl}
             currency={currency}
             pointsPerCents={pointsPerCents}
-            taxRateBasisPoints={taxRateBasisPoints}
+            vatRateBasisPoints={vatRateBasisPoints}
             clientName={clientName}
             clientEmail={clientEmail}
             clientPhone={clientPhone}
@@ -88,7 +88,7 @@ function Frame({
   logoUrl,
   currency,
   pointsPerCents,
-  taxRateBasisPoints,
+  vatRateBasisPoints,
   clientName,
   clientEmail,
   clientPhone,
@@ -100,7 +100,7 @@ function Frame({
   logoUrl: string | null;
   currency: string;
   pointsPerCents: number;
-  taxRateBasisPoints: number;
+  vatRateBasisPoints: number;
   clientName: string;
   clientEmail: string | null;
   clientPhone: string | null;
@@ -267,7 +267,7 @@ function Frame({
         merchantName={merchantName}
         currency={currency}
         pointsPerCents={pointsPerCents}
-        taxRateBasisPoints={taxRateBasisPoints}
+        vatRateBasisPoints={vatRateBasisPoints}
         clientName={clientName}
         clientEmail={clientEmail}
         clientPhone={clientPhone}

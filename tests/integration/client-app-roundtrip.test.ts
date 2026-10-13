@@ -56,7 +56,7 @@ describe("patient app -> clinic portal round trip", () => {
     // currency. It used to hardcode "EUR" for every clinic.
     await rawDb.tenantBranding.create({ data: { tenantId, businessName: "Round Trip Clinic", currency: "GBP" } });
     await rawDb.tenantSettings.create({
-      data: { tenantId, taxRateBasisPoints: 0, appointmentCancellationHours: 24 },
+      data: { tenantId, vatRateBasisPoints: 0, appointmentCancellationHours: 24 },
     });
     await rawDb.loyaltyProgramme.create({
       data: { tenantId, pointsPerCents: 0.01, pointsPerVisit: 50, referralPoints: 100 },

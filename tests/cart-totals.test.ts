@@ -68,26 +68,35 @@ describe("the cart's totals", () => {
 });
 
 /**
- * The cart calls its figure "Total incl. VAT". For a clinic whose prices
- * already include VAT that is simply true; for one that adds tax on top it is
- * only true if the preview adds the same tax checkout will. These two have to
- * agree, or the label is a lie about money.
+ * The cart calls its figure "Total incl. VAT", and the price a clinic set is
+ * the price the client pays. So the preview adds nothing — it only says how
+ * much of that price is VAT, which is what a receipt has to show.
  */
-describe("tax in the preview", () => {
+describe("VAT in the preview", () => {
   const basket = { subtotalCents: 12_000, rewardDiscountCents: 0, autoDiscountCents: 1_200, creditAvailableCents: 0, useCredit: false };
 
-  it("adds nothing when the clinic's prices already include it", () => {
-    expect(cartTotals({ ...basket, taxRateBasisPoints: 0 })).toMatchObject({ taxCents: 0, totalCents: 10_800 });
+  it("charges the price, and nothing on top of it", () => {
+    expect(cartTotals({ ...basket, vatRateBasisPoints: 2100 })).toMatchObject({ totalCents: 10_800 });
   });
 
-  it("taxes the basket after the discount, as checkout does", () => {
-    // 7.25% of €108, not of €120.
-    expect(cartTotals({ ...basket, taxRateBasisPoints: 725 })).toMatchObject({ taxCents: 783, totalCents: 11_583 });
+  it("says how much of that price is VAT", () => {
+    // €108 at 21% contains 10800 * 21/121 = €18.74.
+    expect(cartTotals({ ...basket, vatRateBasisPoints: 2100 })).toMatchObject({ vatCents: 1_874 });
   });
 
-  it("takes credit off after the tax, because the tax was on what they bought", () => {
-    expect(cartTotals({ ...basket, taxRateBasisPoints: 725, creditAvailableCents: 50_000, useCredit: true })).toMatchObject({
-      creditUsedCents: 11_583,
+  it("finds the VAT in what is left after a discount, not in the list price", () => {
+    const undiscounted = cartTotals({ ...basket, autoDiscountCents: 0, vatRateBasisPoints: 2100 });
+    expect(undiscounted.vatCents).toBe(2_083);
+    expect(cartTotals({ ...basket, vatRateBasisPoints: 2100 }).vatCents).toBeLessThan(undiscounted.vatCents);
+  });
+
+  it("finds none for a clinic that charges none", () => {
+    expect(cartTotals({ ...basket, vatRateBasisPoints: 0 })).toMatchObject({ vatCents: 0, totalCents: 10_800 });
+  });
+
+  it("takes credit off the price, which already contains the VAT", () => {
+    expect(cartTotals({ ...basket, vatRateBasisPoints: 2100, creditAvailableCents: 50_000, useCredit: true })).toMatchObject({
+      creditUsedCents: 10_800,
       totalCents: 0,
       settledByCreditAlone: true,
     });

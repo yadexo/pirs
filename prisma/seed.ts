@@ -79,7 +79,7 @@ async function main() {
       },
       settings: {
         create: {
-          taxRateBasisPoints: 725,
+          vatRateBasisPoints: 2100,
           appointmentCancellationHours: 24,
           appointmentReminderHours: 24,
           membershipMaxPauseMonths: 2,

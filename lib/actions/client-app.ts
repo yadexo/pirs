@@ -19,6 +19,7 @@ import { bookingDepositCents } from "@/lib/booking-deposit";
 import { memberCandidatesFor, resolveDiscount } from "@/lib/discounts";
 import { MEMBERSHIP_HOLDS_SLOT } from "@/lib/membership-status";
 import { adjustAccountCredit, availableCredit, creditToApply, InsufficientCreditError } from "@/lib/account-credit";
+import { computeVatCents } from "@/lib/checkout-calculations";
 import {
   cancelMembershipSubscription,
   createMembershipSubscription,
@@ -478,14 +479,15 @@ export async function clientCheckoutAction(
   const discountCents = applied?.discountCents ?? 0;
 
   const settings = await db.tenantSettings.findFirst({ where: {} });
-  const taxRate = settings?.taxRateBasisPoints ?? 0;
-  const taxable = Math.max(subtotalCents - discountCents - loyaltyDiscountCents, 0);
-  const taxCents = Math.round((taxable * taxRate) / 10000);
-  const billCents = Math.max(subtotalCents - discountCents - loyaltyDiscountCents + taxCents, 0);
+  // Prices include VAT, so nothing is added here. The bill is what the clinic
+  // asked for the items, less whatever came off; the VAT is a share of that,
+  // worked out for the receipt and added to no total.
+  const billCents = Math.max(subtotalCents - discountCents - loyaltyDiscountCents, 0);
+  const taxCents = computeVatCents(billCents, 0, settings?.vatRateBasisPoints ?? 0);
 
   // Credit is money the clinic already holds for this client, so it comes off
-  // the bill after tax rather than acting as a discount: the tax was on what
-  // they bought, however they pay for it.
+  // the bill rather than acting as a discount: the VAT was on what they
+  // bought, however they pay for it.
   const creditAppliedCents = creditToApply({
     requestedUse: options.useCredit === true,
     availableCents: await availableCredit(db, user.customerProfileId!),
@@ -756,6 +758,8 @@ export async function clientOrderReceiptAction(
       creditAppliedCents: number;
       loyaltyDiscountCents: number;
       totalCents: number;
+      /** The VAT contained in what was charged — a share of it, never added. */
+      vatCents: number;
       /** "ideal", "card", "klarna" — as the provider named it. */
       paymentMethod: string | null;
       pointsEarned: number;
@@ -774,6 +778,7 @@ export async function clientOrderReceiptAction(
       creditAppliedCents: true,
       loyaltyDiscountCents: true,
       totalCents: true,
+      taxCents: true,
       promotion: { select: { title: true } },
       items: { select: { name: true, quantity: true, totalCents: true } },
       payments: { where: { status: "SUCCEEDED" }, orderBy: { createdAt: "desc" }, take: 1, select: { method: true, provider: true } },
@@ -801,6 +806,9 @@ export async function clientOrderReceiptAction(
     creditAppliedCents: order.creditAppliedCents,
     loyaltyDiscountCents: order.loyaltyDiscountCents,
     totalCents: order.totalCents,
+    // Stored when the order was placed, so an old order still shows what
+    // actually happened rather than today's rate applied to yesterday.
+    vatCents: order.taxCents,
     paymentMethod: payment?.method ?? (payment?.provider === "ACCOUNT_CREDIT" ? "credit" : null),
     pointsEarned: points?.points ?? 0,
     pointsBalance: balance,

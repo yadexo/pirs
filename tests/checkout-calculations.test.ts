@@ -5,7 +5,7 @@ import {
   computeEligibleSubtotalCents,
   computePromoDiscountCents,
   computeRewardDiscountCents,
-  computeTaxCents,
+  computeVatCents,
   computeCreditAppliedCents,
   computeCheckoutTotals,
   type LineItem,
@@ -74,18 +74,27 @@ describe("computeRewardDiscountCents", () => {
   });
 });
 
-describe("computeTaxCents", () => {
-  it("applies the tax rate only to the taxable amount remaining after discount", () => {
-    // $100 taxable subtotal, $20 discount -> $80 taxed at 8% (800 bps) = $6.40
-    expect(computeTaxCents(10000, 2000, 800)).toBe(640);
+/**
+ * Prices include VAT, so this divides the VAT out of a price rather than
+ * adding it on. The number it returns is never added to any total.
+ */
+describe("computeVatCents", () => {
+  it("takes the VAT out of the price, not on top of it", () => {
+    // €121 at 21% contains €21. Adding would have given €25.41.
+    expect(computeVatCents(12100, 0, 2100)).toBe(2100);
   });
 
-  it("never taxes more than the taxable subtotal even if discount exceeds it", () => {
-    expect(computeTaxCents(1000, 5000, 1000)).toBe(0);
+  it("works on what is left after a discount", () => {
+    // €100 taxable, €20 off -> €80 contains 80 * 21/121 = €13.88.
+    expect(computeVatCents(10000, 2000, 2100)).toBe(1388);
   });
 
-  it("returns 0 when the tax rate is 0", () => {
-    expect(computeTaxCents(10000, 0, 0)).toBe(0);
+  it("finds no VAT in a basket a discount wiped out", () => {
+    expect(computeVatCents(1000, 5000, 2100)).toBe(0);
+  });
+
+  it("finds none when the clinic's rate is zero", () => {
+    expect(computeVatCents(10000, 0, 0)).toBe(0);
   });
 });
 
@@ -102,23 +111,23 @@ describe("computeCreditAppliedCents", () => {
 });
 
 describe("computeCheckoutTotals (end-to-end)", () => {
-  it("combines promo discount, tax, and account credit correctly", () => {
+  it("combines a promo discount and account credit, and adds no tax to either", () => {
     const items: LineItem[] = [{ serviceId: "svc_1", productId: null, packageId: null, unitPriceCents: 10000, quantity: 1, taxable: true }];
     const totals = computeCheckoutTotals({
       items,
       promo: { discountType: "PERCENT", discountValue: 10, eligibility: [] },
-      taxRateBasisPoints: 800, // 8%
+      vatRateBasisPoints: 2100,
       requestedCreditCents: 500,
       availableCreditCents: 2000,
     });
 
-    // subtotal 10000, discount 1000 -> taxable 9000 * 8% = 720 tax
     expect(totals.subtotalCents).toBe(10000);
     expect(totals.discountCents).toBe(1000);
-    expect(totals.taxCents).toBe(720);
-    // pre-credit total = 10000 - 1000 + 720 = 9720; credit applied = min(500, 2000, 9720) = 500
+    // The client pays €90, which already contains 9000 * 21/121 = €15.62 VAT.
+    expect(totals.taxCents).toBe(1562);
+    // Nothing is added: the bill is 10000 - 1000, less the credit.
     expect(totals.creditAppliedCents).toBe(500);
-    expect(totals.totalCents).toBe(9720 - 500);
+    expect(totals.totalCents).toBe(9000 - 500);
   });
 
   it("stacks a promo and a loyalty reward discount, and never produces a negative total", () => {
@@ -127,7 +136,7 @@ describe("computeCheckoutTotals (end-to-end)", () => {
       items,
       promo: { discountType: "FIXED_AMOUNT", discountValue: 800, eligibility: [] },
       reward: { rewardType: "DISCOUNT_AMOUNT", discountAmountCents: 500, discountPercent: null },
-      taxRateBasisPoints: 0,
+      vatRateBasisPoints: 0,
       requestedCreditCents: 10000,
       availableCreditCents: 10000,
     });

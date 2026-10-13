@@ -1,3 +1,5 @@
+import { computeVatCents } from "@/lib/checkout-calculations";
+
 /**
  * What the cart shows: the bill, and what is left to pay after the client's
  * credit.
@@ -20,19 +22,17 @@ export interface CartTotalsInput {
   creditAvailableCents: number;
   useCredit: boolean;
   /**
-   * The clinic's tax rate, in basis points. A clinic whose prices already
-   * include VAT leaves it at zero; one that adds tax on top has it here, and
-   * the preview has to add it too — the cart calls its figure "Total incl.
-   * VAT", and that has to be true.
+   * The VAT already inside the prices, in basis points. Nothing is added with
+   * it; it only lets the cart say how much of the total is VAT.
    */
-  taxRateBasisPoints?: number;
+  vatRateBasisPoints?: number;
 }
 
 export interface CartTotals {
-  /** The bill before credit: items less every discount, plus tax. */
+  /** The bill before credit: items less every discount. */
   billCents: number;
-  /** Tax on the discounted basket, worked out the way checkout works it out. */
-  taxCents: number;
+  /** The VAT already inside the bill — a share of it, never an addition. */
+  vatCents: number;
   creditUsedCents: number;
   /** What a card has to cover. */
   totalCents: number;
@@ -44,17 +44,18 @@ export interface CartTotals {
 }
 
 export function cartTotals(input: CartTotalsInput): CartTotals {
-  const taxableCents = Math.max(0, input.subtotalCents - input.rewardDiscountCents - input.autoDiscountCents);
-  // The same order of operations as clientCheckoutAction: tax on the basket
-  // after discounts, and credit off the bill after tax — the tax was on what
-  // the client bought, however they end up paying for it.
-  const taxCents = Math.round((taxableCents * (input.taxRateBasisPoints ?? 0)) / 10000);
-  const billCents = taxableCents + taxCents;
+  // Prices include VAT, so the bill is simply what is being asked for the
+  // items, less whatever comes off. Nothing is added at any point — the same
+  // order of operations as clientCheckoutAction, which is what charges.
+  const billCents = Math.max(0, input.subtotalCents - input.rewardDiscountCents - input.autoDiscountCents);
+  const vatCents = computeVatCents(billCents, 0, input.vatRateBasisPoints ?? 0);
+  // Credit comes off the bill rather than acting as a discount: the VAT was on
+  // what the client bought, however they end up paying for it.
   const creditUsedCents = input.useCredit ? Math.max(0, Math.min(input.creditAvailableCents, billCents)) : 0;
   const totalCents = Math.max(0, billCents - creditUsedCents);
   return {
     billCents,
-    taxCents,
+    vatCents,
     creditUsedCents,
     totalCents,
     settledByCreditAlone: totalCents === 0 && creditUsedCents > 0,

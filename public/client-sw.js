@@ -6,7 +6,14 @@
  * someone's balance. Only Next's fingerprinted static files are cached, which
  * makes a relaunch instant.
  */
-const STATIC_CACHE = "client-static-v1";
+/*
+ * One cache per build. The id comes from this script's own URL, which the page
+ * builds from NEXT_PUBLIC_BUILD_ID — so a new release installs a new worker,
+ * which takes a new cache and deletes every older one on activate. Caching
+ * Next's fingerprinted files forever is only safe if "forever" ends.
+ */
+const BUILD = new URL(self.location.href).searchParams.get("v") || "dev";
+const STATIC_CACHE = `client-static-${BUILD}`;
 
 self.addEventListener("install", () => self.skipWaiting());
 

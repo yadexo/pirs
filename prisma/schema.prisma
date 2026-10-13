@@ -162,7 +162,15 @@ model TenantSettings {
   tenantId String @unique
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  /// Deprecated. This was a sales-tax rate added on top of the price. Prices
+  /// are now VAT-inclusive and nothing is added at checkout, so nothing reads
+  /// this any more — see vatRateBasisPoints. Kept only so the old numbers are
+  /// not thrown away; safe to drop once nobody wants them.
   taxRateBasisPoints           Int     @default(0)
+  /// The VAT already contained in every price this clinic sets. The Dutch
+  /// standard rate is the default; a clinic on a reduced rate changes it.
+  /// Used to show "of which VAT" on a receipt, never to add anything.
+  vatRateBasisPoints           Int     @default(2100)
   appointmentCancellationHours Int     @default(24)
   appointmentReminderHours     Int     @default(24)
   dataRetentionDays            Int?

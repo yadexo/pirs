@@ -44,7 +44,7 @@ export function CartSheet({
   merchantName,
   currency,
   pointsPerCents,
-  taxRateBasisPoints,
+  vatRateBasisPoints,
   clientName,
   clientEmail,
   clientPhone,
@@ -56,8 +56,8 @@ export function CartSheet({
   currency: string;
   /** Same rate checkout uses: points = floor(amount in cents × rate). */
   pointsPerCents: number;
-  /** Zero for a clinic whose prices already include VAT. See cart-totals.ts. */
-  taxRateBasisPoints: number;
+  /** The VAT already inside the prices, for the "of which VAT" line. */
+  vatRateBasisPoints: number;
   clientName: string;
   clientEmail: string | null;
   clientPhone: string | null;
@@ -127,13 +127,13 @@ export function CartSheet({
   // is chosen here. Both come off before credit does.
   // Shown, not decided: the server works the same sums out again from the
   // database at checkout, and that is what the client is charged.
-  const { creditUsedCents: creditUsed, totalCents: total, settledByCreditAlone } = cartTotals({
+  const { creditUsedCents: creditUsed, totalCents: total, vatCents, settledByCreditAlone } = cartTotals({
     subtotalCents: subtotal,
     rewardDiscountCents: discount,
     autoDiscountCents: autoDiscount?.discountCents ?? 0,
     creditAvailableCents: credit,
     useCredit,
-    taxRateBasisPoints,
+    vatRateBasisPoints,
   });
   const pointsToEarn = Math.floor(total * pointsPerCents);
 
@@ -352,6 +352,12 @@ export function CartSheet({
               <span>Total incl. VAT</span>
               <b className="tabular">{money(total, currency)}</b>
             </div>
+            {vatCents > 0 && (
+              <div className="row vat">
+                <span>of which VAT</span>
+                <span className="tabular">{money(vatCents, currency)}</span>
+              </div>
+            )}
             {pointsToEarn > 0 && (
               <div className="row earn">
                 <span>You{stage === "pay" ? "’ll" : ""} earn</span>

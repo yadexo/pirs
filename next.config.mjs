@@ -1,5 +1,14 @@
+/**
+ * One id per build. The service worker caches Next's fingerprinted files
+ * forever, so its cache has to be thrown away when a new build replaces them
+ * — and the only thing that reliably changes between builds is this.
+ */
+const buildId = process.env.BUILD_ID || String(Date.now());
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  generateBuildId: () => buildId,
+  env: { NEXT_PUBLIC_BUILD_ID: buildId },
   eslint: {
     dirs: ["app", "components", "lib", "prisma", "server", "tests"],
   },

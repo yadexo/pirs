@@ -65,21 +65,21 @@ describe("clinic settings", () => {
   describe("general", () => {
     it("saves tax, banner copy and legal text, creating rows the clinic did not have", async () => {
       asOwner();
-      const res = await S.saveGeneralSettingsAction(clinic, fd({ taxRatePercent: "8,25", shopBannerHeadline: "Feel better", payLaterEnabled: true, termsContent: "Our terms" }));
+      const res = await S.saveGeneralSettingsAction(clinic, fd({ vatRatePercent: "8,25", shopBannerHeadline: "Feel better", payLaterEnabled: true, termsContent: "Our terms" }));
       expect(res).toMatchObject({ ok: true });
       const settings = await rawDb.tenantSettings.findUniqueOrThrow({ where: { tenantId: clinic } });
-      expect(settings).toMatchObject({ taxRateBasisPoints: 825, shopBannerHeadline: "Feel better", payLaterEnabled: true, publiclyListed: false });
+      expect(settings).toMatchObject({ vatRateBasisPoints: 825, shopBannerHeadline: "Feel better", payLaterEnabled: true, publiclyListed: false });
       expect((await rawDb.tenantBranding.findUniqueOrThrow({ where: { tenantId: clinic } })).termsContent).toBe("Our terms");
     });
 
-    it("rejects a tax rate with more than two decimals", async () => {
+    it("rejects a VAT rate with more than two decimals", async () => {
       asOwner();
-      expect(errorsOf(await S.saveGeneralSettingsAction(clinic, fd({ taxRatePercent: "7.125" }))).taxRatePercent).toMatch(/two decimals/);
+      expect(errorsOf(await S.saveGeneralSettingsAction(clinic, fd({ vatRatePercent: "7.125" }))).vatRatePercent).toMatch(/two decimals/);
     });
 
     it("is owner-only, whatever permissions staff hold", async () => {
       asStaff();
-      expect(await S.saveGeneralSettingsAction(clinic, fd({ taxRatePercent: "0" }))).toMatchObject({ error: expect.stringMatching(/access/) });
+      expect(await S.saveGeneralSettingsAction(clinic, fd({ vatRatePercent: "0" }))).toMatchObject({ error: expect.stringMatching(/access/) });
     });
   });
 

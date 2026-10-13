@@ -67,7 +67,7 @@ describe("client payments on the clinic's Stripe account", () => {
 
     clinic = (await rawDb.tenant.create({ data: { slug: `pay-${stamp}`, name: "Pay Clinic" } })).id;
     await rawDb.tenantBranding.create({ data: { tenantId: clinic, businessName: "Pay Clinic", currency: "EUR" } });
-    await rawDb.tenantSettings.create({ data: { tenantId: clinic, taxRateBasisPoints: 2100 } });
+    await rawDb.tenantSettings.create({ data: { tenantId: clinic, vatRateBasisPoints: 2100 } });
     await rawDb.loyaltyProgramme.create({ data: { tenantId: clinic, pointsPerCents: 0.01, active: true } });
     await rawDb.tenant.update({
       where: { id: clinic },
@@ -115,9 +115,10 @@ describe("client payments on the clinic's Stripe account", () => {
     expect(res).toMatchObject({ ok: true, paid: false });
     if (!("payment" in res)) throw new Error("expected a payment handoff");
 
-    // €100 + 21% tax = €121 charged; the fee is 10% of the €100 subtotal.
+    // €100 charged: the price includes its VAT and nothing is added. The fee
+    // is 10% of the €100 subtotal.
     const charge = stripeMock.create.mock.calls[0]![0];
-    expect(charge).toMatchObject({ stripeAccountId: ACCOUNT, amountCents: 12_100, subtotalCents: 10_000, currency: "EUR" });
+    expect(charge).toMatchObject({ stripeAccountId: ACCOUNT, amountCents: 10_000, subtotalCents: 10_000, currency: "EUR" });
     expect(res.payment.clientSecret).toBe("pi_secret_test");
 
     const order = await rawDb.order.findFirstOrThrow({ where: { orderNumber: res.orderNumber } });
@@ -169,12 +170,12 @@ describe("client payments on the clinic's Stripe account", () => {
     expect(order.paidAt).not.toBeNull();
     expect(await rawDb.payment.findUniqueOrThrow({ where: { id: payment.id } })).toMatchObject({ status: "SUCCEEDED", method: "card" });
     const profile = await rawDb.customerProfile.findUniqueOrThrow({ where: { id: clientProfileId } });
-    expect(profile.loyaltyPointsBalance).toBe(121); // 1 point per cent of €121
+    expect(profile.loyaltyPointsBalance).toBe(100); // 1 point per cent of €100
 
     // Stripe delivers the same event again.
     expect(await alreadyProcessed(event)).toBe(true);
     await handleStripeEvent(event);
-    expect((await rawDb.customerProfile.findUniqueOrThrow({ where: { id: clientProfileId } })).loyaltyPointsBalance).toBe(121);
+    expect((await rawDb.customerProfile.findUniqueOrThrow({ where: { id: clientProfileId } })).loyaltyPointsBalance).toBe(100);
     expect(await rawDb.inventoryTransaction.count({ where: { tenantId: clinic, productId, type: "SALE" } })).toBe(1);
   });
 

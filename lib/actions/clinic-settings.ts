@@ -65,7 +65,7 @@ async function upsertSettings(merchantId: string, data: Record<string, unknown>)
 // ---------------------------------------------------------------------------
 
 const generalSchema = z.object({
-  taxRatePercent: z.preprocess(
+  vatRatePercent: z.preprocess(
     toNumber,
     z
       .number({ invalid_type_error: "Enter a percentage" })
@@ -87,7 +87,7 @@ export async function saveGeneralSettingsAction(merchantId: string, fd: FormData
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
     const data = generalSchema.parse({
-      taxRatePercent: formText(fd, "taxRatePercent") ?? "0",
+      vatRatePercent: formText(fd, "vatRatePercent") ?? "21",
       payLaterEnabled: formBool(fd, "payLaterEnabled"),
       publiclyListed: formBool(fd, "publiclyListed"),
       shopBannerHeadline: formText(fd, "shopBannerHeadline"),
@@ -99,7 +99,7 @@ export async function saveGeneralSettingsAction(merchantId: string, fd: FormData
     });
 
     await upsertSettings(merchantId, {
-      taxRateBasisPoints: Math.round(data.taxRatePercent * 100),
+      vatRateBasisPoints: Math.round(data.vatRatePercent * 100),
       payLaterEnabled: data.payLaterEnabled,
       publiclyListed: data.publiclyListed,
       shopBannerHeadline: data.shopBannerHeadline ?? null,

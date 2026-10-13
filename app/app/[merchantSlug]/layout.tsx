@@ -80,7 +80,7 @@ export default async function ClientAppLayout({
     getClientSummary(ctx.db, ctx.customerProfileId),
     getRewardsData(ctx.db, ctx.merchant.currency),
     ctx.db.loyaltyProgramme.findFirst({ where: {}, select: { active: true, pointsPerCents: true } }),
-    ctx.db.tenantSettings.findFirst({ where: {}, select: { taxRateBasisPoints: true } }),
+    ctx.db.tenantSettings.findFirst({ where: {}, select: { vatRateBasisPoints: true } }),
   ]);
 
   // Dot on the Rewards tab when something just became affordable.
@@ -96,7 +96,7 @@ export default async function ClientAppLayout({
         currency={ctx.merchant.currency}
         timeZone={ctx.merchant.timeZone}
         pointsPerCents={programme?.active ? programme.pointsPerCents : 0}
-        taxRateBasisPoints={settings?.taxRateBasisPoints ?? 0}
+        vatRateBasisPoints={settings?.vatRateBasisPoints ?? 0}
         clientName={[summary?.firstName, summary?.lastName].filter(Boolean).join(" ")}
         clientEmail={ctx.email}
         clientPhone={summary?.phone ?? null}

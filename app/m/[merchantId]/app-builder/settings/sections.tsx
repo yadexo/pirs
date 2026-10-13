@@ -179,12 +179,12 @@ export function GeneralSection({ merchantId, data, canEdit }: { merchantId: stri
           </FormSection>
           <FormSection title="Money">
             <TextField
-              label="Tax rate (%)"
-              name="taxRatePercent"
+              label="VAT rate (%)"
+              name="vatRatePercent"
               inputMode="decimal"
-              defaultValue={s ? String(s.taxRateBasisPoints / 100) : "0"}
+              defaultValue={s ? String(s.vatRateBasisPoints / 100) : "21"}
               errors={errors}
-              hint="Added at checkout to taxable items."
+              hint="The VAT already included in your prices. Nothing is added at checkout — it is shown on receipts as “of which VAT”."
               className="max-w-[180px]"
             />
           </FormSection>

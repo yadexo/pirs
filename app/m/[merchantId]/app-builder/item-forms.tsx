@@ -73,7 +73,7 @@ export function PackageForm({ merchantId, currency, item, options, errors }: Ite
         <TextField label="Name" name="name" defaultValue={str(item.name)} errors={errors} required />
         <TextAreaField label="Description" name="description" defaultValue={str(item.description)} errors={errors} />
         <div className="grid grid-cols-2 gap-3">
-          <MoneyField label="Price" name="price" currency={currency} defaultValue={centsToInput(item.priceCents as number)} errors={errors} required />
+          <MoneyField label="Price incl. VAT" name="price" currency={currency} defaultValue={centsToInput(item.priceCents as number)} errors={errors} required />
           <TextField label="Sessions included" name="totalUses" type="number" min={1} defaultValue={str(item.totalUses ?? 5)} errors={errors} required />
         </div>
         <TextField label="Expires after (days)" name="expiryDays" type="number" min={1} defaultValue={str(item.expiryDays)} errors={errors} hint="Leave empty for no expiry." />
@@ -306,7 +306,7 @@ export function MembershipPlanForm({ currency, item, errors }: ItemFormProps) {
         <TextField label="Name" name="name" defaultValue={str(item.name)} errors={errors} required />
         <TextAreaField label="Description" name="description" defaultValue={str(item.description)} errors={errors} />
         <div className="grid grid-cols-2 gap-3">
-          <MoneyField label="Price" name="price" currency={currency} defaultValue={centsToInput(item.priceCents as number)} errors={errors} required />
+          <MoneyField label="Price incl. VAT" name="price" currency={currency} defaultValue={centsToInput(item.priceCents as number)} errors={errors} required />
           <SelectField
             label="Billed"
             name="billingFrequency"
