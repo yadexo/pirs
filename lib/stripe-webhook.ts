@@ -15,6 +15,7 @@ import { recordActivity } from "@/lib/activity";
 import { graceEndsAt } from "@/lib/membership-status";
 import { adjustAccountCredit } from "@/lib/account-credit";
 import { createItemsForOrder, voidItemsForOrder } from "@/lib/redeemable";
+import { createPackagesForOrder } from "@/lib/customer-packages";
 import { stripe } from "@/lib/stripe-payments";
 
 /**
@@ -339,6 +340,7 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
         // Paid for means collectable: one code per unit bought. Safe to
         // repeat, because Stripe can deliver the same event twice.
         await createItemsForOrder(payment.orderId);
+        await createPackagesForOrder(payment.orderId);
         // After the order is settled, and unable to affect it: a failed
         // notification must not make Stripe retry a payment already applied.
         await notifyOrderPaid(payment.orderId, payment.amountCents);

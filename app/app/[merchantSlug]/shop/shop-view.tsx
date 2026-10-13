@@ -9,7 +9,8 @@ import { clientAddToCartAction, clientJoinPlanAction } from "@/lib/actions/clien
 import { useCart } from "../cart-context";
 import { CardPayment } from "../card-payment";
 import { BookingSheet, type BookableService } from "./booking-sheet";
-import type { ShopCard } from "@/lib/client-app-catalog";
+import type { PackageCard, ShopCard } from "@/lib/client-app-catalog";
+import { validityLabel } from "@/lib/package-pricing";
 
 export interface ShopPlan {
   id: string;
@@ -35,6 +36,7 @@ export function ShopView({
   categoryId,
   categories,
   treatments,
+  packages,
   popularTreatments,
   products,
   isMember,
@@ -54,6 +56,7 @@ export function ShopView({
   categoryId: string | null;
   categories: { id: string; name: string }[];
   treatments: ShopCard[];
+  packages: PackageCard[];
   popularTreatments: ShopCard[];
   products: ShopCard[];
   isMember: boolean;
@@ -74,6 +77,7 @@ export function ShopView({
   const { toast } = useToast();
 
   const [detail, setDetail] = React.useState<ShopCard | null>(null);
+  const [packageDetail, setPackageDetail] = React.useState<PackageCard | null>(null);
   const [qty, setQty] = React.useState(1);
   const [booking, setBooking] = React.useState<BookableService | null>(null);
   const [planDetail, setPlanDetail] = React.useState<ShopPlan | null>(null);
@@ -194,6 +198,43 @@ export function ShopView({
     </div>
   );
 
+  const packageCard = (pkg: PackageCard) => (
+    <div className="v2-railitem wide" key={pkg.id}>
+      <article className="v2-pkgcard">
+        <button type="button" className="art" onClick={() => setPackageDetail(pkg)} aria-label={pkg.name}>
+          {pkg.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={pkg.imageUrl} alt="" loading="lazy" />
+          ) : (
+            <span className="ph" aria-hidden="true">
+              {pkg.name.charAt(0).toUpperCase()}
+            </span>
+          )}
+          <span className="tags">
+            {/* No saving, no tag at all — see lib/package-pricing.ts. */}
+            {pkg.savingCents !== null && (
+              <Tag kind="brand">
+                {pkg.savingAtLeast ? "Save at least" : "Save"} {money(pkg.savingCents, currency)}
+              </Tag>
+            )}
+          </span>
+          <span className="sessions">{pkg.sessions} sessions</span>
+        </button>
+        <button type="button" className="body" onClick={() => setPackageDetail(pkg)}>
+          <b>{pkg.name}</b>
+          <span className="meta">
+            {pkg.expiryDays ? `Valid ${validityLabel(pkg.expiryDays)}` : "No expiry"}
+            {pkg.covers.length > 0 ? ` · ${pkg.covers.map((c) => c.name).join(", ")}` : ""}
+          </span>
+          <span className="price">
+            <b className="tabular">{money(pkg.priceCents, currency)}</b>
+            <span className="tabular">{money(pkg.perSessionCents, currency)} per session</span>
+          </span>
+        </button>
+      </article>
+    </div>
+  );
+
   const shelf = (title: string, cards: ShopCard[], seeAll: string) =>
     cards.length === 0 ? null : (
       <section className="v2-sec" key={title}>
@@ -258,8 +299,22 @@ export function ShopView({
           ) : (
             <>
               {shelf("Popular treatments", inCategory(popularTreatments), "treatments")}
+              {packages.length > 0 && (
+                <section className="v2-sec">
+                  <div className="v2-sechead">
+                    <h2>Session packages</h2>
+                    <button type="button" onClick={() => go("treatments", categoryId)}>
+                      See all <Icon name="chevR" size={18} />
+                    </button>
+                  </div>
+                  <div className="v2-rail no-scrollbar">{packages.map(packageCard)}</div>
+                </section>
+              )}
               {shelf("Skin care products", inCategory(products), "browse")}
-              <p className="v2-vatnote">All prices include VAT.</p>
+              <p className="v2-vatnote">
+                All prices include VAT.
+                {packages.length > 0 ? " Package savings compare with buying the same sessions one by one." : ""}
+              </p>
             </>
           )}
         </>
@@ -363,7 +418,37 @@ export function ShopView({
               ))}
             </div>
           )}
-          <p className="v2-vatnote">All prices include VAT. Results vary per person.</p>
+          {packages.length > 0 && (
+            <section className="v2-pkggroup">
+              <h2>Packages</h2>
+              <div className="rows">
+                {packages.map((pkg) => (
+                  <button type="button" className="row" key={pkg.id} onClick={() => setPackageDetail(pkg)}>
+                    <span className="txt">
+                      <b>{pkg.name}</b>
+                      <span>
+                        {pkg.sessions} sessions
+                        {pkg.expiryDays ? ` · valid ${validityLabel(pkg.expiryDays)}` : " · no expiry"}
+                      </span>
+                      {pkg.savingCents !== null && (
+                        <span className="save">
+                          {pkg.savingAtLeast ? "Save at least" : "Save"} {money(pkg.savingCents, currency)}
+                        </span>
+                      )}
+                    </span>
+                    <span className="right">
+                      <b className="tabular">{money(pkg.priceCents, currency)}</b>
+                      <span className="tabular">{money(pkg.perSessionCents, currency)} per session</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+          <p className="v2-vatnote">
+            All prices include VAT.
+            {packages.length > 0 ? " Package savings compare with buying the same sessions one by one." : ""} Results vary per person.
+          </p>
         </div>
       )}
 
@@ -454,6 +539,110 @@ export function ShopView({
               <span>Quantity</span>
               <Stepper value={qty} onChange={setQty} />
             </div>
+          </div>
+        )}
+      </Sheet>
+
+      {/* Package detail. Everything a client needs before committing to
+          several sessions at once: what it covers, how long they have, and
+          what it saves them in particular. */}
+      <Sheet
+        open={!!packageDetail}
+        onClose={() => setPackageDetail(null)}
+        title={packageDetail?.name}
+        cta={
+          packageDetail && (
+            <Button
+              amount={packageDetail.priceCents}
+              currency={currency}
+              loading={pending}
+              onClick={async () => {
+                setPending(true);
+                const res = await clientAddToCartAction(merchantSlug, "package", packageDetail.id, 1);
+                setPending(false);
+                if ("error" in res) {
+                  toast(res.error);
+                  return;
+                }
+                await refresh();
+                toast(`${packageDetail.name} added to cart`);
+                setPackageDetail(null);
+              }}
+            >
+              Add to cart
+            </Button>
+          )
+        }
+      >
+        {packageDetail && (
+          <div className="v2-detail">
+            {packageDetail.imageUrl ? (
+              <Carousel images={[packageDetail.imageUrl]} alt={packageDetail.name} />
+            ) : (
+              <div className="shot" aria-hidden="true">
+                <span>{packageDetail.name.charAt(0).toUpperCase()}</span>
+              </div>
+            )}
+            <div className="tags">
+              {packageDetail.savingCents !== null && (
+                <Tag kind="brand">
+                  {packageDetail.savingAtLeast ? "Save at least" : "Save"} {money(packageDetail.savingCents, currency)}
+                </Tag>
+              )}
+              <Tag kind="photo">Package</Tag>
+            </div>
+
+            <h2>{packageDetail.name}</h2>
+            <div className="priceline">
+              <PriceBlock cents={packageDetail.priceCents} currency={currency} />
+              <span className="facts">
+                {money(packageDetail.perSessionCents, currency)} per session
+                {pointsPerCents > 0 ? ` · +${Math.floor(packageDetail.priceCents * pointsPerCents)} points` : ""}
+              </span>
+            </div>
+
+            <div className="v2-pkgfacts">
+              <span>
+                <b>{packageDetail.sessions}</b>
+                sessions
+              </span>
+              <span>
+                <b>{packageDetail.expiryDays ? validityLabel(packageDetail.expiryDays) : "No expiry"}</b>
+                {packageDetail.expiryDays ? "from purchase" : "use any time"}
+              </span>
+              {packageDetail.transferable && (
+                <span>
+                  <b>Shareable</b>
+                  give sessions away
+                </span>
+              )}
+            </div>
+
+            {packageDetail.description && <p className="desc">{packageDetail.description}</p>}
+
+            {packageDetail.covers.length > 0 && (
+              <div className="v2-pkgcovers">
+                <h3>What a session can be used for</h3>
+                {packageDetail.covers.map((c) => (
+                  <div className="row" key={c.id}>
+                    <span className="txt">
+                      <b>{c.name}</b>
+                      <span className="tabular">{money(c.singlePriceCents, currency)} on its own</span>
+                    </span>
+                    <span className="how">{c.bookingUrl ? "Book online after buying" : "Book at the desk"}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {packageDetail.savingCents !== null && (
+              <p className="desc">
+                {packageDetail.savingAtLeast
+                  ? `Compared with buying ${packageDetail.sessions} sessions of the cheapest treatment this covers, one by one.`
+                  : `Compared with buying ${packageDetail.sessions} sessions one by one.`}
+              </p>
+            )}
+            <p className="desc">Results vary per person.</p>
           </div>
         )}
       </Sheet>

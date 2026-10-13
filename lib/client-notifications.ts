@@ -350,3 +350,39 @@ export async function notifyMembershipActive(membershipId: string): Promise<void
     tag: `membership-active-${membershipId}`,
   });
 }
+
+/**
+ * Somebody gave this client sessions from a package they bought.
+ *
+ * A service notification, not an offer: the client now owns something, and
+ * the sessions have an end date they need to know about.
+ */
+export async function notifySessionsReceived(customerProfileId: string, packageName: string, sessions: number): Promise<void> {
+  const to = await recipientForClient(customerProfileId);
+  if (!to) return;
+  await notifyClientQuietly(to.userId, {
+    title: to.clinicName,
+    body: `You've been given ${sessions} ${packageName} session${sessions === 1 ? "" : "s"}. They're in My items.`,
+    url: clinicPath(to.slug, "/profile"),
+    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    tag: `sessions-${customerProfileId}-${Date.now()}`,
+  });
+}
+
+/**
+ * Sessions the client still has are about to run out.
+ *
+ * Sent once, a fortnight before the end date, and only while there is
+ * something left to use — see lib/package-pricing.ts.
+ */
+export async function notifySessionsExpiring(customerProfileId: string, packageName: string, sessions: number, endsOn: string): Promise<void> {
+  const to = await recipientForClient(customerProfileId);
+  if (!to) return;
+  await notifyClientQuietly(to.userId, {
+    title: to.clinicName,
+    body: `${sessions} ${packageName} session${sessions === 1 ? "" : "s"} left — they run out on ${endsOn}.`,
+    url: clinicPath(to.slug, "/profile"),
+    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    tag: `sessions-expiring-${customerProfileId}`,
+  });
+}

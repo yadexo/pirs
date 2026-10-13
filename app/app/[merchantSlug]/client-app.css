@@ -3933,3 +3933,378 @@
   font-weight: 700;
   white-space: nowrap;
 }
+
+/* ======================================================================== */
+/* Session packages.                                                        */
+/* ======================================================================== */
+
+/* A wider rail item: a package card carries more than a product card does. */
+.client-app .v2-railitem.wide {
+  width: 240px;
+}
+.client-app .v2-pkgcard .art {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--brand-soft);
+}
+.client-app .v2-pkgcard .art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.client-app .v2-pkgcard .art .ph {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: var(--title-1-size);
+  font-weight: 800;
+  color: var(--brand-strong);
+}
+.client-app .v2-pkgcard .art .tags {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+}
+.client-app .v2-pkgcard .art .sessions {
+  position: absolute;
+  bottom: var(--space-2);
+  left: var(--space-2);
+  height: 26px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: var(--tag-size);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+}
+.client-app .v2-pkgcard .body {
+  display: block;
+  width: 100%;
+  padding-top: var(--space-2);
+  text-align: left;
+}
+.client-app .v2-pkgcard .body b {
+  display: block;
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  font-weight: 600;
+  color: var(--ink);
+}
+.client-app .v2-pkgcard .meta {
+  display: block;
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.client-app .v2-pkgcard .price {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+.client-app .v2-pkgcard .price b {
+  font-size: var(--title-3-size);
+  font-weight: 800;
+  color: var(--ink);
+}
+.client-app .v2-pkgcard .price span {
+  font-size: var(--caption-size);
+  color: var(--text-2);
+}
+
+/* The Packages group at the foot of the Treatments tab. */
+.client-app .v2-pkggroup {
+  margin-top: var(--space-8);
+}
+.client-app .v2-pkggroup h2 {
+  font-size: var(--title-2-size);
+  line-height: var(--title-2-line);
+  font-weight: 800;
+  color: var(--ink);
+  margin-bottom: var(--space-3);
+}
+.client-app .v2-pkggroup .rows {
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.client-app .v2-pkggroup .row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-4);
+  text-align: left;
+}
+.client-app .v2-pkggroup .row + .row {
+  border-top: 1px solid var(--line);
+}
+.client-app .v2-pkggroup .txt b {
+  display: block;
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  font-weight: 600;
+  color: var(--ink);
+}
+.client-app .v2-pkggroup .txt span {
+  display: block;
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-2);
+}
+.client-app .v2-pkggroup .txt .save {
+  color: var(--brand-strong);
+  font-weight: 700;
+}
+.client-app .v2-pkggroup .right {
+  text-align: right;
+  flex: none;
+}
+.client-app .v2-pkggroup .right b {
+  display: block;
+  font-size: var(--title-3-size);
+  font-weight: 800;
+  color: var(--ink);
+}
+.client-app .v2-pkggroup .right span {
+  font-size: var(--caption-size);
+  color: var(--text-2);
+}
+
+/* Three facts about a package, in the detail sheet. */
+.client-app .v2-pkgfacts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+.client-app .v2-pkgfacts span {
+  display: block;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-2);
+  text-align: center;
+}
+.client-app .v2-pkgfacts b {
+  display: block;
+  font-size: var(--body-size);
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.client-app .v2-pkgcovers {
+  margin-top: var(--space-5);
+}
+.client-app .v2-pkgcovers h3 {
+  font-size: var(--title-3-size);
+  line-height: var(--title-3-line);
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: var(--space-2);
+}
+.client-app .v2-pkgcovers .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.client-app .v2-pkgcovers .row:last-child {
+  border-bottom: 0;
+}
+.client-app .v2-pkgcovers .txt b {
+  display: block;
+  font-size: var(--body-size);
+  font-weight: 600;
+  color: var(--ink);
+}
+.client-app .v2-pkgcovers .txt span {
+  font-size: var(--caption-size);
+  color: var(--text-2);
+}
+.client-app .v2-pkgcovers .how {
+  flex: none;
+  font-size: var(--caption-size);
+  color: var(--text-2);
+}
+
+/* ------------------------------------------------- a package in My items */
+.client-app .v2-pkgowned {
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  margin-bottom: var(--space-3);
+}
+.client-app .v2-pkgowned .top {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.client-app .v2-pkgowned .thumb {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  display: grid;
+  place-items: center;
+}
+.client-app .v2-pkgowned .thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.client-app .v2-pkgowned .txt {
+  flex: 1;
+  min-width: 0;
+}
+.client-app .v2-pkgowned .txt b {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  font-weight: 700;
+  color: var(--ink);
+}
+.client-app .v2-pkgowned .txt span {
+  display: block;
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-2);
+}
+.client-app .v2-pkgowned .txt .from {
+  color: var(--brand-strong);
+}
+
+/* One segment per session, so what is left can be counted at a glance. */
+.client-app .v2-pkgowned .pips {
+  display: flex;
+  gap: 4px;
+  margin-top: var(--space-3);
+}
+.client-app .v2-pkgowned .pips span {
+  flex: 1;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--line-strong);
+}
+.client-app .v2-pkgowned .pips span.on {
+  background: var(--brand-strong);
+}
+
+.client-app .v2-pkgowned .covers {
+  margin-top: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  overflow: hidden;
+}
+.client-app .v2-pkgowned .covers .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--small-size);
+  color: var(--ink);
+}
+.client-app .v2-pkgowned .covers .row + .row {
+  border-top: 1px solid var(--line);
+}
+.client-app .v2-pkgowned .covers .book {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--ink);
+  color: #ffffff;
+  font-size: var(--caption-size);
+  font-weight: 700;
+}
+.client-app .v2-pkgowned .covers .desk {
+  font-size: var(--caption-size);
+  color: var(--text-2);
+}
+.client-app .v2-pkgowned .give {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  margin-top: var(--space-3);
+  padding: var(--space-3) 0 0;
+  border-top: 1px solid var(--line);
+  font-size: var(--small-size);
+  font-weight: 600;
+  color: var(--ink);
+}
+.client-app .v2-pkgowned .give svg:last-child {
+  margin-left: auto;
+}
+
+/* ------------------------------------------------------- giving sessions */
+.client-app .v2-give {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.client-app .v2-give .summary {
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+}
+.client-app .v2-give .summary b {
+  display: block;
+  font-size: var(--body-size);
+  font-weight: 700;
+  color: var(--ink);
+}
+.client-app .v2-give .summary span {
+  font-size: var(--caption-size);
+  color: var(--text-2);
+}
+.client-app .v2-give .howmany {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--body-size);
+  font-weight: 600;
+  color: var(--ink);
+}
+.client-app .v2-give .facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-left: var(--space-5);
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-2);
+}
+.client-app .v2-give .left {
+  font-size: var(--small-size);
+  font-weight: 600;
+  color: var(--ink);
+}
+.client-app .v2-give .err {
+  font-size: var(--small-size);
+  color: var(--danger);
+}

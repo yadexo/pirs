@@ -17,6 +17,9 @@ import type { ItemKind } from "@/lib/actions/app-builder";
 import { NotifyOffer, type OfferCampaign } from "./notify-offer";
 import { ProductPanelForm } from "./product-form";
 import { FieldIssues, TextCheckPanel, useTextCheck } from "@/components/merchant/text-check";
+import { Info } from "lucide-react";
+import { packageSaving } from "@/lib/package-pricing";
+import { formatMoney } from "@/lib/utils";
 
 export interface FormOptions {
   serviceCategories: string[];
@@ -28,7 +31,7 @@ export interface FormOptions {
   clinicName?: string;
   /** Whether this staff member may send notifications as well as write offers. */
   canSendMessages?: boolean;
-  services: { id: string; name: string }[];
+  services: { id: string; name: string; priceCents?: number }[];
   products: { id: string; name: string }[];
   tags: { id: string; name: string; icon: string; description: string | null }[];
   staff: { id: string; name: string; title: string | null }[];
@@ -68,15 +71,61 @@ export function ProductForm(props: ItemFormProps) {
 
 export function PackageForm({ merchantId, currency, item, options, errors }: ItemFormProps) {
   const chosen = new Set(((item.items as { serviceId: string }[]) ?? []).map((i) => i.serviceId));
+
+  // What clients will see, recomputed as the clinic types. The saving is only
+  // ever shown against a treatment's own price; a clinic editing this sees the
+  // non-member figure, which is the larger of the two.
+  const [priceInput, setPriceInput] = React.useState(centsToInput(item.priceCents as number));
+  const [sessionsInput, setSessionsInput] = React.useState(String(item.totalUses ?? 5));
+  const [covered, setCovered] = React.useState<Set<string>>(chosen);
+  const priceCents = Math.round(Number(priceInput.replace(",", ".") || 0) * 100);
+  const sessions = Number(sessionsInput) || 0;
+  const coveredPrices = options.services.filter((svc) => covered.has(svc.id)).map((svc) => svc.priceCents ?? 0).filter((c) => c > 0);
+  const preview = packageSaving({ packagePriceCents: priceCents, sessions, coveredSinglePricesCents: coveredPrices });
+
   return (
     <div className="space-y-5">
       <FormSection title="Custom plan">
         <TextField label="Name" name="name" defaultValue={str(item.name)} errors={errors} required />
         <TextAreaField label="Description" name="description" defaultValue={str(item.description)} errors={errors} />
         <div className="grid grid-cols-2 gap-3">
-          <MoneyField label="Price incl. VAT" name="price" currency={currency} defaultValue={centsToInput(item.priceCents as number)} errors={errors} required />
-          <TextField label="Sessions included" name="totalUses" type="number" min={1} defaultValue={str(item.totalUses ?? 5)} errors={errors} required />
+          <MoneyField
+            label="Price incl. VAT"
+            name="price"
+            currency={currency}
+            value={priceInput}
+            onChange={(e) => setPriceInput(e.target.value)}
+            errors={errors}
+            required
+          />
+          <TextField
+            label="Sessions included"
+            name="totalUses"
+            type="number"
+            min={2}
+            value={sessionsInput}
+            onChange={(e) => setSessionsInput(e.target.value)}
+            errors={errors}
+            required
+          />
         </div>
+        {sessions > 0 && priceCents > 0 && (
+          <div className="pk-notice pk-notice-info">
+            <Info className="ic h-4 w-4" aria-hidden="true" />
+            <span className="txt">
+              Clients will see <b>{formatMoney(Math.round(priceCents / sessions), currency)} per session</b>
+              {preview.savingCents !== null ? (
+                <>
+                  {" "}
+                  and <b>{preview.atLeast ? "Save at least" : "Save"} {formatMoney(preview.savingCents, currency)}</b>. Members see a smaller saving,
+                  because they already pay less for one session.
+                </>
+              ) : (
+                <>. No saving is shown: this costs the same or more than buying the sessions one by one.</>
+              )}
+            </span>
+          </div>
+        )}
         <TextField label="Expires after (days)" name="expiryDays" type="number" min={1} defaultValue={str(item.expiryDays)} errors={errors} hint="Leave empty for no expiry." />
         <ImageField label="Image" name="imageUrl" merchantId={merchantId} defaultValue={item.imageUrl as string} errors={errors} />
       </FormSection>
@@ -86,7 +135,20 @@ export function PackageForm({ merchantId, currency, item, options, errors }: Ite
         ) : (
           <div className="max-h-56 space-y-1.5 overflow-y-auto">
             {options.services.map((s) => (
-              <CheckboxField key={s.id} name="serviceIds" label={s.name} defaultChecked={chosen.has(s.id)} />
+              <CheckboxField
+                key={s.id}
+                name="serviceIds"
+                label={s.name}
+                checked={covered.has(s.id)}
+                onChange={(on) =>
+                  setCovered((prev) => {
+                    const next = new Set(prev);
+                    if (on) next.add(s.id);
+                    else next.delete(s.id);
+                    return next;
+                  })
+                }
+              />
             ))}
           </div>
         )}

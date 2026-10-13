@@ -7,6 +7,7 @@ import { useBasePath, useFinderPath } from "../base-path";
 import { NotificationSettings } from "@/components/client-app/push";
 import { MyItems, type ClientItem } from "./my-items";
 import type { BalanceChange } from "@/lib/client-app-data";
+import type { OwnedPackage } from "@/lib/client-app-packages";
 import { Sheet, Icon, EmptyState, money, useToast } from "@/components/client-app/ui";
 import { SegmentedControl } from "@/components/client-app/v2";
 import { signOutOfClinicAction } from "@/lib/actions/session";
@@ -105,6 +106,7 @@ export function ProfileView({
   orders,
   billing,
   balanceHistory,
+  packages,
   appVersion,
   platformName,
 }: {
@@ -121,6 +123,8 @@ export function ProfileView({
   billing: BillingRow[];
   /** Credit and points the clinic moved, with the reason they gave. */
   balanceHistory: BalanceChange[];
+  /** Session packages this client owns, used and expired ones included. */
+  packages: OwnedPackage[];
   appVersion: string;
   /** The agency's own white-label name — never a hardcoded one. */
   platformName: string;
@@ -338,7 +342,7 @@ export function ProfileView({
 
       {tab === "items" && (
         <>
-          <MyItems items={items} />
+          <MyItems items={items} packages={packages} merchantSlug={merchantSlug} />
           <div className="v2-profilelinks">
             <button type="button" className="row" onClick={() => setSheet("appointments")}>
               <span className="ic" aria-hidden="true">

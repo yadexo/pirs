@@ -8,6 +8,9 @@ import { runMarketing } from "@/lib/cron/marketing";
 import { PAST_DUE_GRACE_MS } from "@/lib/membership-status";
 import { notifyMembershipSuspended } from "@/lib/client-notifications";
 import { applyDuePriceChanges } from "@/lib/membership-price-rollout";
+import { EXPIRY_REMINDER_DAYS } from "@/lib/package-pricing";
+import { notifySessionsExpiring } from "@/lib/client-notifications";
+import { formatDay } from "@/lib/client-format";
 
 /** How long an unpaid order may hold stock and redeemed points. */
 const ABANDONED_ORDER_MS = 60 * 60 * 1000;
@@ -150,12 +153,64 @@ export const CRON_JOBS: Record<string, () => Promise<CronResult>> = {
      */
     const prices = await applyDuePriceChanges(new Date());
 
+    /**
+     * Session packages about to run out.
+     *
+     * A fortnight before the end date, and only while there is something left
+     * to use — telling somebody their empty package is expiring is noise.
+     * expiryReminderSentAt is what makes it once rather than once a day, and
+     * it is written whether or not the push lands, because a client with
+     * notifications off should not be queued up forever.
+     */
+    const now = new Date();
+    const expiringSoon = await rawDb.customerPackage.findMany({
+      where: {
+        status: "ACTIVE",
+        remainingUses: { gt: 0 },
+        expiryReminderSentAt: null,
+        expiresAt: { gt: now, lte: new Date(now.getTime() + EXPIRY_REMINDER_DAYS * 86_400_000) },
+      },
+      select: {
+        id: true,
+        customerProfileId: true,
+        remainingUses: true,
+        expiresAt: true,
+        package: { select: { name: true } },
+      },
+      take: 500,
+    });
+
+    let expiryReminders = 0;
+    for (const row of expiringSoon) {
+      // Claimed first: two overlapping runs must not both send.
+      const { count } = await rawDb.customerPackage.updateMany({
+        where: { id: row.id, expiryReminderSentAt: null },
+        data: { expiryReminderSentAt: now },
+      });
+      if (count === 0) continue;
+      expiryReminders += 1;
+      await notifySessionsExpiring(
+        row.customerProfileId,
+        row.package.name,
+        row.remainingUses,
+        formatDay(row.expiresAt!, null),
+      ).catch(() => undefined);
+    }
+
+    /** Packages whose date has passed: marked once, so the app can file them. */
+    const expiredPackages = await rawDb.customerPackage.updateMany({
+      where: { status: "ACTIVE", expiresAt: { lte: now } },
+      data: { status: "EXPIRED" },
+    });
+
     return {
       suspended,
       considered: expired.length,
       abandonedSignups: stale.count,
       priceChangesApplied: prices.applied,
       priceChangesFailed: prices.failed,
+      packageExpiryReminders: expiryReminders,
+      packagesExpired: expiredPackages.count,
     };
   },
 };

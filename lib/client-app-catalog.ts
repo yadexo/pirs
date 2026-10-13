@@ -3,6 +3,7 @@ import type { TenantDb } from "@/lib/tenant-db";
 import { shopDiscountsFor, type DiscountCandidate } from "@/lib/discounts";
 import { groupHistory, historyKey, type PricePoint } from "@/lib/price-history";
 import { cardTag, isNew, popularIds, priceItem, POPULAR_WINDOW_DAYS, type CardTag, type PlanRates, type PricedItem } from "@/lib/merchandising";
+import { packageSaving } from "@/lib/package-pricing";
 
 /**
  * The clinic's catalogue as the client app shows it: one card per thing, with
@@ -34,9 +35,34 @@ export interface ShopCard extends PricedItem {
   popular: boolean;
 }
 
+/**
+ * A session package as this viewer sees it: the price, what it works out at
+ * per session, and what it saves *them* — which is less for a member, who
+ * already pays the member price for a single session. Never stored; see
+ * lib/package-pricing.ts.
+ */
+export interface PackageCard {
+  id: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  priceCents: number;
+  sessions: number;
+  /** Days from purchase, or null when it never expires. */
+  expiryDays: number | null;
+  transferable: boolean;
+  perSessionCents: number;
+  savingCents: number | null;
+  /** True when the saving was measured against the cheapest of several. */
+  savingAtLeast: boolean;
+  /** The treatments a session can be spent on. */
+  covers: { id: string; name: string; singlePriceCents: number; bookingUrl: string | null }[];
+}
+
 export interface Catalog {
   treatments: ShopCard[];
   products: ShopCard[];
+  packages: PackageCard[];
   /** Treatments with the real top sellers first. */
   popularTreatments: ShopCard[];
   isMember: boolean;
@@ -62,7 +88,7 @@ export async function getCatalog(db: TenantDb, params: { tenantId: string; custo
   const now = params.now ?? new Date();
   const popularSince = new Date(now.getTime() - POPULAR_WINDOW_DAYS * DAY);
 
-  const [profile, plans, services, products, paidItems, history] = await Promise.all([
+  const [profile, plans, services, products, paidItems, history, packages] = await Promise.all([
     db.customerProfile.findFirst({
       where: { id: params.customerProfileId },
       select: { memberships: { where: { status: { in: ["ACTIVE", "TRIAL"] } }, select: { id: true }, take: 1 } },
@@ -103,6 +129,21 @@ export async function getCatalog(db: TenantDb, params: { tenantId: string; custo
     db.priceHistory.findMany({
       orderBy: { recordedAt: "asc" },
       select: { itemType: true, serviceId: true, productId: true, priceCents: true, recordedAt: true },
+    }),
+    db.package.findMany({
+      where: { active: true, archivedAt: null },
+      orderBy: { priceCents: "asc" },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        imageUrl: true,
+        priceCents: true,
+        totalUses: true,
+        expiryDays: true,
+        transferable: true,
+        items: { select: { serviceId: true } },
+      },
     }),
   ]);
 
@@ -194,5 +235,41 @@ export async function getCatalog(db: TenantDb, params: { tenantId: string; custo
   // on a quiet month.
   const popularTreatments = [...treatments].sort((a, b) => Number(b.popular) - Number(a.popular));
 
-  return { treatments, products: products_, popularTreatments, isMember, pitchPlan, viewerCandidates };
+  // The saving is worked out against what *this* viewer pays for one session,
+  // so a member and a non-member looking at the same package see different
+  // numbers — and sometimes the member sees none at all.
+  const byId = new Map(treatments.map((t) => [t.id, t]));
+  const packageCards: PackageCard[] = packages.map((pkg) => {
+    const covers = pkg.items
+      .map((i) => byId.get(i.serviceId))
+      .filter((t): t is ShopCard => !!t)
+      .map((t) => ({
+        id: t.id,
+        name: t.name,
+        // What the viewer would pay for one of these today.
+        singlePriceCents: t.memberPriceCents ?? t.viewerPriceCents,
+        bookingUrl: t.bookingUrl,
+      }));
+    const saving = packageSaving({
+      packagePriceCents: pkg.priceCents,
+      sessions: pkg.totalUses,
+      coveredSinglePricesCents: covers.map((c) => c.singlePriceCents),
+    });
+    return {
+      id: pkg.id,
+      name: pkg.name,
+      description: pkg.description,
+      imageUrl: pkg.imageUrl,
+      priceCents: pkg.priceCents,
+      sessions: pkg.totalUses,
+      expiryDays: pkg.expiryDays,
+      transferable: pkg.transferable,
+      perSessionCents: saving.perSessionCents,
+      savingCents: saving.savingCents,
+      savingAtLeast: saving.atLeast,
+      covers,
+    };
+  });
+
+  return { treatments, products: products_, packages: packageCards, popularTreatments, isMember, pitchPlan, viewerCandidates };
 }

@@ -143,7 +143,7 @@ export async function getAppBuilderOptionsAction(merchantId: string, kind: ItemK
     const [serviceCategories, productCategories, services, products, tags, staff] = await Promise.all([
       db.serviceCategory.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
       db.productCategory.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-      db.service.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+      db.service.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true, priceCents: true } }),
       db.product.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
       db.catalogTag.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, icon: true, description: true } }),
       db.staffProfile.findMany({

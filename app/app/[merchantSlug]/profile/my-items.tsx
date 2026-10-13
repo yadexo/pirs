@@ -5,6 +5,11 @@ import { Icon, QrCode, Sheet } from "@/components/client-app/ui";
 import { redeemQrValue } from "@/lib/redeemable-shared";
 import { formatDay } from "@/lib/client-format";
 import { useClinicTimeZone } from "../base-path";
+import { useRouter } from "next/navigation";
+import { useToast, Stepper } from "@/components/client-app/ui";
+import { Button, TextField } from "@/components/client-app/v2";
+import { clientGiveSessionsAction } from "@/lib/actions/client-app";
+import type { OwnedPackage } from "@/lib/client-app-packages";
 
 /**
  * "My items" — the things this client has paid for and can still collect.
@@ -39,8 +44,11 @@ const STATUS_LABEL: Record<ClientItem["status"], string> = {
 
 const day = (iso: string, timeZone: string) => formatDay(iso, timeZone);
 
-export function MyItems({ items }: { items: ClientItem[] }) {
+export function MyItems({ items, packages, merchantSlug }: { items: ClientItem[]; packages: OwnedPackage[]; merchantSlug: string }) {
   const timeZone = useClinicTimeZone();
+  const [giving, setGiving] = React.useState<OwnedPackage | null>(null);
+  const usable = packages.filter((p) => !p.expired && p.remainingUses > 0);
+  const spent = packages.filter((p) => p.expired || p.remainingUses === 0);
   const [open, setOpen] = React.useState<ClientItem | null>(null);
   const [live, setLive] = React.useState<Record<string, ClientItem["status"]>>({});
 
@@ -72,7 +80,7 @@ export function MyItems({ items }: { items: ClientItem[] }) {
   const past = items.filter((i) => statusOf(i) !== "AVAILABLE");
   const openStatus = open ? statusOf(open) : null;
 
-  if (items.length === 0) {
+  if (items.length === 0 && packages.length === 0) {
     return (
       <div className="v2-items">
         <p className="none">Anything you buy in the app appears here with its own code to show at the clinic.</p>
@@ -82,9 +90,69 @@ export function MyItems({ items }: { items: ClientItem[] }) {
 
   return (
     <div className="v2-items">
-      {available.length > 0 && (
+      {(available.length > 0 || usable.length > 0) && (
         <section>
           <h2>Ready to use</h2>
+
+          {/* Packages first: they are several sessions and the most to say. */}
+          {usable.map((pkg) => (
+            <div className="v2-pkgowned" key={pkg.id}>
+              <div className="top">
+                <span className="thumb" aria-hidden="true">
+                  {pkg.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={pkg.imageUrl} alt="" />
+                  ) : (
+                    <Icon name="sparkle" size={20} />
+                  )}
+                </span>
+                <span className="txt">
+                  <b>
+                    {pkg.name} <span className="v2-tag v2-tag-photo">Package</span>
+                  </b>
+                  <span>
+                    {pkg.sessionsLabel}
+                    {pkg.expiresAt ? `, valid until ${formatDay(pkg.expiresAt, timeZone)}` : ""}
+                  </span>
+                  {pkg.receivedFromName && <span className="from">Given to you by {pkg.receivedFromName}</span>}
+                </span>
+              </div>
+
+              {/* One segment per session, so what is left is countable. */}
+              <div className="pips" aria-hidden="true">
+                {Array.from({ length: pkg.totalUses }, (_, i) => (
+                  <span key={i} className={i < pkg.remainingUses ? "on" : undefined} />
+                ))}
+              </div>
+
+              {pkg.covers.length > 0 && (
+                <div className="covers">
+                  {pkg.covers.map((c) => (
+                    <div className="row" key={c.id}>
+                      <span>{c.name}</span>
+                      {c.bookingUrl ? (
+                        <a className="book" href={c.bookingUrl} target="_blank" rel="noreferrer">
+                          Book
+                          <Icon name="share" size={14} />
+                        </a>
+                      ) : (
+                        <span className="desk">Book at the desk</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {pkg.canGive && (
+                <button type="button" className="give" onClick={() => setGiving(pkg)}>
+                  <Icon name="share" size={18} />
+                  Give sessions to someone
+                  <Icon name="chevR" size={18} />
+                </button>
+              )}
+            </div>
+          ))}
+
           <div className="list">
             {available.map((item) => (
               <div key={item.id} className="rowwrap">
@@ -112,10 +180,24 @@ export function MyItems({ items }: { items: ClientItem[] }) {
         </section>
       )}
 
-      {past.length > 0 && (
+      {(past.length > 0 || spent.length > 0) && (
         <section>
           <h2>Past items</h2>
           <div className="list past">
+            {spent.map((pkg) => (
+              <div className="row" key={pkg.id}>
+                <span className="thumb" aria-hidden="true">
+                  <Icon name="sparkle" size={20} />
+                </span>
+                <span className="txt">
+                  <b>{pkg.name}</b>
+                  <span>
+                    {pkg.expired ? "Expired" : "All sessions used"}
+                    {pkg.expiresAt ? ` · ${formatDay(pkg.expiresAt, timeZone)}` : ""}
+                  </span>
+                </span>
+              </div>
+            ))}
             {past.map((item) => (
               <div key={item.id} className="row" >
                 <span className="thumb" aria-hidden="true">
@@ -133,6 +215,8 @@ export function MyItems({ items }: { items: ClientItem[] }) {
           </div>
         </section>
       )}
+
+      <GiveSessionsSheet pkg={giving} merchantSlug={merchantSlug} timeZone={timeZone} onClose={() => setGiving(null)} />
 
       <Sheet open={!!open} onClose={() => setOpen(null)} full title={open?.name}>
         {open && (
@@ -171,5 +255,107 @@ export function MyItems({ items }: { items: ClientItem[] }) {
         )}
       </Sheet>
     </div>
+  );
+}
+
+/**
+ * Giving sessions away.
+ *
+ * It happens at once and cannot be undone, so the sheet says so before the
+ * button rather than after it, and shows what the giver will have left.
+ */
+function GiveSessionsSheet({
+  pkg,
+  merchantSlug,
+  timeZone,
+  onClose,
+}: {
+  pkg: OwnedPackage | null;
+  merchantSlug: string;
+  timeZone: string;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [count, setCount] = React.useState(1);
+  const [contact, setContact] = React.useState("");
+  const [pending, setPending] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (pkg) {
+      setCount(1);
+      setContact("");
+      setError(null);
+    }
+  }, [pkg]);
+
+  if (!pkg) return null;
+
+  async function give() {
+    if (!pkg) return;
+    setPending(true);
+    setError(null);
+    const res = await clientGiveSessionsAction(merchantSlug, pkg.id, count, contact);
+    setPending(false);
+    if ("error" in res) {
+      setError(res.error);
+      return;
+    }
+    toast(`${res.sessions} session${res.sessions === 1 ? "" : "s"} given`);
+    onClose();
+    router.refresh();
+  }
+
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title="Give sessions"
+      cta={
+        <Button loading={pending} disabled={!contact.trim()} onClick={() => void give()}>
+          Give {count} session{count === 1 ? "" : "s"}
+        </Button>
+      }
+    >
+      <div className="v2-give">
+        <div className="summary">
+          <b>{pkg.name}</b>
+          <span>
+            {pkg.sessionsLabel}
+            {pkg.expiresAt ? `, valid until ${formatDay(pkg.expiresAt, timeZone)}` : ""}
+          </span>
+        </div>
+
+        <div className="howmany">
+          <span>How many</span>
+          <Stepper value={count} min={1} max={pkg.remainingUses} onChange={setCount} />
+        </div>
+
+        <TextField
+          label="Their email or phone number"
+          value={contact}
+          onChange={(e) => setContact(e.target.value)}
+          placeholder="name@example.com"
+          inputMode="email"
+        />
+
+        <ul className="facts">
+          <li>They need an account at this clinic already.</li>
+          <li>The sessions arrive in their My items with the same treatments and the same end date.</li>
+          <li>This can&apos;t be undone.</li>
+        </ul>
+
+        <p className="left">
+          You&apos;ll have {pkg.remainingUses - count} session{pkg.remainingUses - count === 1 ? "" : "s"} left.
+        </p>
+
+        {error && (
+          <p className="err" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+    </Sheet>
   );
 }

@@ -148,3 +148,19 @@ export function canGiveSessions(input: {
   }
   return { ok: true };
 }
+
+/**
+ * "1 year", "6 months", "90 days" — how long a package stays usable, said the
+ * way a person would say it rather than always in days.
+ */
+export function validityLabel(expiryDays: number): string {
+  if (expiryDays % 365 === 0) {
+    const years = expiryDays / 365;
+    return `${years} year${years === 1 ? "" : "s"}`;
+  }
+  if (expiryDays % 30 === 0) {
+    const months = expiryDays / 30;
+    return `${months} month${months === 1 ? "" : "s"}`;
+  }
+  return `${expiryDays} day${expiryDays === 1 ? "" : "s"}`;
+}

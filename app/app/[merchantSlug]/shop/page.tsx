@@ -59,6 +59,7 @@ export default async function ShopPage({
       categoryId={sp.category ?? null}
       categories={[...categories.map((c) => ({ id: c.id, name: c.name })), ...treatmentCategories]}
       treatments={catalog.treatments}
+      packages={catalog.packages}
       popularTreatments={catalog.popularTreatments}
       products={catalog.products}
       isMember={catalog.isMember}

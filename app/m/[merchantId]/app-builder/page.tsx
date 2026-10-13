@@ -8,6 +8,7 @@ import { CatalogTab, type CatalogItem } from "./catalog-tab";
 import { SettingsTab } from "./settings-tab";
 import { cn } from "@/lib/utils";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
+import { formatMoney } from "@/lib/utils";
 import { loadSettingsSection } from "./settings/load";
 import { viewerCan } from "@/lib/viewer";
 import type { MerchantRequirement } from "@/lib/merchant-action";
@@ -99,7 +100,7 @@ export default async function AppBuilderPage({
             q={q}
             typeFilter={typeFilter}
             currency={currency}
-            items={await loadItems(ctx.db, tab, q, typeFilter)}
+            items={await loadItems(ctx.db, tab, q, typeFilter, currency)}
           />
         )}
       </div>
@@ -116,13 +117,44 @@ async function loadItems(
   tab: string,
   q: string,
   typeFilter: string,
+  currency: string,
 ): Promise<CatalogItem[]> {
   const nameFilter = q ? { name: { contains: q, mode: "insensitive" as const } } : {};
 
   if (tab === "custom-plans") {
     // Packages became Custom plans.
-    const rows = await db.package.findMany({ where: { archivedAt: null, ...nameFilter }, orderBy: { name: "asc" } });
-    return rows.map((r) => ({ kind: "package", id: r.id, name: r.name, meta: `${r.totalUses} sessions`, priceCents: r.priceCents, active: r.active }));
+    const rows = await db.package.findMany({
+      where: { archivedAt: null, ...nameFilter },
+      orderBy: { name: "asc" },
+      include: {
+        _count: { select: { customerPackages: true } },
+        items: { select: { service: { select: { name: true, schedulingUrl: true } } } },
+      },
+    });
+    return rows.map((r) => {
+      const covered = r.items.map((i) => i.service).filter((s): s is NonNullable<typeof s> => !!s);
+      const unbookable = covered.filter((s) => !s.schedulingUrl).length;
+      return {
+        kind: "package" as const,
+        id: r.id,
+        name: r.name,
+        meta: [
+          `${r.totalUses} sessions`,
+          `${formatMoney(Math.round(r.priceCents / Math.max(1, r.totalUses)), currency)} per session`,
+          r.expiryDays ? `valid ${r.expiryDays} days` : "no expiry",
+          covered.length > 0 ? covered.map((s) => s.name).join(", ") : "covers nothing yet",
+          r.transferable ? "transferable" : null,
+          r._count.customerPackages > 0 ? `${r._count.customerPackages} sold` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        // A package whose treatments cannot be booked sells sessions a client
+        // then cannot use without coming to the desk.
+        warning: unbookable > 0 ? "Booking link missing" : undefined,
+        priceCents: r.priceCents,
+        active: r.active,
+      };
+    });
   }
 
   if (tab === "offers") {

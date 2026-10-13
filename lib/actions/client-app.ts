@@ -15,11 +15,14 @@ import { recordActivity } from "@/lib/activity";
 import { clinicPaymentMode, createDirectCharge } from "@/lib/stripe-payments";
 import { completePaidOrder, releaseFailedOrder } from "@/lib/order-completion";
 import { createItemsForOrder } from "@/lib/redeemable";
+import { createPackagesForOrder } from "@/lib/customer-packages";
 import { bookingDepositCents } from "@/lib/booking-deposit";
 import { memberCandidatesFor, resolveDiscount } from "@/lib/discounts";
 import { MEMBERSHIP_HOLDS_SLOT } from "@/lib/membership-status";
 import { adjustAccountCredit, availableCredit, creditToApply, InsufficientCreditError } from "@/lib/account-credit";
 import { computeVatCents } from "@/lib/checkout-calculations";
+import { canGiveSessions } from "@/lib/package-pricing";
+import { notifySessionsReceived } from "@/lib/client-notifications";
 import {
   cancelMembershipSubscription,
   createMembershipSubscription,
@@ -261,7 +264,7 @@ export async function clientCancelAppointmentAction(slug: string, appointmentId:
 
 export async function clientAddToCartAction(
   slug: string,
-  kind: "product" | "service",
+  kind: "product" | "service" | "package",
   id: string,
   qty: number,
 ): Promise<{ error: string } | { ok: true }> {
@@ -271,7 +274,18 @@ export async function clientAddToCartAction(
     (await db.basket.findFirst({ where: { customerProfileId: user.customerProfileId!, status: "OPEN" } })) ??
     (await db.basket.create({ data: { customerProfileId: user.customerProfileId!, status: "OPEN" } as never }));
 
-  if (kind === "product") {
+  if (kind === "package") {
+    // A session package: one price for a fixed number of sessions. The sessions
+    // themselves are created when the order is paid, not here.
+    const pkg = await db.package.findFirst({ where: { id, active: true, archivedAt: null } });
+    if (!pkg) return { error: "That package is no longer available." };
+    const line = await db.basketItem.findFirst({ where: { basketId: basket.id, packageId: id } });
+    if (line) await db.basketItem.updateMany({ where: { id: line.id }, data: { quantity: { increment: qty } } });
+    else
+      await db.basketItem.create({
+        data: { basketId: basket.id, itemType: "PACKAGE", packageId: id, quantity: qty, unitPriceCents: pkg.priceCents },
+      });
+  } else if (kind === "product") {
     const product = await db.product.findFirst({ where: { id, active: true } });
     if (!product) return { error: "Product not found." };
     if (product.inventoryQuantity < qty) return { error: "Not enough stock." };
@@ -300,13 +314,16 @@ export async function clientCartAction() {
   const { db, user } = await requireCustomerContext();
   const basket = await db.basket.findFirst({
     where: { customerProfileId: user.customerProfileId!, status: "OPEN" },
-    include: { items: { include: { service: true, product: true } } },
+    include: { items: { include: { service: true, product: true, package: true } } },
   });
 
   const items = (basket?.items ?? []).map((i) => ({
     id: i.id,
-    name: i.service?.name ?? i.product?.name ?? "Item",
-    imageUrl: i.service?.imageUrl ?? (Array.isArray(i.product?.images) ? ((i.product!.images as string[])[0] ?? null) : null),
+    name: i.service?.name ?? i.product?.name ?? i.package?.name ?? "Item",
+    imageUrl:
+      i.service?.imageUrl ??
+      i.package?.imageUrl ??
+      (Array.isArray(i.product?.images) ? ((i.product!.images as string[])[0] ?? null) : null),
     quantity: i.quantity,
     unitPriceCents: i.unitPriceCents,
   }));
@@ -354,9 +371,12 @@ export async function clientCartExtrasAction(): Promise<{
 
   const basket = await db.basket.findFirst({
     where: { customerProfileId: user.customerProfileId!, status: "OPEN" },
-    include: { items: { include: { service: true, product: true } } },
+    include: { items: { include: { service: true, product: true, package: true } } },
   });
-  const lines = (basket?.items ?? []).map((i) => ({
+  // Session packages are left out: a package is already a bundled price, and
+  // the saving it advertises is a comparison with single sessions, not a
+  // discount. Taking a member rate off it as well would discount it twice.
+  const lines = (basket?.items ?? []).filter((i) => i.itemType !== "PACKAGE").map((i) => ({
     kind: (i.itemType === "PRODUCT" ? "PRODUCT" : "SERVICE") as "PRODUCT" | "SERVICE",
     id: (i.itemType === "PRODUCT" ? i.productId : i.serviceId) ?? i.id,
     categoryId: (i.itemType === "PRODUCT" ? i.product?.categoryId : i.service?.categoryId) ?? null,
@@ -438,7 +458,7 @@ export async function clientCheckoutAction(
 
   const basket = await db.basket.findFirst({
     where: { customerProfileId: user.customerProfileId!, status: "OPEN" },
-    include: { items: { include: { service: true, product: true } } },
+    include: { items: { include: { service: true, product: true, package: true } } },
   });
   const items = basket?.items ?? [];
   if (!basket || items.length === 0) return { error: "Your cart is empty." };
@@ -468,7 +488,10 @@ export async function clientCheckoutAction(
   const applied = await resolveDiscount({
     tenantId: user.tenantId!,
     customerProfileId: user.customerProfileId!,
-    lines: items.map((i) => ({
+    // Packages are excluded here for the same reason as in the cart preview:
+    // their price is already the bundle, and discounting it again would make
+    // the saving they advertise untrue.
+    lines: items.filter((i) => i.itemType !== "PACKAGE").map((i) => ({
       kind: i.itemType === "PRODUCT" ? "PRODUCT" : "SERVICE",
       id: (i.itemType === "PRODUCT" ? i.productId : i.serviceId) ?? i.id,
       categoryId: (i.itemType === "PRODUCT" ? i.product?.categoryId : i.service?.categoryId) ?? null,
@@ -524,7 +547,10 @@ export async function clientCheckoutAction(
           itemType: i.itemType,
           serviceId: i.serviceId,
           productId: i.productId,
-          name: i.service?.name ?? i.product?.name ?? "Item",
+          // Without this the sessions a package was bought for would have
+          // nothing to point at when the order is paid.
+          packageId: i.packageId,
+          name: i.service?.name ?? i.product?.name ?? i.package?.name ?? "Item",
           quantity: i.quantity,
           unitPriceCents: i.unitPriceCents,
           totalCents: i.unitPriceCents * i.quantity,
@@ -630,6 +656,7 @@ export async function clientCheckoutAction(
     });
     const { pointsEarned } = await completePaidOrder(db, order.id);
     await createItemsForOrder(order.id);
+    await createPackagesForOrder(order.id);
     revalidateClient(slug);
     return { ok: true, paid: true, orderNumber, pointsEarned, totalCents: 0 };
   }
@@ -822,6 +849,116 @@ export async function clientOrderReceiptAction(
       .filter((i) => !!i.service?.schedulingUrl)
       .map((i) => ({ name: i.name, url: i.service!.schedulingUrl! })),
   };
+}
+
+/**
+ * Giving some of your sessions to someone else.
+ *
+ * It happens at once and cannot be undone, so every reason to refuse is
+ * settled before anything moves — see canGiveSessions. The receiver must
+ * already have an account at the same clinic: this creates sessions, it does
+ * not invite anybody, and sending a stranger a package they cannot reach
+ * would be worse than saying no.
+ *
+ * The sessions keep the giver's end date. They were bought on a day and that
+ * is when they run out; passing them on does not buy more time.
+ */
+export async function clientGiveSessionsAction(
+  slug: string,
+  customerPackageId: string,
+  sessions: number,
+  contact: string,
+): Promise<{ error: string } | { ok: true; name: string; sessions: number; remaining: number }> {
+  const { db, user } = await requireCustomerContext();
+  const giverId = user.customerProfileId!;
+
+  const owned = await db.customerPackage.findFirst({
+    where: { id: customerPackageId, customerProfileId: giverId },
+    select: {
+      id: true,
+      remainingUses: true,
+      expiresAt: true,
+      packageId: true,
+      status: true,
+      package: { select: { name: true, transferable: true } },
+    },
+  });
+  if (!owned) return { error: "Those sessions are no longer yours." };
+
+  // Found by email or phone, and only inside this clinic — a client of
+  // another clinic is not a client of this one.
+  const needle = contact.trim();
+  if (!needle) return { error: "Enter their email or phone number." };
+  const receiver = await db.customerProfile.findFirst({
+    where: needle.includes("@")
+      ? { user: { email: { equals: needle, mode: "insensitive" } } }
+      : { phone: { equals: needle } },
+    select: { id: true, firstName: true },
+  });
+
+  const allowed = canGiveSessions({
+    transferable: owned.package.transferable,
+    remainingUses: owned.remainingUses,
+    requested: sessions,
+    expiresAt: owned.expiresAt,
+    giverProfileId: giverId,
+    receiverProfileId: receiver?.id ?? null,
+  });
+  if (!allowed.ok) return { error: allowed.message };
+
+  if (!receiver) {
+    return { error: `We couldn't find an account with this email or phone number at ${slug}.` };
+  }
+
+  // Both sides in one transaction: sessions must never be in two places, nor
+  // in none. The giver's count is decremented conditionally, so two taps at
+  // once cannot give the same session twice.
+  const moved = await rawDb.$transaction(async (tx) => {
+    const taken = await tx.customerPackage.updateMany({
+      where: { id: owned.id, customerProfileId: giverId, remainingUses: { gte: sessions } },
+      data: { remainingUses: { decrement: sessions } },
+    });
+    if (taken.count === 0) return null;
+
+    const after = await tx.customerPackage.findUniqueOrThrow({ where: { id: owned.id }, select: { remainingUses: true, tenantId: true } });
+    if (after.remainingUses === 0) {
+      await tx.customerPackage.update({ where: { id: owned.id }, data: { status: "TRANSFERRED" } });
+    }
+
+    await tx.customerPackage.create({
+      data: {
+        tenantId: after.tenantId,
+        customerProfileId: receiver.id,
+        packageId: owned.packageId,
+        remainingUses: sessions,
+        totalUses: sessions,
+        // The end date travels with the sessions, unchanged.
+        expiresAt: owned.expiresAt,
+        receivedFromCustomerProfileId: giverId,
+        receivedAt: new Date(),
+      } as never,
+    });
+
+    return after.remainingUses;
+  });
+
+  if (moved === null) return { error: "Those sessions have already been used or given away." };
+
+  // Both clients' Items tab shows this, and the clinic can see who moved what.
+  await writeAuditLog({
+    tenantId: user.tenantId!,
+    actorUserId: user.id,
+    actorType: "SYSTEM",
+    action: "package.sessions.given",
+    entityType: "CustomerPackage",
+    entityId: owned.id,
+    metadata: { packageName: owned.package.name, sessions, fromCustomerProfileId: giverId, toCustomerProfileId: receiver.id },
+  });
+
+  await notifySessionsReceived(receiver.id, owned.package.name, sessions).catch(() => undefined);
+
+  revalidateClient(slug);
+  return { ok: true, name: owned.package.name, sessions, remaining: moved };
 }
 
 /** The client gave up in the Payment Element: let the stock and points go. */
