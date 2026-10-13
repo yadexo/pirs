@@ -96,6 +96,7 @@ model Tenant {
   customerMemberships    CustomerMembership[]
   membershipPriceChanges MembershipPriceChange[]
   priceHistory           PriceHistory[]
+  packageSessionUses     PackageSessionUse[]
   loyaltyProgramme       LoyaltyProgramme?
   loyaltyTransactions    LoyaltyTransaction[]
   accountCreditTx        AccountCreditTransaction[]
@@ -301,6 +302,7 @@ model User {
   passwordResets        PasswordResetToken[]
   pushSubscriptions     PushSubscription[]
   redemptionsPerformed  RedeemableItem[]       @relation("RedeemedBy")
+  packageSessionsUsed   PackageSessionUse[]    @relation("PackageSessionUsedBy")
   impersonationSessions ImpersonationSession[]
 
   @@unique([tenantId, email])
@@ -687,6 +689,7 @@ model Service {
   membershipBenefits   MembershipBenefit[]
   loyaltyRewards       LoyaltyReward[]
   priceHistory         PriceHistory[]
+  packageSessionUses   PackageSessionUse[]
 
   @@index([tenantId, categoryId])
 }
@@ -945,8 +948,37 @@ model CustomerPackage {
   updatedAt DateTime @updatedAt
 
   appointments Appointment[]
+  sessionUses  PackageSessionUse[]
 
   @@index([tenantId, customerProfileId])
+}
+
+/// One session of a package, spent at the desk.
+///
+/// A row per use rather than only a counter on the package: the client is
+/// entitled to an account of where their sessions went, and the clinic to
+/// know which member of staff gave each one. The counter on CustomerPackage
+/// is what the rest of the app reads; this is the history behind it.
+model PackageSessionUse {
+  id                String          @id @default(cuid())
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerPackageId String
+  customerPackage   CustomerPackage @relation(fields: [customerPackageId], references: [id], onDelete: Cascade)
+
+  /// Which of the covered treatments this session was spent on.
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: NoAction)
+
+  /// The staff member who used it. Kept if their account is later removed.
+  usedById String?
+  usedBy   User?   @relation("PackageSessionUsedBy", fields: [usedById], references: [id], onDelete: SetNull)
+
+  /// What they typed, when they typed anything.
+  note   String?
+  usedAt DateTime @default(now())
+
+  @@index([tenantId, customerPackageId])
 }
 
 // ---------------------------------------------------------------------------

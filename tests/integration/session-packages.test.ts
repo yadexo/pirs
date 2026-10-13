@@ -19,6 +19,7 @@ const { createPackagesForOrder } = await import("@/lib/customer-packages");
 const { clientGiveSessionsAction } = await import("@/lib/actions/client-app");
 const { getOwnedPackages } = await import("@/lib/client-app-packages");
 const { getTenantDb } = await import("@/lib/tenant-db");
+const { spendPackageSession, sessionUsedMessage } = await import("@/lib/package-redemption");
 
 describe("session packages", () => {
   let tenantId: string;
@@ -250,6 +251,112 @@ describe("session packages", () => {
       expect(owned[0]!.canGive).toBe(false);
     });
   });
+
+  /* ------------------------------------------------ spending them at the desk */
+
+  describe("using a session at the desk", () => {
+    let staffUserId: string;
+    let deskPackageId: string;
+    let deskServiceId: string;
+    let otherServiceId: string;
+
+    beforeAll(async () => {
+      const stamp = Date.now();
+      staffUserId = (await rawDb.user.create({ data: { tenantId, email: `desk-${stamp}@x.com`, passwordHash: "x", role: "STAFF" } })).id;
+      const category = await rawDb.serviceCategory.findFirstOrThrow({ where: { tenantId } });
+      deskServiceId = serviceId;
+      otherServiceId = (
+        await rawDb.service.create({ data: { tenantId, categoryId: category.id, name: "Not covered", durationMinutes: 30, priceCents: 5_000 } })
+      ).id;
+      deskPackageId = packageId;
+    });
+
+    async function owned(over: Record<string, unknown> = {}) {
+      return rawDb.customerPackage.create({
+        data: {
+          tenantId,
+          customerProfileId: giverId,
+          packageId: deskPackageId,
+          remainingUses: 3,
+          totalUses: 5,
+          expiresAt: new Date(Date.now() + 60 * 86_400_000),
+          ...over,
+        } as never,
+      });
+    }
+
+    it("takes one session and records who took it, and what for", async () => {
+      const mine = await owned();
+      const res = await spendPackageSession({ tenantId, customerPackageId: mine.id, serviceId: deskServiceId, staffUserId });
+      expect(res).toMatchObject({ ok: true, remainingUses: 2, totalUses: 5, serviceName: "Facial" });
+
+      expect((await rawDb.customerPackage.findUniqueOrThrow({ where: { id: mine.id } })).remainingUses).toBe(2);
+      const use = await rawDb.packageSessionUse.findFirstOrThrow({ where: { customerPackageId: mine.id } });
+      expect(use.usedById).toBe(staffUserId);
+      expect(use.serviceId).toBe(deskServiceId);
+    });
+
+    /**
+     * The point of the whole thing: two people at the desk, one session. One of
+     * them gets it and the other is told, rather than both being handed a
+     * session that only existed once.
+     */
+    it("gives the last session to exactly one of two people asking at once", async () => {
+      const mine = await owned({ remainingUses: 1 });
+      const [a, b] = await Promise.all([
+        spendPackageSession({ tenantId, customerPackageId: mine.id, serviceId: deskServiceId, staffUserId }),
+        spendPackageSession({ tenantId, customerPackageId: mine.id, serviceId: deskServiceId, staffUserId }),
+      ]);
+
+      const wins = [a, b].filter((r) => r.ok);
+      expect(wins).toHaveLength(1);
+      expect((await rawDb.customerPackage.findUniqueOrThrow({ where: { id: mine.id } })).remainingUses).toBe(0);
+      // And only one row in the history, so the client is not billed twice for
+      // a session that happened once.
+      expect(await rawDb.packageSessionUse.count({ where: { customerPackageId: mine.id } })).toBe(1);
+    });
+
+    it("marks a package with nothing left as finished", async () => {
+      const mine = await owned({ remainingUses: 1 });
+      await spendPackageSession({ tenantId, customerPackageId: mine.id, serviceId: deskServiceId, staffUserId });
+      expect((await rawDb.customerPackage.findUniqueOrThrow({ where: { id: mine.id } })).status).toBe("DEPLETED");
+    });
+
+    it("refuses an empty package, and writes no history", async () => {
+      const mine = await owned({ remainingUses: 0 });
+      const res = await spendPackageSession({ tenantId, customerPackageId: mine.id, serviceId: deskServiceId, staffUserId });
+      expect(res).toMatchObject({ ok: false, reason: "none-left" });
+      expect(await rawDb.packageSessionUse.count({ where: { customerPackageId: mine.id } })).toBe(0);
+    });
+
+    it("refuses an expired package, and says so rather than saying it is empty", async () => {
+      const mine = await owned({ expiresAt: new Date(Date.now() - 86_400_000) });
+      const res = await spendPackageSession({ tenantId, customerPackageId: mine.id, serviceId: deskServiceId, staffUserId });
+      expect(res).toMatchObject({ ok: false, reason: "expired" });
+      expect((res as { message: string }).message).toMatch(/end date/i);
+      expect((await rawDb.customerPackage.findUniqueOrThrow({ where: { id: mine.id } })).remainingUses).toBe(3);
+    });
+
+    it("refuses a treatment the package does not cover", async () => {
+      const mine = await owned();
+      const res = await spendPackageSession({ tenantId, customerPackageId: mine.id, serviceId: otherServiceId, staffUserId });
+      expect(res).toMatchObject({ ok: false, reason: "not-covered" });
+      expect((await rawDb.customerPackage.findUniqueOrThrow({ where: { id: mine.id } })).remainingUses).toBe(3);
+    });
+
+    it("refuses a package belonging to another clinic", async () => {
+      const mine = await owned();
+      const res = await spendPackageSession({ tenantId: "some-other-clinic", customerPackageId: mine.id, serviceId: deskServiceId, staffUserId });
+      expect(res).toMatchObject({ ok: false, reason: "not-found" });
+      expect((await rawDb.customerPackage.findUniqueOrThrow({ where: { id: mine.id } })).remainingUses).toBe(3);
+    });
+
+    it("tells the client how many are left, in those words", async () => {
+      expect(sessionUsedMessage(4)).toBe("1 session used, 4 left");
+      expect(sessionUsedMessage(0)).toBe("1 session used, 0 left");
+    });
+  });
+
 });
 
 /**

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Camera, CheckCircle2, Keyboard, Loader2, Ticket } from "lucide-react";
+import { Camera, CheckCircle2, Keyboard, Loader2, Search, Ticket } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Drawer, Pill } from "@/components/ui/primitives";
@@ -10,6 +10,8 @@ import { useQrCamera, type CameraProblem } from "@/components/use-qr-camera";
 import { describeActionFailure } from "@/lib/action-failure";
 import { lookupRedeemableAction, redeemItemAction } from "@/lib/actions/redeem";
 import type { ItemView } from "@/lib/redeemable";
+import { ClientPackages } from "@/components/merchant/client-packages";
+import { searchClientsForCheckInAction } from "@/lib/actions/check-in";
 
 /**
  * Handing a client the thing they bought: scan the code in their app, or type
@@ -23,8 +25,10 @@ import type { ItemView } from "@/lib/redeemable";
 type Stage =
   | { kind: "scanning" }
   | { kind: "typing" }
+  | { kind: "finding" }
   | { kind: "loading" }
   | { kind: "found"; item: ItemView; method: "QR" | "BACKUP_CODE" }
+  | { kind: "client"; customerProfileId: string; name: string }
   | { kind: "done"; item: ItemView };
 
 export function RedeemButton() {
@@ -117,6 +121,22 @@ function RedeemFlow({ merchantId, onClose }: { merchantId: string; onClose: () =
     );
   }
 
+  if (stage.kind === "client") {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-card bg-app p-4">
+          <p className="text-[15px] font-semibold">{stage.name}</p>
+          {/* Sessions are a count, not a ticket, so there is nothing to scan. */}
+          <p className="mt-0.5 text-[13px] text-ink-muted">Session packages this client can use today.</p>
+        </div>
+        <ClientPackages merchantId={merchantId} customerProfileId={stage.customerProfileId} />
+        <Button variant="outline" className="w-full" onClick={() => setStage({ kind: "finding" })}>
+          Find someone else
+        </Button>
+      </div>
+    );
+  }
+
   if (stage.kind === "found") {
     return (
       <ItemCard
@@ -130,21 +150,27 @@ function RedeemFlow({ merchantId, onClose }: { merchantId: string; onClose: () =
 
   return (
     <div className="space-y-4">
-      <div className="flex rounded-[10px] border border-border p-0.5 text-[12px]" role="tablist">
-        {(["scanning", "typing"] as const).map((k) => (
+      <div className="flex rounded-[12px] bg-app p-1 text-[14px]" role="tablist">
+        {(["scanning", "typing", "finding"] as const).map((k) => (
           <button
             key={k}
             role="tab"
             aria-selected={stage.kind === k}
             onClick={() => setStage({ kind: k })}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-[8px] py-1.5 ${stage.kind === k ? "bg-primary-soft font-medium text-primary" : "text-ink-muted"}`}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-[10px] py-2 ${stage.kind === k ? "bg-surface font-bold text-ink" : "text-ink-muted"}`}
           >
-            {k === "scanning" ? <Camera className="h-3.5 w-3.5" /> : <Keyboard className="h-3.5 w-3.5" />}
-            {k === "scanning" ? "Scan code" : "Type code"}
+            {k === "scanning" ? <Camera className="h-4 w-4" /> : k === "typing" ? <Keyboard className="h-4 w-4" /> : <Search className="h-4 w-4" />}
+            {k === "scanning" ? "Scan code" : k === "typing" ? "Type code" : "Find client"}
           </button>
         ))}
       </div>
-      {stage.kind === "scanning" ? <CodeScanner onCode={onCode} onUnavailable={toTyping} /> : <CodeEntry onSubmit={(v) => void lookup(v, "BACKUP_CODE")} />}
+      {stage.kind === "scanning" ? (
+        <CodeScanner onCode={onCode} onUnavailable={toTyping} />
+      ) : stage.kind === "typing" ? (
+        <CodeEntry onSubmit={(v) => void lookup(v, "BACKUP_CODE")} />
+      ) : (
+        <ClientFinder merchantId={merchantId} onPick={(customerProfileId, name) => setStage({ kind: "client", customerProfileId, name })} />
+      )}
     </div>
   );
 }
@@ -306,5 +332,67 @@ function CodeEntry({ onSubmit }: { onSubmit: (value: string) => void }) {
         Find item
       </Button>
     </form>
+  );
+}
+
+/**
+ * Finding a client when there is no code: a package is a count on their
+ * record rather than a ticket in their hand, so the way to it is through
+ * them.
+ */
+function ClientFinder({ merchantId, onPick }: { merchantId: string; onPick: (customerProfileId: string, name: string) => void }) {
+  const [query, setQuery] = React.useState("");
+  const [results, setResults] = React.useState<{ customerProfileId: string; name: string; email: string | null }[]>([]);
+  const [searching, setSearching] = React.useState(false);
+
+  React.useEffect(() => {
+    const term = query.trim();
+    if (term.length < 2) {
+      setResults([]);
+      return;
+    }
+    // Typed, not submitted: a short wait keeps one query per pause rather
+    // than one per keystroke.
+    const id = setTimeout(async () => {
+      setSearching(true);
+      const res = await searchClientsForCheckInAction(merchantId, term).catch(() => ({ error: "" }));
+      setSearching(false);
+      setResults("error" in res ? [] : res.results);
+    }, 250);
+    return () => clearTimeout(id);
+  }, [query, merchantId]);
+
+  return (
+    <div className="space-y-3">
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Name, email or phone"
+        autoFocus
+        className="h-12 w-full rounded-[14px] bg-surface px-4 text-[16px] text-ink shadow-[inset_0_0_0_1px_var(--line-strong)] outline-none focus-visible:shadow-[inset_0_0_0_1.5px_var(--ink)]"
+      />
+      {searching && <Loader2 className="mx-auto h-4 w-4 animate-spin text-ink-muted" />}
+      {results.length > 0 && (
+        <ul className="divide-y divide-border rounded-card bg-app">
+          {results.map((r) => (
+            <li key={r.customerProfileId}>
+              <button
+                type="button"
+                onClick={() => onPick(r.customerProfileId, r.name)}
+                className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left hover:bg-surface"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-[14px] font-semibold text-ink">{r.name}</span>
+                  {r.email && <span className="block truncate text-[13px] text-ink-muted">{r.email}</span>}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {!searching && query.trim().length >= 2 && results.length === 0 && (
+        <p className="py-4 text-center text-[13px] text-ink-muted">Nobody found. Try their email or phone number.</p>
+      )}
+    </div>
   );
 }

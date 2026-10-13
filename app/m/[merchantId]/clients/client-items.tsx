@@ -9,6 +9,7 @@ import { Pill } from "@/components/ui/primitives";
 import { describeActionFailure } from "@/lib/action-failure";
 import { clientItemsAction, redeemItemAction } from "@/lib/actions/redeem";
 import { giftClientItemAction, reissueClientItemAction, voidClientItemAction } from "@/lib/actions/client-items";
+import { ClientPackages } from "@/components/merchant/client-packages";
 import type { ItemView } from "@/lib/redeemable";
 
 /**
@@ -205,9 +206,12 @@ export function ClientItems({ merchantId, customerProfileId }: { merchantId: str
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      {/* Packages first: they are the ones with sessions left to spend. */}
+      <ClientPackages merchantId={merchantId} customerProfileId={customerProfileId} onUsed={load} />
+
       {items.length === 0 ? (
-        <p className="py-6 text-center text-[12px] text-ink-muted">Nothing bought in the app yet.</p>
+        <p className="py-6 text-center text-[13px] text-ink-muted">Nothing bought in the app yet.</p>
       ) : (
         <ul className="divide-y divide-border rounded-card border border-border">
           {items.map((item) => (

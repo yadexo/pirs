@@ -386,3 +386,21 @@ export async function notifySessionsExpiring(customerProfileId: string, packageN
     tag: `sessions-expiring-${customerProfileId}`,
   });
 }
+
+/**
+ * A session of a package was used at the desk.
+ *
+ * A service notification: the client's own balance of sessions just went
+ * down, and the count is the point of the message.
+ */
+export async function notifySessionUsed(customerProfileId: string, packageName: string, serviceName: string, remaining: number): Promise<void> {
+  const to = await recipientForClient(customerProfileId);
+  if (!to) return;
+  await notifyClientQuietly(to.userId, {
+    title: to.clinicName,
+    body: `${packageName}: 1 session used for ${serviceName}, ${remaining} left`,
+    url: clinicPath(to.slug, "/profile"),
+    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    tag: `session-used-${customerProfileId}-${Date.now()}`,
+  });
+}
