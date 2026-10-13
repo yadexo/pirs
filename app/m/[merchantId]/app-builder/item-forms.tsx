@@ -16,6 +16,7 @@ import {
 import type { ItemKind } from "@/lib/actions/app-builder";
 import { NotifyOffer, type OfferCampaign } from "./notify-offer";
 import { ProductPanelForm } from "./product-form";
+import { FieldIssues, TextCheckPanel, useTextCheck } from "@/components/merchant/text-check";
 
 export interface FormOptions {
   serviceCategories: string[];
@@ -178,6 +179,13 @@ export function PromotionForm({ merchantId, currency, item, options, errors }: I
   const [startNow, setStartNow] = React.useState(isNew(item));
   const start = str(item.startAt) || new Date().toISOString();
   const end = str(item.endAt) || new Date(Date.now() + 30 * 864e5).toISOString();
+  // An offer always has an end date in this form, so urgency words are fair.
+  // The check still reads them, in case that ever stops being true.
+  const check = useTextCheck({
+    title: { text: title, hasEndDate: true },
+    description: { text: description, hasEndDate: true },
+  });
+
   const storedValue = item.discountValue as number | undefined;
   const valueDefault =
     storedValue === undefined ? "" : discountType === "FIXED_AMOUNT" && item.discountType === "FIXED_AMOUNT" ? centsToInput(storedValue) : String(storedValue);
@@ -185,9 +193,19 @@ export function PromotionForm({ merchantId, currency, item, options, errors }: I
   return (
     <div className="space-y-5">
       <FormSection title="Offer">
-        <TextField label="Title" name="title" value={title} onChange={(e) => setTitle(e.target.value)} errors={errors} required />
-        <TextAreaField label="Description" name="description" value={description} onChange={(e) => setDescription(e.target.value)} errors={errors} />
+        <div>
+          <TextField label="Title" name="title" value={title} onChange={(e) => setTitle(e.target.value)} errors={errors} required />
+          <FieldIssues issues={check.byField.title} />
+        </div>
+        <div>
+          <TextAreaField label="Description" name="description" value={description} onChange={(e) => setDescription(e.target.value)} errors={errors} />
+          <FieldIssues issues={check.byField.description} />
+        </div>
         <ImageField label="Image" name="imageUrl" merchantId={merchantId} defaultValue={item.imageUrl as string} errors={errors} />
+        <TextCheckPanel issues={check.issues} blocking={check.blocking} />
+        {/* The drawer's Save reads this: an offer with an open issue can be
+            kept as a draft but not published. */}
+        <input type="hidden" name="__textCheckBlocking" value={check.blocking} />
       </FormSection>
       <FormSection title="Discount">
         <div className="grid grid-cols-2 gap-3">

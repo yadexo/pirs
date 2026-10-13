@@ -28,18 +28,9 @@ export interface MerchantActionContext {
 }
 
 /** Thrown for anything the caller should see as a plain message. */
-/**
- * A refusal the client should see. `fieldErrors` puts the message under the
- * field it is about, which is the difference between "something is wrong" and
- * "this box needs a link".
- */
-export class ActionError extends Error {
-  readonly fieldErrors?: Record<string, string>;
-  constructor(message: string, fieldErrors?: Record<string, string>) {
-    super(message);
-    this.fieldErrors = fieldErrors;
-  }
-}
+import { ActionError } from "@/lib/action-error";
+
+export { ActionError };
 
 const NOT_ALLOWED = "You don't have access to do that.";
 

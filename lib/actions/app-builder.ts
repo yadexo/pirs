@@ -19,6 +19,7 @@ import { isPromotionUsed, NO_USAGE, type PromotionUsage } from "@/lib/promotion-
 import { rolloutPlanPrice, type RolloutResult } from "@/lib/membership-price-rollout";
 import { pricingOptionsSchema, toStoredPricingOptions, EMPTY_PRICING } from "@/lib/pricing-options";
 import { recordPrice } from "@/lib/price-history";
+import { assertTextIsPublishable } from "@/lib/text-check-guard";
 import { sendCampaignNow } from "@/lib/campaign-send";
 import { marketingAudience, marketingWindowFor } from "@/lib/marketing";
 import { instantFromLocal, isWithinWindow, nextSendableTime } from "@/lib/marketing-window";
@@ -402,6 +403,11 @@ export async function saveServiceAction(merchantId: string, id: string | null, f
       active: formBool(fd, "active"),
     });
     const shared = readShopItemFields(fd);
+    if (data.active) {
+      // A treatment description has no deadline of its own, so urgency words
+      // in one have nothing behind them.
+      assertTextIsPublishable({ name: { text: data.name, hasEndDate: false }, description: { text: data.description ?? "", hasEndDate: false } });
+    }
     // A treatment is bought in the app and booked on the clinic's own page.
     // Without the link the client is left holding something they cannot use,
     // so it is refused here rather than discovered by them later.
@@ -482,6 +488,9 @@ export async function saveProductAction(merchantId: string, id: string | null, f
       active: formBool(fd, "active"),
     });
     const shared = readShopItemFields(fd);
+    if (data.active) {
+      assertTextIsPublishable({ name: { text: data.name, hasEndDate: false }, description: { text: data.description ?? "", hasEndDate: false } });
+    }
     const { categoryName, sku, ...rest } = data;
     const fields = {
       ...rest,
@@ -702,6 +711,19 @@ export async function savePromotionAction(merchantId: string, id: string | null,
       notifyAgain: formBool(fd, "notifyAgain"),
       notifyIgnoreDailyLimit: formBool(fd, "notifyIgnoreDailyLimit"),
     });
+
+    // The text check, enforced here and not only in the browser: the form is
+    // where a clinic is told, this is where it is true. An offer that is not
+    // live harms nobody, so only publishing is blocked — a draft can keep a
+    // sentence somebody is still working on.
+    if (data.active) {
+      assertTextIsPublishable({
+        title: { text: data.title, hasEndDate: true },
+        description: { text: data.description ?? "", hasEndDate: true },
+        notifyTitle: { text: data.notifyTitle ?? "", hasEndDate: true },
+        notifyBody: { text: data.notifyBody ?? "", hasEndDate: true },
+      });
+    }
 
     const tagged = data.customerSegment === "TAGGED";
     if (tagged && !(await ctx.db.customerTag.findFirst({ where: { id: data.segmentTagId } }))) throw fieldError("segmentTagId", "Choose a tag");
