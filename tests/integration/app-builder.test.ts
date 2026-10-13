@@ -119,6 +119,43 @@ describe("App Builder actions", () => {
       expect(product!.sku).toMatch(/^SKU-/);
     });
 
+    /**
+     * The shop may only strike through the lowest price of the last 30 days,
+     * and that is unknowable without a record of what the price has been. So
+     * every save leaves a trail — and a save that did not touch the price
+     * leaves nothing, or the window would fill with repeats of one number.
+     */
+    it("records a price the first time and again whenever it changes", async () => {
+      signIn("owner");
+      const created = await A.saveServiceAction(clinic, null, service({ name: "Priced treatment", price: "120" }));
+      const id = (created as { id: string }).id;
+      const trail = () => rawDb.priceHistory.findMany({ where: { serviceId: id }, orderBy: { recordedAt: "asc" } });
+
+      expect((await trail()).map((r) => r.priceCents)).toEqual([12000]);
+
+      // A save that changes the name only.
+      await A.saveServiceAction(clinic, id, service({ name: "Priced treatment, renamed", price: "120" }));
+      expect((await trail()).map((r) => r.priceCents)).toEqual([12000]);
+
+      await A.saveServiceAction(clinic, id, service({ name: "Priced treatment, renamed", price: "96" }));
+      expect((await trail()).map((r) => r.priceCents)).toEqual([12000, 9600]);
+
+      // Back up again: still a change, so still recorded.
+      await A.saveServiceAction(clinic, id, service({ name: "Priced treatment, renamed", price: "150" }));
+      expect((await trail()).map((r) => r.priceCents)).toEqual([12000, 9600, 15000]);
+      expect((await trail()).every((r) => r.itemType === "SERVICE")).toBe(true);
+    });
+
+    it("records a product's price on the same terms", async () => {
+      signIn("owner");
+      const created = await A.saveProductAction(clinic, null, fd({ name: "Tracked serum", categoryName: "Care", price: "49", inventoryQuantity: "5", active: true }));
+      const id = (created as { id: string }).id;
+      await A.saveProductAction(clinic, id, fd({ name: "Tracked serum", categoryName: "Care", price: "39", inventoryQuantity: "5", active: true }));
+
+      const trail = await rawDb.priceHistory.findMany({ where: { productId: id }, orderBy: { recordedAt: "asc" } });
+      expect(trail.map((r) => r.priceCents)).toEqual([4900, 3900]);
+    });
+
     it("rejects a duplicate SKU with a field message instead of crashing", async () => {
       signIn("owner");
       await A.saveProductAction(clinic, null, fd({ name: "A", categoryName: "Care", price: "1", sku: "DUP-1", active: true }));

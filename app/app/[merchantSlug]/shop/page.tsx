@@ -1,5 +1,5 @@
 import { getClientAppContext } from "@/lib/client-app-context";
-import { discountedUnitPrice, shopDiscountsFor } from "@/lib/discounts";
+import { getCatalog } from "@/lib/client-app-catalog";
 import { clinicPaymentMode } from "@/lib/stripe-payments";
 import { MEMBERSHIP_HOLDS_SLOT } from "@/lib/membership-status";
 import { ShopView } from "./shop-view";
@@ -9,7 +9,7 @@ export default async function ShopPage({
   searchParams,
 }: {
   params: Promise<{ merchantSlug: string }>;
-  searchParams: Promise<{ tab?: string; category?: string; product?: string; membership?: string }>;
+  searchParams: Promise<{ tab?: string; category?: string; product?: string; kind?: string; membership?: string }>;
 }) {
   const { merchantSlug } = await params;
   const sp = await searchParams;
@@ -21,20 +21,12 @@ export default async function ShopPage({
   // shop front with nothing to show what just happened.
   const tab = sp.membership ? "memberships" : sp.tab === "memberships" || sp.tab === "treatments" ? sp.tab : "browse";
 
-  // This client's own automatic discounts, including any personal one.
-  const discounts = await shopDiscountsFor(ctx.merchant.id, ctx.customerProfileId);
+  // One read for both prices on every card: what this client pays, and what
+  // they would pay as a member. Same resolver the till uses.
+  const catalog = await getCatalog(ctx.db, { tenantId: ctx.merchant.id, customerProfileId: ctx.customerProfileId });
 
-  const [categories, products, services, plans, membership, programme, settings] = await Promise.all([
+  const [categories, plans, membership, programme, settings] = await Promise.all([
     ctx.db.productCategory.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
-    ctx.db.product.findMany({
-      where: { active: true, ...(sp.category ? { categoryId: sp.category } : {}) },
-      orderBy: { name: "asc" },
-    }),
-    ctx.db.service.findMany({
-      where: { active: true },
-      orderBy: { name: "asc" },
-      include: { category: { select: { name: true } }, staff: { select: { staffProfileId: true }, take: 1 } },
-    }),
     ctx.db.membershipPlan.findMany({
       where: { active: true },
       orderBy: { priceCents: "asc" },
@@ -51,63 +43,32 @@ export default async function ShopPage({
   // Whether this clinic can bill a recurring plan at all.
   const billable = (await clinicPaymentMode(ctx.merchant.id)).mode !== "blocked";
 
+  // The categories a client can filter by: the product ones the clinic set up,
+  // plus the treatment categories, so one chip row covers the whole shop.
+  const treatmentCategories = [...new Map(catalog.treatments.filter((t) => t.categoryId).map((t) => [t.categoryId!, t.categoryName!])).entries()].map(
+    ([id, name]) => ({ id, name }),
+  );
+
   return (
     <ShopView
       merchantSlug={merchantSlug}
+      merchantName={ctx.merchant.name}
       openProductId={sp.product ?? null}
       currency={ctx.merchant.currency}
       tab={tab}
       categoryId={sp.category ?? null}
-      categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+      categories={[...categories.map((c) => ({ id: c.id, name: c.name })), ...treatmentCategories]}
+      treatments={catalog.treatments}
+      popularTreatments={catalog.popularTreatments}
+      products={catalog.products}
+      isMember={catalog.isMember}
+      pitchPlan={catalog.pitchPlan}
       currentPlanId={membership?.membershipPlanId ?? null}
       pointsPerCents={programme?.active ? programme.pointsPerCents : 0}
-      banner={{
-        headline: settings?.shopBannerHeadline ?? null,
-        subtitle: settings?.shopBannerSubtitle ?? null,
-        buttonLabel: settings?.shopBannerButtonLabel ?? null,
-      }}
       externalBookingUrl={settings?.bookingMode === "EXTERNAL" ? settings.externalBookingUrl : null}
-      products={products.map((p) => {
-        // The struck-through price comes from the same rules checkout uses, so
-        // the shop cannot promise a discount the till won't give.
-        const offer = discountedUnitPrice(
-          { kind: "PRODUCT", id: p.id, categoryId: p.categoryId, unitPriceCents: p.priceCents, quantity: 1 },
-          discounts,
-        );
-        return {
-          id: p.id,
-          name: p.name,
-          description: p.description,
-          priceCents: p.priceCents,
-          offerPriceCents: offer.promotionTitle ? offer.priceCents : null,
-          offerTitle: offer.promotionTitle,
-          images: Array.isArray(p.images) ? (p.images as string[]) : [],
-          soldOut: p.inventoryQuantity <= 0,
-          categoryId: p.categoryId,
-        };
-      })}
-      services={services.map((s) => {
-        const offer = discountedUnitPrice(
-          { kind: "SERVICE", id: s.id, categoryId: s.categoryId, unitPriceCents: s.priceCents, quantity: 1 },
-          discounts,
-        );
-        return {
-        id: s.id,
-        name: s.name,
-        description: s.description,
-        priceCents: s.priceCents,
-        offerPriceCents: offer.promotionTitle ? offer.priceCents : null,
-        offerTitle: offer.promotionTitle,
-        durationMinutes: s.durationMinutes,
-        images: s.imageUrl ? [s.imageUrl] : [],
-        // Only bookable when the clinic has assigned a practitioner to it.
-        bookable: s.staff.length > 0,
-        categoryName: s.category.name,
-        };
-      })}
-      // A plan is a promise to bill somebody every month. A clinic that
-      // cannot take a payment cannot keep that promise, so its plans are not
-      // shown at all rather than offered and then refused at the last step.
+      // A plan is a promise to bill somebody every month. A clinic that cannot
+      // take a payment cannot keep that promise, so its plans are not shown at
+      // all rather than offered and then refused at the last step.
       plans={
         billable
           ? plans.map((m) => ({

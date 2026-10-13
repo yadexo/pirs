@@ -3,34 +3,14 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useBasePath } from "../base-path";
-import { Gloss, Sheet, Icon, Stepper, Carousel, EmptyState, money, useToast } from "@/components/client-app/ui";
+import { Sheet, Icon, Stepper, Carousel, EmptyState, money, useToast } from "@/components/client-app/ui";
+import { Button, PriceBlock, ProductCard, SegmentedControl, Tag } from "@/components/client-app/v2";
 import { clientAddToCartAction, clientJoinPlanAction } from "@/lib/actions/client-app";
 import { useCart } from "../cart-context";
 import { CardPayment } from "../card-payment";
-import { BookingSheet } from "./booking-sheet";
+import { BookingSheet, type BookableService } from "./booking-sheet";
+import type { ShopCard } from "@/lib/client-app-catalog";
 
-export interface ShopProduct {
-  id: string;
-  name: string;
-  description: string | null;
-  priceCents: number;
-  /** Set when a discount applies to this client; the old price is struck through. */
-  offerPriceCents?: number | null;
-  offerTitle?: string | null;
-  images: string[];
-  soldOut: boolean;
-  categoryId: string | null;
-}
-export interface ShopService {
-  id: string;
-  name: string;
-  description: string | null;
-  priceCents: number;
-  durationMinutes: number;
-  images: string[];
-  bookable: boolean;
-  categoryName: string;
-}
 export interface ShopPlan {
   id: string;
   name: string;
@@ -41,44 +21,50 @@ export interface ShopPlan {
 }
 
 const SEGMENTS = [
-  { key: "browse", label: "Browse" },
-  { key: "memberships", label: "Memberships" },
-  { key: "treatments", label: "Treatments" },
-];
+  { value: "browse", label: "Browse" },
+  { value: "memberships", label: "Memberships" },
+  { value: "treatments", label: "Treatments" },
+] as const;
 
 export function ShopView({
   merchantSlug,
+  merchantName,
   openProductId,
   currency,
   tab,
   categoryId,
   categories,
+  treatments,
+  popularTreatments,
   products,
-  services,
+  isMember,
+  pitchPlan,
   plans,
   currentPlanId,
   membershipPending,
   pointsPerCents,
-  banner,
   externalBookingUrl,
 }: {
   merchantSlug: string;
-  /** A product to open straight away — a notification linking to one. */
+  merchantName: string;
+  /** An item to open straight away — a notification linking to one. */
   openProductId?: string | null;
   currency: string;
   tab: string;
   categoryId: string | null;
   categories: { id: string; name: string }[];
-  products: ShopProduct[];
-  services: ShopService[];
+  treatments: ShopCard[];
+  popularTreatments: ShopCard[];
+  products: ShopCard[];
+  isMember: boolean;
+  /** The plan behind "Members save X%", or null for a member. */
+  pitchPlan: { id: string; name: string; serviceDiscountPercent: number | null; productDiscountPercent: number | null } | null;
   plans: ShopPlan[];
   currentPlanId: string | null;
   /** Their membership exists but its first payment hasn't been confirmed. */
   membershipPending?: boolean;
   /** Same rate checkout uses: points = floor(amount in cents × rate). */
   pointsPerCents: number;
-  /** Clinic's own banner copy from App Builder → Settings; null fields use the defaults. */
-  banner: { headline: string | null; subtitle: string | null; buttonLabel: string | null };
   /** Set when the clinic books on its own website instead of in the app. */
   externalBookingUrl: string | null;
 }) {
@@ -86,12 +72,10 @@ export function ShopView({
   const base = useBasePath();
   const { refresh } = useCart();
   const { toast } = useToast();
-  const segRef = React.useRef<HTMLDivElement>(null);
 
-  const [detail, setDetail] = React.useState<{ kind: "product"; item: ShopProduct } | { kind: "service"; item: ShopService } | null>(null);
+  const [detail, setDetail] = React.useState<ShopCard | null>(null);
   const [qty, setQty] = React.useState(1);
-  const [howOpen, setHowOpen] = React.useState(false);
-  const [booking, setBooking] = React.useState<ShopService | null>(null);
+  const [booking, setBooking] = React.useState<BookableService | null>(null);
   const [planDetail, setPlanDetail] = React.useState<ShopPlan | null>(null);
   const [pending, setPending] = React.useState(false);
   /** The first invoice of a membership, waiting to be confirmed by the client. */
@@ -108,20 +92,19 @@ export function ShopView({
   const [duration, setDuration] = React.useState<number | null>(null);
   const [sort, setSort] = React.useState("pop");
 
-  // A notification can link to one product. Opening its sheet here means the
-  // client lands on the thing they tapped, not on the shop for them to find
-  // it again. A product that has since gone just leaves the shop open.
+  const everything = React.useMemo(() => [...treatments, ...products], [treatments, products]);
+
+  // A notification can link to one item. Opening its sheet here means the
+  // client lands on the thing they tapped, not on the shop for them to find it
+  // again. An item that has since gone just leaves the shop open.
   React.useEffect(() => {
     if (!openProductId) return;
-    const item = products.find((p) => p.id === openProductId);
-    if (item) setDetail({ kind: "product", item });
-  }, [openProductId, products]);
-
-  const [indicator, setIndicator] = React.useState<{ left: number; width: number }>({ left: 0, width: 0 });
-  React.useLayoutEffect(() => {
-    const active = segRef.current?.querySelector<HTMLButtonElement>("button.on");
-    if (active) setIndicator({ left: active.offsetLeft, width: active.offsetWidth });
-  }, [tab]);
+    const item = everything.find((p) => p.id === openProductId);
+    if (item) {
+      setQty(1);
+      setDetail(item);
+    }
+  }, [openProductId, everything]);
 
   function go(next: string, cat?: string | null) {
     const sp = new URLSearchParams();
@@ -130,32 +113,35 @@ export function ShopView({
     router.push(`${base}/shop${sp.toString() ? `?${sp}` : ""}`);
   }
 
+  const inCategory = React.useCallback((list: ShopCard[]) => (categoryId ? list.filter((c) => c.categoryId === categoryId) : list), [categoryId]);
+
   const visibleTreatments = React.useMemo(() => {
-    let list = [...services];
-    if (priceBand === "u50") list = list.filter((s) => s.priceCents < 5000);
-    if (priceBand === "50-100") list = list.filter((s) => s.priceCents >= 5000 && s.priceCents <= 10000);
-    if (priceBand === "o100") list = list.filter((s) => s.priceCents > 10000);
+    let list = inCategory([...treatments]);
+    if (priceBand === "u50") list = list.filter((s) => s.viewerPriceCents < 5000);
+    if (priceBand === "50-100") list = list.filter((s) => s.viewerPriceCents >= 5000 && s.viewerPriceCents <= 10000);
+    if (priceBand === "o100") list = list.filter((s) => s.viewerPriceCents > 10000);
     if (duration) list = list.filter((s) => s.durationMinutes === duration);
-    if (sort === "pasc") list.sort((a, b) => a.priceCents - b.priceCents);
-    if (sort === "pdesc") list.sort((a, b) => b.priceCents - a.priceCents);
+    if (sort === "pop") list.sort((a, b) => Number(b.popular) - Number(a.popular));
+    if (sort === "pasc") list.sort((a, b) => a.viewerPriceCents - b.viewerPriceCents);
+    if (sort === "pdesc") list.sort((a, b) => b.viewerPriceCents - a.viewerPriceCents);
     return list;
-  }, [services, priceBand, duration, sort]);
+  }, [treatments, inCategory, priceBand, duration, sort]);
 
-  const activeCategory = categories.find((c) => c.id === categoryId) ?? null;
-
-  async function addToCart() {
-    if (!detail) return;
-    setPending(true);
-    const res = await clientAddToCartAction(merchantSlug, detail.kind, detail.item.id, detail.kind === "product" ? qty : 1);
-    setPending(false);
-    if ("error" in res) {
-      toast(res.error);
-      return;
-    }
-    await refresh();
-    setDetail(null);
-    toast("Added to cart");
-  }
+  const addCard = React.useCallback(
+    async (card: ShopCard, quantity = 1) => {
+      setPending(true);
+      const res = await clientAddToCartAction(merchantSlug, card.kind === "SERVICE" ? "service" : "product", card.id, quantity);
+      setPending(false);
+      if ("error" in res) {
+        toast(res.error);
+        return false;
+      }
+      await refresh();
+      toast(`${card.name} added to cart`);
+      return true;
+    },
+    [merchantSlug, refresh, toast],
+  );
 
   /**
    * Joining asks for the first payment. Nothing is a membership until that
@@ -186,270 +172,290 @@ export function ShopView({
     setFirstPayment({ plan: res.name, amountCents: res.firstPaymentCents, payment: res.payment });
   }
 
+  const card = (c: ShopCard) => (
+    <div className="v2-railitem" key={c.id}>
+      <ProductCard
+        name={c.name}
+        meta={c.meta}
+        imageUrl={c.imageUrl}
+        tags={c.tag && <Tag kind={c.tag.kind}>{c.tag.label}</Tag>}
+        cents={c.viewerPriceCents}
+        currency={currency}
+        wasCents={c.wasCents}
+        memberCents={c.memberPriceCents}
+        isMember={isMember}
+        onJoin={() => go("memberships")}
+        onOpen={() => {
+          setQty(1);
+          setDetail(c);
+        }}
+        onAdd={c.soldOut || pending ? undefined : () => void addCard(c)}
+      />
+    </div>
+  );
+
+  const shelf = (title: string, cards: ShopCard[], seeAll: string) =>
+    cards.length === 0 ? null : (
+      <section className="v2-sec" key={title}>
+        <div className="v2-sechead">
+          <h2>{title}</h2>
+          <button type="button" onClick={() => go(seeAll, categoryId)}>
+            See all <Icon name="chevR" size={18} />
+          </button>
+        </div>
+        <div className="v2-rail no-scrollbar">{cards.map(card)}</div>
+      </section>
+    );
+
+  const memberRate = pitchPlan ? Math.max(pitchPlan.serviceDiscountPercent ?? 0, pitchPlan.productDiscountPercent ?? 0) : 0;
+
   return (
-    <div>
-      <div className="seg" ref={segRef}>
+    <div className="v2-shop">
+      <div className="v2-shopseg">
         {/* A clinic that cannot bill a recurring plan has no memberships to
             show, so the tab goes too rather than leading to an empty shelf. */}
-        {SEGMENTS.filter((s) => s.key !== "memberships" || plans.length > 0).map((s) => (
-          <button key={s.key} className={tab === s.key ? "on" : undefined} onClick={() => go(s.key, categoryId)}>
-            {s.label}
-          </button>
-        ))}
-        <i className="ind" style={{ left: indicator.left, width: indicator.width }} />
+        <SegmentedControl
+          label="Shop sections"
+          value={tab}
+          onChange={(next) => go(next, categoryId)}
+          options={SEGMENTS.filter((s) => s.value !== "memberships" || plans.length > 0).map((s) => ({ value: s.value as string, label: s.label }))}
+        />
       </div>
 
-      <div style={{ padding: "var(--gap) var(--pad-x) 0", display: "flex", flexDirection: "column", gap: "var(--gap)" }}>
-        {tab === "browse" && (
-          <>
-            <Gloss className="banner" particles seed={merchantSlug}>
-              <h2 style={{ fontSize: 24, fontWeight: 700, color: "var(--on-black)" }}>
-                {banner.headline ?? (
-                  <>
-                    Treat today. Pay later.
-                    <br />
-                    Earn rewards.
-                  </>
-                )}
-              </h2>
-              <p style={{ fontSize: 15, color: "var(--on-black-muted)" }}>{banner.subtitle ?? "Free treatments & exclusive perks."}</p>
-              <button className="btn-white" style={{ marginTop: 8 }} onClick={() => setHowOpen(true)}>
-                {banner.buttonLabel ?? "How does it work?"}
+      {tab === "browse" && (
+        <>
+          {categories.length > 0 && (
+            <div className="v2-chips no-scrollbar">
+              <button type="button" className={categoryId === null ? "on" : undefined} onClick={() => go("browse", null)}>
+                All
               </button>
-            </Gloss>
-
-            {categories.length > 0 && (
-              <div className={`catrow no-scrollbar ${categories.length === 1 ? "single" : ""}`}>
-                {categories.map((c) => (
-                  <button
-                    key={c.id}
-                    className={`cattile ${categoryId === c.id ? "on" : ""}`}
-                    onClick={() => go("browse", categoryId === c.id ? null : c.id)}
-                  >
-                    <Icon name="tag" size={28} />
-                    {c.name}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div>
-              <h2 className="h-sec">{activeCategory ? `All “${activeCategory.name}”` : "All products"}</h2>
+              {categories.map((c) => (
+                <button key={c.id} type="button" className={categoryId === c.id ? "on" : undefined} onClick={() => go("browse", categoryId === c.id ? null : c.id)}>
+                  {c.name}
+                </button>
+              ))}
             </div>
+          )}
 
-            {products.length === 0 ? (
-              <div className="ca-card">
-                <EmptyState text="The shop is being stocked" sub="Check back soon — new products are on their way." />
-              </div>
-            ) : (
-              <div className={`pgrid ${products.length === 1 ? "single" : ""}`}>
-                {products.map((p) => (
-                  <button
-                    key={p.id}
-                    className={`pcard ${p.soldOut ? "sold" : ""}`}
-                    onClick={() => {
-                      setQty(1);
-                      setDetail({ kind: "product", item: p });
-                    }}
-                  >
-                    <span style={{ position: "relative", display: "block" }}>
-                      {p.images[0] ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.images[0]} alt={p.name} loading="lazy" />
-                      ) : (
-                        <span style={{ display: "block", aspectRatio: "4/5", background: "var(--pill-bg)" }} />
-                      )}
-                      {p.soldOut && <span className="soldpill">SOLD OUT</span>}
-                    </span>
-                    <span style={{ display: "block", fontSize: 15, color: "var(--ink)", padding: "8px 12px 2px" }}>{p.name}</span>
-                    <span className="tabular" style={{ display: "block", fontSize: 17, fontWeight: 700, color: "var(--ink-strong)", padding: "0 12px 12px" }}>
-                      {p.offerPriceCents != null ? (
-                        <>
-                          <span style={{ textDecoration: "line-through", color: "var(--muted)", fontWeight: 500, marginRight: 8 }}>
-                            {money(p.priceCents, currency)}
-                          </span>
-                          {money(p.offerPriceCents, currency)}
-                        </>
-                      ) : (
-                        money(p.priceCents, currency)
-                      )}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </>
-        )}
+          {!isMember && memberRate > 0 && (
+            <button type="button" className="v2-memberstrip" onClick={() => go("memberships")}>
+              <span className="ic" aria-hidden="true">
+                <Icon name="star" size={20} />
+              </span>
+              <span className="txt">
+                <b>Members save {memberRate}%</b> on everything at {merchantName}
+              </span>
+              <Icon name="chevR" size={20} />
+            </button>
+          )}
 
-        {tab === "memberships" &&
-          (plans.length === 0 ? (
-            <div className="ca-card">
+          {everything.length === 0 ? (
+            <div className="v2-sec">
+              <div className="v2-empty">
+                <EmptyState text="The shop is being stocked" sub="Check back soon — new treatments and products are on their way." />
+              </div>
+            </div>
+          ) : (
+            <>
+              {shelf("Popular treatments", inCategory(popularTreatments), "treatments")}
+              {shelf("Skin care products", inCategory(products), "browse")}
+              <p className="v2-vatnote">All prices include VAT.</p>
+            </>
+          )}
+        </>
+      )}
+
+      {tab === "memberships" && (
+        <div className="v2-plans">
+          {plans.length === 0 ? (
+            <div className="v2-empty">
               <EmptyState text="No memberships available" sub="Plans will appear here once the clinic publishes them." />
             </div>
           ) : (
             plans.map((pl) => {
               const current = pl.id === currentPlanId;
               return (
-                <div key={pl.id} className="ca-card plancard" data-plan={pl.id}>
-                  <span style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                    <h3 style={{ fontSize: 20, fontWeight: 700 }}>{pl.name}</h3>
-                    <span style={{ flex: 1 }} />
-                    <span className="tabular" style={{ fontSize: 24, fontWeight: 700, color: "var(--ink-strong)" }}>
-                      {money(pl.priceCents, currency)}
+                <div key={pl.id} className="v2-plan" data-plan={pl.id}>
+                  <div className="top">
+                    <h3>{pl.name}</h3>
+                    <span className="price">
+                      <b className="tabular">{money(pl.priceCents, currency)}</b>
+                      <span>per {pl.interval}</span>
                     </span>
-                    <span style={{ color: "var(--muted)", fontSize: 15 }}>/{pl.interval}</span>
-                  </span>
+                  </div>
+                  {pl.description && <p className="blurb">{pl.description}</p>}
                   {pl.benefits.length > 0 && (
-                    <div className="bens">
+                    <ul className="bens">
                       {pl.benefits.map((b, i) => (
-                        <div key={i}>
+                        <li key={i}>
                           <Icon name="check" size={18} /> {b}
-                        </div>
+                        </li>
                       ))}
-                    </div>
+                    </ul>
                   )}
+                  <p className="terms">
+                    Price includes VAT. Renews automatically every {pl.interval}. Cancel any time in Profile → Membership.
+                  </p>
                   {current ? (
-                    <span className="status-pill dark" style={{ alignSelf: "flex-start" }}>
-                      {membershipPending ? "Waiting for your first payment" : "Current plan"}
-                    </span>
+                    <span className="v2-tag v2-tag-soft">{membershipPending ? "Waiting for your first payment" : "Current plan"}</span>
                   ) : (
-                    <button className="btn-black" disabled={pending || membershipPending} onClick={() => joinPlan(pl.id)}>
-                      Join
-                    </button>
+                    <Button disabled={pending || membershipPending} onClick={() => joinPlan(pl.id)}>
+                      Join {pl.name}
+                    </Button>
                   )}
                 </div>
               );
             })
-          ))}
-
-        {tab === "treatments" && (
-          <>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-              <button className="chip" onClick={() => setFilterOpen(true)}>
-                <Icon name="sliders" size={18} /> Filter
-              </button>
-              <button className="chip" onClick={() => setSortOpen(true)}>
-                Sort <Icon name="chevD" size={16} />
-              </button>
+          )}
+          {plans.length > 0 && (
+            <div className="v2-reassure">
+              <span>
+                <Icon name="check" size={18} /> Cancel anytime
+              </span>
+              <span>
+                <Icon name="check" size={18} /> Perks start today
+              </span>
+              <span>
+                <Icon name="shield" size={18} /> Pay securely
+              </span>
             </div>
+          )}
+        </div>
+      )}
 
-            {visibleTreatments.length === 0 ? (
-              <div className="ca-card">
-                <EmptyState text="No treatments found" sub="Try clearing filters, or check back soon." />
-              </div>
-            ) : (
-              visibleTreatments.map((s) => (
-                <button key={s.id} className="treatcard" onClick={() => setDetail({ kind: "service", item: s })}>
-                  {s.images[0] ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={s.images[0]} alt={s.name} loading="lazy" />
-                  ) : (
-                    <Gloss style={{ height: 190 }} />
-                  )}
-                  <span style={{ display: "flex", flexDirection: "column", gap: 9, alignItems: "flex-start", padding: 20 }}>
-                    <span className="status-pill">Session</span>
-                    <h3 style={{ fontSize: 20, fontWeight: 700, color: "var(--ink-strong)" }}>{s.name}</h3>
-                    {s.description && <p style={{ fontSize: 15, color: "var(--muted)" }}>{s.description}</p>}
-                    <span className="outline-chip">{s.categoryName}</span>
-                    <span className="tabular" style={{ color: "var(--muted)", fontSize: 16 }}>
-                      From {money(s.priceCents, currency)} · {s.durationMinutes} min
-                    </span>
-                  </span>
-                </button>
-              ))
-            )}
-          </>
-        )}
-      </div>
+      {tab === "treatments" && (
+        <div className="v2-treatments">
+          <div className="filters">
+            <button type="button" className="v2-btn v2-btn-pill" onClick={() => setFilterOpen(true)}>
+              <Icon name="sliders" size={18} /> Filter
+            </button>
+            <button type="button" className="v2-btn v2-btn-pill" onClick={() => setSortOpen(true)}>
+              Sort <Icon name="chevD" size={16} />
+            </button>
+          </div>
+
+          {visibleTreatments.length === 0 ? (
+            <div className="v2-empty">
+              <EmptyState text="No treatments found" sub="Try clearing filters, or check back soon." />
+            </div>
+          ) : (
+            <div className="rows">
+              {visibleTreatments.map((s) => (
+                <ProductCard
+                  key={s.id}
+                  shape="row"
+                  name={s.name}
+                  meta={[s.meta, pointsPerCents > 0 ? `+${Math.floor(s.viewerPriceCents * pointsPerCents)} points` : null].filter(Boolean).join(" · ")}
+                  imageUrl={s.imageUrl}
+                  tags={s.tag && <Tag kind={s.tag.kind}>{s.tag.label}</Tag>}
+                  cents={s.viewerPriceCents}
+                  currency={currency}
+                  wasCents={s.wasCents}
+                  memberCents={s.memberPriceCents}
+                  isMember={isMember}
+                  onJoin={() => go("memberships")}
+                  onOpen={() => {
+                    setQty(1);
+                    setDetail(s);
+                  }}
+                  onAdd={pending ? undefined : () => void addCard(s)}
+                />
+              ))}
+            </div>
+          )}
+          <p className="v2-vatnote">All prices include VAT. Results vary per person.</p>
+        </div>
+      )}
 
       {/* ---------------------------------------------------------- sheets */}
 
       <Sheet
         open={!!detail}
         onClose={() => setDetail(null)}
-        title={detail?.item.name}
+        title={detail?.name}
         cta={
-          detail?.kind === "product" ? (
-            <button className="btn-black" disabled={pending || detail.item.soldOut} onClick={addToCart}>
-              {detail.item.soldOut ? "Sold out" : "Add to cart"}
-            </button>
-          ) : detail?.kind === "service" ? (
-            detail.item.bookable ? (
-              <button
-                className="btn-black"
+          detail &&
+          (detail.soldOut ? (
+            <Button disabled>Sold out</Button>
+          ) : detail.kind === "SERVICE" && detail.bookable && !externalBookingUrl ? (
+            <div className="v2-ctapair">
+              <Button
+                variant="outline"
+                disabled={pending}
+                onClick={async () => {
+                  if (await addCard(detail, qty)) setDetail(null);
+                }}
+              >
+                Add to cart
+              </Button>
+              <Button
                 onClick={() => {
-                  if (externalBookingUrl) {
-                    // The clinic takes bookings on its own site.
-                    window.open(externalBookingUrl, "_blank", "noopener,noreferrer");
-                  } else {
-                    setBooking(detail.item);
-                  }
+                  setBooking({ id: detail.id, name: detail.name, priceCents: detail.viewerPriceCents, durationMinutes: detail.durationMinutes ?? 30 });
                   setDetail(null);
                 }}
               >
-                <Icon name="calendar" size={20} /> Book now
-              </button>
-            ) : (
-              <button className="btn-black" disabled={pending} onClick={addToCart}>
-                Add to cart
-              </button>
-            )
-          ) : undefined
+                <Icon name="calendar" size={20} /> Book
+              </Button>
+            </div>
+          ) : (
+            <Button
+              amount={detail.viewerPriceCents * qty}
+              currency={currency}
+              loading={pending}
+              onClick={async () => {
+                if (await addCard(detail, qty)) setDetail(null);
+              }}
+            >
+              Add to cart
+            </Button>
+          ))
         }
       >
         {detail && (
-          <>
-            {detail.item.images.length > 0 && <Carousel images={detail.item.images} alt={detail.item.name} />}
-            <div className="dsec" style={{ paddingBottom: 4 }}>
-              <span style={{ fontSize: 21, fontWeight: 700, color: "var(--ink-strong)" }}>{detail.item.name}</span>
-              <span className="tabular" style={{ fontSize: 17, fontWeight: 700 }}>
-                {money(detail.item.priceCents, currency)}
+          <div className="v2-detail">
+            {detail.images.length > 0 ? (
+              <Carousel images={detail.images} alt={detail.name} />
+            ) : (
+              <div className="shot" aria-hidden="true">
+                <span>{detail.name.charAt(0).toUpperCase()}</span>
+              </div>
+            )}
+            {/* The sheet is the one place the handoff allows two tags. */}
+            <div className="tags">
+              {detail.offerLabel && <Tag kind="brand">{detail.offerLabel}</Tag>}
+              {detail.popular && <Tag kind="photo">Popular</Tag>}
+            </div>
+
+            <h2>{detail.name}</h2>
+            <div className="priceline">
+              <PriceBlock
+                cents={detail.viewerPriceCents}
+                currency={currency}
+                wasCents={detail.wasCents}
+                memberCents={detail.memberPriceCents}
+                isMember={isMember}
+                onJoin={() => {
+                  setDetail(null);
+                  go("memberships");
+                }}
+              />
+              <span className="facts">
+                {[detail.meta, pointsPerCents > 0 ? `+${Math.floor(detail.viewerPriceCents * pointsPerCents)} points` : null].filter(Boolean).join(" · ")}
               </span>
             </div>
-            {detail.item.description && (
-              <p style={{ color: "var(--muted)", fontSize: 15, paddingBottom: 6 }}>{detail.item.description}</p>
-            )}
-            {detail.kind === "product" ? (
-              <div className="dsec">
-                <span style={{ color: "var(--muted)", fontSize: 15 }}>Quantity</span>
-                <Stepper value={qty} onChange={setQty} />
-              </div>
-            ) : (
-              <div className="dsec">
-                <span className="outline-chip">{detail.item.categoryName}</span>
-                <span style={{ color: "var(--muted)", fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
-                  <Icon name="clock" size={15} /> {detail.item.durationMinutes} min
-                </span>
-              </div>
-            )}
-            <p style={{ color: "var(--muted)", fontSize: 14 }}>
-              Earn {Math.floor(detail.item.priceCents * (detail.kind === "product" ? qty : 1) * pointsPerCents)} points with this purchase
-            </p>
-          </>
-        )}
-      </Sheet>
 
-      <Sheet
-        open={howOpen}
-        onClose={() => setHowOpen(false)}
-        title="How does it work?"
-        cta={
-          <button
-            className="btn-black"
-            onClick={() => {
-              setHowOpen(false);
-              go("browse", categoryId);
-            }}
-          >
-            Browse the shop
-          </button>
-        }
-      >
-        <ol style={{ fontSize: 16, display: "flex", flexDirection: "column", gap: 12, paddingLeft: 0, listStyle: "none" }}>
-          <li>1. Browse treatments and products from this clinic.</li>
-          <li>2. Pay now, or spread the cost over monthly payments.</li>
-          <li>3. Earn points on everything you spend and redeem them for rewards.</li>
-        </ol>
+            {detail.description && <p className="desc">{detail.description}</p>}
+            {detail.kind === "SERVICE" && externalBookingUrl && (
+              <p className="desc">After buying, book your time on {merchantName}&rsquo;s booking page.</p>
+            )}
+            {detail.kind === "SERVICE" && <p className="desc">Results vary per person.</p>}
+
+            <div className="qty">
+              <span>Quantity</span>
+              <Stepper value={qty} onChange={setQty} />
+            </div>
+          </div>
+        )}
       </Sheet>
 
       <Sheet
@@ -457,20 +463,17 @@ export function ShopView({
         onClose={() => setFilterOpen(false)}
         title="Filter treatments"
         cta={
-          <div style={{ display: "flex", gap: 10 }}>
-            <button
-              className="btn-ghost"
-              style={{ flex: 1 }}
+          <div className="v2-ctapair">
+            <Button
+              variant="grey"
               onClick={() => {
                 setPriceBand(null);
                 setDuration(null);
               }}
             >
               Reset
-            </button>
-            <button className="btn-black" style={{ flex: 2 }} onClick={() => setFilterOpen(false)}>
-              Apply
-            </button>
+            </Button>
+            <Button onClick={() => setFilterOpen(false)}>Apply</Button>
           </div>
         }
       >
@@ -538,20 +541,20 @@ export function ShopView({
         title={planDetail?.name}
         cta={
           planDetail && (
-            <button className="btn-black" disabled={pending} onClick={() => joinPlan(planDetail.id)}>
+            <Button disabled={pending} onClick={() => joinPlan(planDetail.id)}>
               Join {planDetail.name}
-            </button>
+            </Button>
           )
         }
       >
         {planDetail && (
-          <div className="bens">
+          <ul className="bens">
             {planDetail.benefits.map((b, i) => (
-              <div key={i}>
+              <li key={i}>
                 <Icon name="check" size={18} /> {b}
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </Sheet>
 
@@ -560,7 +563,7 @@ export function ShopView({
       <Sheet open={!!firstPayment} onClose={() => setFirstPayment(null)} title={firstPayment ? `Start ${firstPayment.plan}` : ""}>
         {firstPayment && (
           <>
-            <p style={{ fontSize: 14, color: "var(--muted)", paddingBottom: 4 }}>
+            <p style={{ fontSize: 14, color: "var(--text-2)", paddingBottom: 4 }}>
               {money(firstPayment.amountCents, currency)} now, then the same each period. Cancel any time from your profile.
             </p>
             <CardPayment

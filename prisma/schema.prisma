@@ -44,11 +44,11 @@ enum StripeConnectStatus {
 }
 
 model Tenant {
-  id                 String              @id @default(cuid())
-  slug               String              @unique
+  id                 String             @id @default(cuid())
+  slug               String             @unique
   name               String
-  status             TenantStatus        @default(ACTIVE)
-  subscriptionStatus SubscriptionStatus  @default(TRIAL)
+  status             TenantStatus       @default(ACTIVE)
+  subscriptionStatus SubscriptionStatus @default(TRIAL)
   suspendedAt        DateTime?
   suspendedReason    String?
 
@@ -70,179 +70,180 @@ model Tenant {
   /// percentage as the clinic's other sales, and 0 means the platform takes
   /// nothing. Kept apart from the per-sale fee because a recurring plan is a
   /// different deal from a one-off purchase.
-  membershipFeePercent   Float?
+  membershipFeePercent Float?
 
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  branding             TenantBranding?
-  settings             TenantSettings?
-  locations            Location[]
-  users                User[]
-  staffProfiles        StaffProfile[]
-  customerProfiles     CustomerProfile[]
-  customerTags         CustomerTag[]
-  catalogTags          CatalogTag[]
-  clientResults        ClientResult[]
-  leads                Lead[]
-  roles                Role[]
-  serviceCategories    ServiceCategory[]
-  services             Service[]
-  productCategories    ProductCategory[]
-  products             Product[]
-  packages             Package[]
-  customerPackages     CustomerPackage[]
-  membershipPlans      MembershipPlan[]
-  customerMemberships  CustomerMembership[]
+  branding               TenantBranding?
+  settings               TenantSettings?
+  locations              Location[]
+  users                  User[]
+  staffProfiles          StaffProfile[]
+  customerProfiles       CustomerProfile[]
+  customerTags           CustomerTag[]
+  catalogTags            CatalogTag[]
+  clientResults          ClientResult[]
+  leads                  Lead[]
+  roles                  Role[]
+  serviceCategories      ServiceCategory[]
+  services               Service[]
+  productCategories      ProductCategory[]
+  products               Product[]
+  packages               Package[]
+  customerPackages       CustomerPackage[]
+  membershipPlans        MembershipPlan[]
+  customerMemberships    CustomerMembership[]
   membershipPriceChanges MembershipPriceChange[]
-  loyaltyProgramme     LoyaltyProgramme?
-  loyaltyTransactions  LoyaltyTransaction[]
-  accountCreditTx      AccountCreditTransaction[]
-  promotions           Promotion[]
-  baskets              Basket[]
-  orders               Order[]
-  payments             Payment[]
-  refunds              Refund[]
-  appointments         Appointment[]
-  blockedTimes         BlockedTime[]
-  conversations        Conversation[]
-  messages             Message[]
-  notifications        Notification[]
-  notificationCampaigns NotificationCampaign[]
+  priceHistory           PriceHistory[]
+  loyaltyProgramme       LoyaltyProgramme?
+  loyaltyTransactions    LoyaltyTransaction[]
+  accountCreditTx        AccountCreditTransaction[]
+  promotions             Promotion[]
+  baskets                Basket[]
+  orders                 Order[]
+  payments               Payment[]
+  refunds                Refund[]
+  appointments           Appointment[]
+  blockedTimes           BlockedTime[]
+  conversations          Conversation[]
+  messages               Message[]
+  notifications          Notification[]
+  notificationCampaigns  NotificationCampaign[]
   notificationDeliveries NotificationDelivery[]
-  auditLogs            AuditLog[]
-  inventoryTransactions InventoryTransaction[]
-  impersonationSessions ImpersonationSession[]
+  auditLogs              AuditLog[]
+  inventoryTransactions  InventoryTransaction[]
+  impersonationSessions  ImpersonationSession[]
+  activityEvents         ActivityEvent[]
+  pushSubscriptions      PushSubscription[]
+  redeemableItems        RedeemableItem[]
+  birthdayGreetings      BirthdayGreeting[]
 
   @@index([status])
-  activityEvents        ActivityEvent[]
-  pushSubscriptions     PushSubscription[]
-  redeemableItems       RedeemableItem[]
-  birthdayGreetings     BirthdayGreeting[]
 }
 
 model TenantBranding {
-  id                String   @id @default(cuid())
-  tenantId          String   @unique
-  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  tenantId String @unique
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  businessName      String
-  logoUrl           String?
-  appIconUrl        String?
-  primaryColor      String   @default("#0f766e")
-  secondaryColor    String   @default("#0891b2")
-  accentColor       String   @default("#f59e0b")
-  coverImageUrl     String?
+  businessName   String
+  logoUrl        String?
+  appIconUrl     String?
+  primaryColor   String  @default("#0f766e")
+  secondaryColor String  @default("#0891b2")
+  accentColor    String  @default("#f59e0b")
+  coverImageUrl  String?
 
-  contactEmail      String?
-  contactPhone      String?
-  addressLine1      String?
-  addressLine2      String?
-  city              String?
-  region            String?
-  postalCode        String?
-  country           String?
-  website           String?
-  socialLinks       Json?
+  contactEmail String?
+  contactPhone String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  region       String?
+  postalCode   String?
+  country      String?
+  website      String?
+  socialLinks  Json?
 
-  termsContent      String?
-  privacyContent    String?
+  termsContent       String?
+  privacyContent     String?
   cancellationPolicy String?
 
-  currency          String   @default("EUR")
-  timeZone          String   @default("Europe/Amsterdam")
+  currency String @default("EUR")
+  timeZone String @default("Europe/Amsterdam")
 
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model TenantSettings {
-  id                          String   @id @default(cuid())
-  tenantId                    String   @unique
-  tenant                      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  tenantId String @unique
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  taxRateBasisPoints           Int      @default(0)
-  appointmentCancellationHours Int      @default(24)
-  appointmentReminderHours     Int      @default(24)
+  taxRateBasisPoints           Int     @default(0)
+  appointmentCancellationHours Int     @default(24)
+  appointmentReminderHours     Int     @default(24)
   dataRetentionDays            Int?
-  membershipMaxPauseMonths     Int      @default(2)
-  loyaltyEnabled                Boolean  @default(true)
+  membershipMaxPauseMonths     Int     @default(2)
+  loyaltyEnabled               Boolean @default(true)
   /// Drives the Home / Shop pay-later row in the client app.
-  payLaterEnabled               Boolean  @default(false)
+  payLaterEnabled              Boolean @default(false)
 
   /// Shop banner in the client app. Empty = the app's default copy.
-  shopBannerHeadline            String?
-  shopBannerSubtitle            String?
-  shopBannerButtonLabel         String?
+  shopBannerHeadline    String?
+  shopBannerSubtitle    String?
+  shopBannerButtonLabel String?
 
   /// Deposit a client pays to book. 0 (the default) means booking is free and
   /// the treatment is paid at the clinic. A fixed amount wins over the
   /// percentage when both are set.
-  bookingDepositPercent         Int      @default(0)
-  bookingDepositFixedCents      Int      @default(0)
+  bookingDepositPercent    Int @default(0)
+  bookingDepositFixedCents Int @default(0)
 
   /// IN_APP books through the availability engine; EXTERNAL sends clients to
   /// the clinic's own booking site.
-  bookingMode                   BookingMode @default(IN_APP)
-  externalBookingUrl            String?
+  bookingMode        BookingMode @default(IN_APP)
+  externalBookingUrl String?
 
   /// "Review us on Google" row on the client's Rewards tab.
-  googleReviewUrl               String?
+  googleReviewUrl String?
 
   /// Listed in the client app's clinic search, so clients can find the clinic
   /// by name and sign in or create an account. On by default; a clinic that
   /// would rather only be reachable by its own link or QR can turn it off.
-  publiclyListed                Boolean  @default(true)
+  publiclyListed Boolean @default(true)
 
   /// Automatic messages to clients. Each still respects the client's own consent.
-  notifyBookingConfirmations    Boolean  @default(true)
-  notifyAppointmentReminders    Boolean  @default(true)
-  notifyPointsEarned            Boolean  @default(true)
-  notifyMembershipBilling       Boolean  @default(true)
+  notifyBookingConfirmations Boolean @default(true)
+  notifyAppointmentReminders Boolean @default(true)
+  notifyPointsEarned         Boolean @default(true)
+  notifyMembershipBilling    Boolean @default(true)
 
   /// When this clinic may send marketing, as minutes from local midnight in
   /// the clinic's own timezone. 09:00 to 22:00 unless the clinic narrows it;
   /// the platform refuses anything outside 07:00–22:00 (see lib/marketing-window.ts).
-  marketingWindowStartMinutes   Int      @default(540)
-  marketingWindowEndMinutes     Int      @default(1320)
+  marketingWindowStartMinutes Int @default(540)
+  marketingWindowEndMinutes   Int @default(1320)
   /// How many marketing notifications one client may get from this clinic in
   /// a day. Zero means no limit — which is the clinic's choice to make, and
   /// its clients' choice to switch notifications off over.
-  marketingDailyLimit           Int      @default(1)
+  marketingDailyLimit         Int @default(1)
 
   /// Birthday automation. Off until a clinic turns it on, because a message
   /// nobody wrote is worse than no message.
-  birthdayMessageEnabled        Boolean  @default(false)
-  birthdayMessage               String?
+  birthdayMessageEnabled  Boolean @default(false)
+  birthdayMessage         String?
   /// An optional present with it: a personal discount of this many percent,
   /// usable for this many days. Zero percent means a message only.
-  birthdayDiscountPercent       Int      @default(0)
-  birthdayDiscountDays          Int      @default(14)
+  birthdayDiscountPercent Int     @default(0)
+  birthdayDiscountDays    Int     @default(14)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model Location {
-  id          String   @id @default(cuid())
-  tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  name        String
+  name         String
   addressLine1 String?
   addressLine2 String?
-  city        String?
-  region      String?
-  postalCode  String?
-  country     String?
-  phone       String?
-  timeZone    String?
+  city         String?
+  region       String?
+  postalCode   String?
+  country      String?
+  phone        String?
+  timeZone     String?
   openingHours Json?
-  isPrimary   Boolean  @default(false)
-  active      Boolean  @default(true)
+  isPrimary    Boolean @default(false)
+  active       Boolean @default(true)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   staffLocations StaffLocation[]
   appointments   Appointment[]
@@ -269,29 +270,29 @@ enum UserStatus {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  tenantId     String?
-  tenant       Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String  @id @default(cuid())
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  email        String
-  passwordHash String
-  role         UserRole
-  status       UserStatus @default(ACTIVE)
-  emailVerifiedAt DateTime?
-  lastLoginAt  DateTime?
+  email              String
+  passwordHash       String
+  role               UserRole
+  status             UserStatus @default(ACTIVE)
+  emailVerifiedAt    DateTime?
+  lastLoginAt        DateTime?
   /// Sessions created before this moment are refused. Set on password reset
   /// and account closure, so an old or stolen session cannot outlive them.
   sessionsValidAfter DateTime?
 
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  staffProfile    StaffProfile?
-  customerProfile CustomerProfile?
-  auditLogs       AuditLog[]
-  passwordResets  PasswordResetToken[]
-  pushSubscriptions PushSubscription[]
-  redemptionsPerformed RedeemableItem[] @relation("RedeemedBy")
+  staffProfile          StaffProfile?
+  customerProfile       CustomerProfile?
+  auditLogs             AuditLog[]
+  passwordResets        PasswordResetToken[]
+  pushSubscriptions     PushSubscription[]
+  redemptionsPerformed  RedeemableItem[]       @relation("RedeemedBy")
   impersonationSessions ImpersonationSession[]
 
   @@unique([tenantId, email])
@@ -299,30 +300,30 @@ model User {
 }
 
 model PasswordResetToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String   @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 }
 
 /// A browser or installed app that has agreed to receive notifications.
 /// One client can have several: a phone, a tablet, a laptop. The endpoint is
 /// the push service's own address for that device, so it identifies the row.
 model PushSubscription {
-  id         String   @id @default(cuid())
-  tenantId   String
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  endpoint   String   @unique
+  endpoint  String  @unique
   /// The browser's own public key and auth secret for encrypting a payload.
-  p256dh     String
-  auth       String
-  userAgent  String?
+  p256dh    String
+  auth      String
+  userAgent String?
 
   createdAt  DateTime @default(now())
   /// Last time a push service accepted a message for this device.
@@ -366,45 +367,45 @@ model RolePermission {
 }
 
 model StaffProfile {
-  id             String    @id @default(cuid())
-  tenantId       String
-  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  userId         String    @unique
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  roleId         String?
-  role           Role?     @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  id       String  @id @default(cuid())
+  tenantId String
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId   String  @unique
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId   String?
+  role     Role?   @relation(fields: [roleId], references: [id], onDelete: SetNull)
 
-  firstName      String
-  lastName       String
-  title          String?
-  bio            String?
-  avatarUrl      String?
-  active         Boolean   @default(true)
-  invitedAt      DateTime?
-  activatedAt    DateTime?
-  deactivatedAt  DateTime?
+  firstName     String
+  lastName      String
+  title         String?
+  bio           String?
+  avatarUrl     String?
+  active        Boolean   @default(true)
+  invitedAt     DateTime?
+  activatedAt   DateTime?
+  deactivatedAt DateTime?
 
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  locations        StaffLocation[]
-  services         StaffService[]
-  practitionerServices Service[] @relation("ServicePractitioner")
-  practitionerProducts Product[] @relation("ProductPractitioner")
-  availability      StaffAvailability[]
-  blockedTimes      BlockedTime[]
-  appointments      Appointment[]
-  assignedLeads     Lead[]
+  locations             StaffLocation[]
+  services              StaffService[]
+  practitionerServices  Service[]                  @relation("ServicePractitioner")
+  practitionerProducts  Product[]                  @relation("ProductPractitioner")
+  availability          StaffAvailability[]
+  blockedTimes          BlockedTime[]
+  appointments          Appointment[]
+  assignedLeads         Lead[]
   assignedConversations Conversation[]
-  messages          Message[]
-  customerNotes     CustomerNote[]
-  loyaltyAdjustments LoyaltyTransaction[]
-  creditAdjustments AccountCreditTransaction[]
-  refundsCreated    Refund[]
-  campaignsCreated  NotificationCampaign[]
-  itemsIssued       RedeemableItem[] @relation("IssuedItems")
-  itemsVoided       RedeemableItem[] @relation("VoidedItems")
-  priceChanges      MembershipPriceChange[] @relation("PriceChanges")
+  messages              Message[]
+  customerNotes         CustomerNote[]
+  loyaltyAdjustments    LoyaltyTransaction[]
+  creditAdjustments     AccountCreditTransaction[]
+  refundsCreated        Refund[]
+  campaignsCreated      NotificationCampaign[]
+  itemsIssued           RedeemableItem[]           @relation("IssuedItems")
+  itemsVoided           RedeemableItem[]           @relation("VoidedItems")
+  priceChanges          MembershipPriceChange[]    @relation("PriceChanges")
 
   @@index([tenantId])
 }
@@ -433,15 +434,15 @@ model StaffAvailability {
   staffProfileId String
   staffProfile   StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
 
-  dayOfWeek      Int // 0 = Sunday .. 6 = Saturday
-  startMinute    Int // minutes after midnight
-  endMinute      Int
+  dayOfWeek        Int // 0 = Sunday .. 6 = Saturday
+  startMinute      Int // minutes after midnight
+  endMinute        Int
   breakStartMinute Int?
   breakEndMinute   Int?
-  active         Boolean      @default(true)
+  active           Boolean @default(true)
 
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([tenantId, staffProfileId, dayOfWeek])
 }
@@ -455,10 +456,10 @@ model BlockedTime {
   staffProfileId String?
   staffProfile   StaffProfile? @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
 
-  startAt        DateTime
-  endAt          DateTime
-  reason         String?
-  createdAt      DateTime      @default(now())
+  startAt   DateTime
+  endAt     DateTime
+  reason    String?
+  createdAt DateTime @default(now())
 
   @@index([tenantId, startAt, endAt])
 }
@@ -468,73 +469,73 @@ model BlockedTime {
 // ---------------------------------------------------------------------------
 
 model CustomerProfile {
-  id             String   @id @default(cuid())
-  tenantId       String
-  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  userId         String   @unique
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId   String @unique
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  firstName      String
-  lastName       String
-  phone          String?
-  dateOfBirth    DateTime?
-  addressLine1   String?
-  addressLine2   String?
-  city           String?
-  region         String?
-  postalCode     String?
-  country        String?
+  firstName    String
+  lastName     String
+  phone        String?
+  dateOfBirth  DateTime?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  region       String?
+  postalCode   String?
+  country      String?
 
   preferredLocationId String?
 
-  marketingConsent Boolean @default(false)
+  marketingConsent         Boolean   @default(false)
   /// When the client last decided about offers themselves, and where. Set only
   /// by the client's own actions, never by us — turning notifications on opts
   /// a new client into offers, but it must never undo a "no" they once gave.
   marketingConsentChosenAt DateTime?
   marketingConsentSource   String?
-  emailConsent     Boolean @default(true)
-  smsConsent       Boolean @default(false)
-  pushConsent      Boolean @default(false)
+  emailConsent             Boolean   @default(true)
+  smsConsent               Boolean   @default(false)
+  pushConsent              Boolean   @default(false)
 
-  loyaltyPointsBalance   Int @default(0)
+  loyaltyPointsBalance      Int @default(0)
   accountCreditBalanceCents Int @default(0)
 
   /// This client as a customer on their clinic's own Stripe account, used for
   /// membership subscriptions. It belongs to that one connected account — a
   /// client of another clinic is a different Stripe customer entirely.
-  stripeCustomerId       String?
+  stripeCustomerId String?
 
   /// Drives the Visits / Last Visit columns on Client Profiles. A client with
   /// zero visits is what the "Leads" filter selects.
-  visitCount             Int       @default(0)
-  lastVisitAt            DateTime?
+  visitCount  Int       @default(0)
+  lastVisitAt DateTime?
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  tags            CustomerProfileTag[]
-  notes           CustomerNote[]
-  leads           Lead[]
-  packages        CustomerPackage[]
-  memberships     CustomerMembership[]
-  loyaltyTx       LoyaltyTransaction[]
-  creditTx        AccountCreditTransaction[]
-  promotionRedemptions PromotionRedemption[]
-  baskets         Basket[]
-  orders          Order[]
-  appointments    Appointment[]
-  conversations   Conversation[]
-  notifications   Notification[]
+  tags                   CustomerProfileTag[]
+  notes                  CustomerNote[]
+  leads                  Lead[]
+  packages               CustomerPackage[]
+  memberships            CustomerMembership[]
+  loyaltyTx              LoyaltyTransaction[]
+  creditTx               AccountCreditTransaction[]
+  promotionRedemptions   PromotionRedemption[]
+  baskets                Basket[]
+  orders                 Order[]
+  appointments           Appointment[]
+  conversations          Conversation[]
+  notifications          Notification[]
   notificationDeliveries NotificationDelivery[]
+  activityEvents         ActivityEvent[]
+  redeemableItems        RedeemableItem[]
+  personalPromotions     Promotion[]
+  personalCampaigns      NotificationCampaign[]
+  birthdayGreetings      BirthdayGreeting[]
 
   @@index([tenantId])
   @@index([tenantId, lastName, firstName])
-  activityEvents  ActivityEvent[]
-  redeemableItems   RedeemableItem[]
-  personalPromotions Promotion[]
-  personalCampaigns  NotificationCampaign[]
-  birthdayGreetings  BirthdayGreeting[]
 }
 
 model CustomerTag {
@@ -559,14 +560,14 @@ model CustomerProfileTag {
 }
 
 model CustomerNote {
-  id                String           @id @default(cuid())
-  tenantId          String
-  customerProfileId String
-  customerProfile   CustomerProfile  @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  id                   String          @id @default(cuid())
+  tenantId             String
+  customerProfileId    String
+  customerProfile      CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
   authorStaffProfileId String?
-  authorStaffProfile StaffProfile?   @relation(fields: [authorStaffProfileId], references: [id], onDelete: SetNull)
-  body              String
-  createdAt         DateTime         @default(now())
+  authorStaffProfile   StaffProfile?   @relation(fields: [authorStaffProfileId], references: [id], onDelete: SetNull)
+  body                 String
+  createdAt            DateTime        @default(now())
 
   @@index([tenantId, customerProfileId])
 }
@@ -581,27 +582,27 @@ enum LeadStatus {
 }
 
 model Lead {
-  id                  String       @id @default(cuid())
-  tenantId            String
-  tenant              Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  name                String
-  email               String?
-  phone               String?
-  source              String?
-  assignedStaffProfileId String?
-  assignedStaffProfile StaffProfile? @relation(fields: [assignedStaffProfileId], references: [id], onDelete: SetNull)
-  status              LeadStatus   @default(NEW)
-  valueEstimateCents  Int?
-  notes               String?
-  nextFollowUpAt      DateTime?
-  lastContactedAt     DateTime?
+  name                       String
+  email                      String?
+  phone                      String?
+  source                     String?
+  assignedStaffProfileId     String?
+  assignedStaffProfile       StaffProfile?    @relation(fields: [assignedStaffProfileId], references: [id], onDelete: SetNull)
+  status                     LeadStatus       @default(NEW)
+  valueEstimateCents         Int?
+  notes                      String?
+  nextFollowUpAt             DateTime?
+  lastContactedAt            DateTime?
   convertedCustomerProfileId String?
-  convertedCustomerProfile CustomerProfile? @relation(fields: [convertedCustomerProfileId], references: [id], onDelete: SetNull)
-  convertedAt         DateTime?
+  convertedCustomerProfile   CustomerProfile? @relation(fields: [convertedCustomerProfileId], references: [id], onDelete: SetNull)
+  convertedAt                DateTime?
 
-  createdAt           DateTime     @default(now())
-  updatedAt            DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([tenantId, status])
 }
@@ -611,89 +612,90 @@ model Lead {
 // ---------------------------------------------------------------------------
 
 model ServiceCategory {
-  id        String    @id @default(cuid())
+  id        String   @id @default(cuid())
   tenantId  String
-  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name      String
-  sortOrder Int       @default(0)
-  active    Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  services  Service[]
+  services             Service[]
+  promotionEligibility PromotionEligibility[]
 
   @@index([tenantId])
-  promotionEligibility PromotionEligibility[]
 }
 
 model Service {
-  id                  String           @id @default(cuid())
-  tenantId            String
-  tenant              Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  categoryId          String
-  category            ServiceCategory  @relation(fields: [categoryId], references: [id], onDelete: NoAction)
+  id         String          @id @default(cuid())
+  tenantId   String
+  tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: NoAction)
 
-  name                String
-  description         String?
-  prepInstructions    String?
+  name                  String
+  description           String?
+  prepInstructions      String?
   aftercareInstructions String?
-  durationMinutes     Int
-  priceCents          Int
-  taxable             Boolean          @default(true)
-  imageUrl            String?
-  sortOrder           Int              @default(0)
-  active              Boolean          @default(true)
-  archivedAt          DateTime?
+  durationMinutes       Int
+  priceCents            Int
+  taxable               Boolean   @default(true)
+  imageUrl              String?
+  sortOrder             Int       @default(0)
+  active                Boolean   @default(true)
+  archivedAt            DateTime?
 
   /// What the clinic calls this in its own app: "session", "treatment",
   /// "product", "syringe" — shown to clients next to the price.
-  unitLabel             String?
+  unitLabel            String?
   /// The clinic's own booking or intake link for this item, if it has one.
-  schedulingUrl         String?
+  schedulingUrl        String?
   /// Most a client may put in one order. Null = no limit.
-  maxQuantity           Int?
+  maxQuantity          Int?
   /// Warn the client before they buy, and make them acknowledge it.
-  requiresConsultation  Boolean          @default(false)
-  consultationNotice    String?
+  requiresConsultation Boolean       @default(false)
+  consultationNotice   String?
   /// Account credit ("cash balance") may not be spent on this item.
-  cashBalanceBlocked    Boolean          @default(false)
+  cashBalanceBlocked   Boolean       @default(false)
   /// Bundle and variation prices the clinic defined — see lib/pricing-options.ts.
-  pricingOptions        Json?
-  practitionerId        String?
-  practitioner        StaffProfile?    @relation("ServicePractitioner", fields: [practitionerId], references: [id], onDelete: SetNull)
+  pricingOptions       Json?
+  practitionerId       String?
+  practitioner         StaffProfile? @relation("ServicePractitioner", fields: [practitionerId], references: [id], onDelete: SetNull)
 
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  itemTags            CatalogItemTag[]
-  clientResults       ClientResult[]
-  staff               StaffService[]
-  packageItems        PackageItem[]
-  appointments        Appointment[]
-  basketItems         BasketItem[]
-  orderItems          OrderItem[]
+  itemTags             CatalogItemTag[]
+  clientResults        ClientResult[]
+  staff                StaffService[]
+  packageItems         PackageItem[]
+  appointments         Appointment[]
+  basketItems          BasketItem[]
+  orderItems           OrderItem[]
   promotionEligibility PromotionEligibility[]
-  loyaltyExclusions   LoyaltyExclusion[]
-  membershipBenefits  MembershipBenefit[]
-  loyaltyRewards      LoyaltyReward[]
+  loyaltyExclusions    LoyaltyExclusion[]
+  membershipBenefits   MembershipBenefit[]
+  loyaltyRewards       LoyaltyReward[]
+  priceHistory         PriceHistory[]
 
   @@index([tenantId, categoryId])
 }
 
 model ProductCategory {
-  id        String    @id @default(cuid())
+  id        String   @id @default(cuid())
   tenantId  String
-  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name      String
-  sortOrder Int       @default(0)
-  active    Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  products  Product[]
+  products             Product[]
+  promotionEligibility PromotionEligibility[]
 
   @@index([tenantId])
-  promotionEligibility PromotionEligibility[]
 }
 
 /// A label a clinic puts on the things it sells — "Popular", "No downtime" —
@@ -711,7 +713,7 @@ model CatalogTag {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  items       CatalogItemTag[]
+  items CatalogItemTag[]
 
   @@unique([tenantId, name])
 }
@@ -733,13 +735,13 @@ model CatalogItemTag {
 
 /// A before/after pair with what the client said about it.
 model ClientResult {
-  id             String   @id @default(cuid())
-  tenantId       String
-  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  serviceId      String?
-  service        Service? @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  productId      String?
-  product        Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  serviceId String?
+  service   Service? @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   beforeImageUrl String?
   afterImageUrl  String?
@@ -754,60 +756,86 @@ model ClientResult {
 }
 
 model Product {
-  id                String            @id @default(cuid())
-  tenantId          String
-  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  categoryId        String
-  category          ProductCategory   @relation(fields: [categoryId], references: [id], onDelete: NoAction)
+  id         String          @id @default(cuid())
+  tenantId   String
+  tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   ProductCategory @relation(fields: [categoryId], references: [id], onDelete: NoAction)
 
   name              String
   description       String?
   images            Json?
   priceCents        Int
-  taxable           Boolean           @default(true)
-  inventoryQuantity Int               @default(0)
+  taxable           Boolean   @default(true)
+  inventoryQuantity Int       @default(0)
   sku               String
-  active            Boolean           @default(true)
+  active            Boolean   @default(true)
   archivedAt        DateTime?
 
   /// Anything sold in the shop can also be a treatment: a duration, what to
   /// do before and after, and who performs it are all optional.
-  durationMinutes   Int?
-  prepInstructions  String?
+  durationMinutes       Int?
+  prepInstructions      String?
   aftercareInstructions String?
 
   /// What the clinic calls this in its own app: "session", "treatment",
   /// "product", "syringe" — shown to clients next to the price.
-  unitLabel             String?
+  unitLabel            String?
   /// The clinic's own booking or intake link for this item, if it has one.
-  schedulingUrl         String?
+  schedulingUrl        String?
   /// Most a client may put in one order. Null = no limit.
-  maxQuantity           Int?
+  maxQuantity          Int?
   /// Warn the client before they buy, and make them acknowledge it.
-  requiresConsultation  Boolean          @default(false)
-  consultationNotice    String?
+  requiresConsultation Boolean       @default(false)
+  consultationNotice   String?
   /// Account credit ("cash balance") may not be spent on this item.
-  cashBalanceBlocked    Boolean          @default(false)
+  cashBalanceBlocked   Boolean       @default(false)
   /// Bundle and variation prices the clinic defined — see lib/pricing-options.ts.
-  pricingOptions        Json?
-  practitionerId        String?
-  practitioner      StaffProfile?     @relation("ProductPractitioner", fields: [practitionerId], references: [id], onDelete: SetNull)
+  pricingOptions       Json?
+  practitionerId       String?
+  practitioner         StaffProfile? @relation("ProductPractitioner", fields: [practitionerId], references: [id], onDelete: SetNull)
 
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  itemTags          CatalogItemTag[]
-  clientResults     ClientResult[]
-  basketItems       BasketItem[]
-  orderItems        OrderItem[]
-  inventoryTx       InventoryTransaction[]
+  itemTags             CatalogItemTag[]
+  clientResults        ClientResult[]
+  basketItems          BasketItem[]
+  orderItems           OrderItem[]
+  inventoryTx          InventoryTransaction[]
   promotionEligibility PromotionEligibility[]
-  loyaltyExclusions LoyaltyExclusion[]
-  loyaltyRewards    LoyaltyReward[]
+  loyaltyExclusions    LoyaltyExclusion[]
+  loyaltyRewards       LoyaltyReward[]
+  priceHistory         PriceHistory[]
+  campaigns            NotificationCampaign[]
 
   @@unique([tenantId, sku])
   @@index([tenantId, categoryId])
-  campaigns         NotificationCampaign[]
+}
+
+/// Every list price a clinic has set for one item.
+///
+/// The EU's Omnibus rule is that a "was" price next to a reduced one must be
+/// the lowest price the seller applied in the 30 days before — not whatever
+/// the price happened to be last. Without a record of the changes there is no
+/// way to know that number, so one row is written per price the clinic sets,
+/// and lib/price-history.ts reads the window back out.
+model PriceHistory {
+  id        String          @id @default(cuid())
+  tenantId  String
+  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  itemType  CatalogItemType
+  serviceId String?
+  service   Service?        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product?        @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  priceCents Int
+  /// When this price started applying.
+  recordedAt DateTime @default(now())
+
+  @@index([tenantId, serviceId, recordedAt])
+  @@index([tenantId, productId, recordedAt])
 }
 
 enum InventoryTransactionType {
@@ -818,16 +846,16 @@ enum InventoryTransactionType {
 }
 
 model InventoryTransaction {
-  id             String                    @id @default(cuid())
-  tenantId       String
-  tenant         Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  productId      String
-  product        Product                   @relation(fields: [productId], references: [id], onDelete: Cascade)
-  type           InventoryTransactionType
-  quantityChange Int
-  reason         String?
+  id                 String                   @id @default(cuid())
+  tenantId           String
+  tenant             Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productId          String
+  product            Product                  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type               InventoryTransactionType
+  quantityChange     Int
+  reason             String?
   relatedOrderItemId String?
-  createdAt      DateTime                  @default(now())
+  createdAt          DateTime                 @default(now())
 
   @@index([tenantId, productId])
 }
@@ -840,27 +868,27 @@ enum CustomerPackageStatus {
 }
 
 model Package {
-  id             String    @id @default(cuid())
-  tenantId       String
-  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  name           String
-  description    String?
-  priceCents     Int
-  totalUses      Int
-  expiryDays     Int?
-  transferable   Boolean   @default(false)
-  imageUrl       String?
-  active         Boolean   @default(true)
-  archivedAt     DateTime?
+  name         String
+  description  String?
+  priceCents   Int
+  totalUses    Int
+  expiryDays   Int?
+  transferable Boolean   @default(false)
+  imageUrl     String?
+  active       Boolean   @default(true)
+  archivedAt   DateTime?
 
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  items           PackageItem[]
-  customerPackages CustomerPackage[]
-  basketItems      BasketItem[]
-  orderItems       OrderItem[]
+  items                PackageItem[]
+  customerPackages     CustomerPackage[]
+  basketItems          BasketItem[]
+  orderItems           OrderItem[]
   promotionEligibility PromotionEligibility[]
 
   @@index([tenantId])
@@ -878,25 +906,25 @@ model PackageItem {
 }
 
 model CustomerPackage {
-  id                 String                 @id @default(cuid())
-  tenantId           String
-  tenant             Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customerProfileId  String
-  customerProfile    CustomerProfile        @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
-  packageId          String
-  package            Package                @relation(fields: [packageId], references: [id], onDelete: NoAction)
-  orderItemId        String?
+  id                String          @id @default(cuid())
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId String
+  customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  packageId         String
+  package           Package         @relation(fields: [packageId], references: [id], onDelete: NoAction)
+  orderItemId       String?
 
-  remainingUses      Int
-  totalUses          Int
-  purchasedAt        DateTime               @default(now())
-  expiresAt          DateTime?
-  status             CustomerPackageStatus  @default(ACTIVE)
+  remainingUses Int
+  totalUses     Int
+  purchasedAt   DateTime              @default(now())
+  expiresAt     DateTime?
+  status        CustomerPackageStatus @default(ACTIVE)
 
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  appointments        Appointment[]
+  appointments Appointment[]
 
   @@index([tenantId, customerProfileId])
 }
@@ -925,54 +953,54 @@ enum MembershipBenefitType {
 }
 
 model MembershipPlan {
-  id                     String            @id @default(cuid())
-  tenantId               String
-  tenant                 Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  name                   String
-  description            String?
-  billingFrequency       BillingFrequency
-  priceCents             Int
-  includedCreditCents    Int               @default(0)
-  serviceDiscountPercent Int?
-  productDiscountPercent Int?
-  priorityAccess         Boolean           @default(false)
+  name                    String
+  description             String?
+  billingFrequency        BillingFrequency
+  priceCents              Int
+  includedCreditCents     Int              @default(0)
+  serviceDiscountPercent  Int?
+  productDiscountPercent  Int?
+  priorityAccess          Boolean          @default(false)
   minimumCommitmentMonths Int?
-  cancellationPolicy     String?
-  pauseAllowed           Boolean           @default(true)
-  maxPauseMonths         Int?
-  active                 Boolean           @default(true)
-  archivedAt             DateTime?
+  cancellationPolicy      String?
+  pauseAllowed            Boolean          @default(true)
+  maxPauseMonths          Int?
+  active                  Boolean          @default(true)
+  archivedAt              DateTime?
 
   /// The product and recurring price this plan is billed by, created on the
   /// clinic's own connected account the first time somebody joins. Cleared if
   /// the price changes, so the next join creates a fresh one rather than
   /// charging the old amount.
-  stripeProductId        String?
-  stripePriceId          String?
+  stripeProductId String?
+  stripePriceId   String?
 
-  createdAt              DateTime          @default(now())
-  updatedAt              DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  benefits               MembershipBenefit[]
-  customerMemberships    CustomerMembership[]
-  priceChanges           MembershipPriceChange[]
-  orderItems             OrderItem[]
-  promotionEligibility   PromotionEligibility[]
+  benefits             MembershipBenefit[]
+  customerMemberships  CustomerMembership[]
+  priceChanges         MembershipPriceChange[]
+  orderItems           OrderItem[]
+  promotionEligibility PromotionEligibility[]
 
   @@index([tenantId])
 }
 
 model MembershipBenefit {
-  id              String                 @id @default(cuid())
-  membershipPlanId String
-  membershipPlan  MembershipPlan         @relation(fields: [membershipPlanId], references: [id], onDelete: Cascade)
-  type            MembershipBenefitType
-  serviceId       String?
-  service         Service?               @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  description     String
-  valuePercent    Int?
-  valueCents      Int?
+  id                String                @id @default(cuid())
+  membershipPlanId  String
+  membershipPlan    MembershipPlan        @relation(fields: [membershipPlanId], references: [id], onDelete: Cascade)
+  type              MembershipBenefitType
+  serviceId         String?
+  service           Service?              @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  description       String
+  valuePercent      Int?
+  valueCents        Int?
   quantityPerPeriod Int?
 
   @@index([membershipPlanId])
@@ -994,39 +1022,39 @@ enum MembershipStatus {
 }
 
 model CustomerMembership {
-  id                  String            @id @default(cuid())
-  tenantId            String
-  tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customerProfileId   String
-  customerProfile     CustomerProfile   @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
-  membershipPlanId    String
-  membershipPlan      MembershipPlan    @relation(fields: [membershipPlanId], references: [id], onDelete: NoAction)
+  id                String          @id @default(cuid())
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId String
+  customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  membershipPlanId  String
+  membershipPlan    MembershipPlan  @relation(fields: [membershipPlanId], references: [id], onDelete: NoAction)
 
-  status              MembershipStatus  @default(ACTIVE)
-  startedAt           DateTime          @default(now())
-  currentPeriodStart  DateTime          @default(now())
-  currentPeriodEnd    DateTime
-  nextBillingAt       DateTime?
-  pausedAt            DateTime?
-  resumesAt           DateTime?
-  cancelledAt         DateTime?
-  cancelAtPeriodEnd   Boolean           @default(false)
-  creditBalanceCents  Int               @default(0)
+  status               MembershipStatus @default(ACTIVE)
+  startedAt            DateTime         @default(now())
+  currentPeriodStart   DateTime         @default(now())
+  currentPeriodEnd     DateTime
+  nextBillingAt        DateTime?
+  pausedAt             DateTime?
+  resumesAt            DateTime?
+  cancelledAt          DateTime?
+  cancelAtPeriodEnd    Boolean          @default(false)
+  creditBalanceCents   Int              @default(0)
   stripeSubscriptionId String?
 
   /// Card-failure retry state, surfaced in the Memberships dunning panel.
-  failedAttempts      Int               @default(0)
-  dunningState        String?
+  failedAttempts Int       @default(0)
+  dunningState   String?
   /// When the current run of failures began, which is what the grace period is
   /// counted from. Cleared the moment a payment succeeds.
-  pastDueSince        DateTime?
+  pastDueSince   DateTime?
 
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  billingEvents       MembershipBillingEvent[]
-  priceChanges        MembershipPriceChange[]
-  payments            Payment[]
+  billingEvents MembershipBillingEvent[]
+  priceChanges  MembershipPriceChange[]
+  payments      Payment[]
 
   @@index([tenantId, customerProfileId])
   @@index([tenantId, status])
@@ -1050,21 +1078,21 @@ model MembershipPriceChange {
   membershipPlanId     String
   membershipPlan       MembershipPlan     @relation(fields: [membershipPlanId], references: [id], onDelete: Cascade)
 
-  oldPriceCents        Int
-  newPriceCents        Int
+  oldPriceCents Int
+  newPriceCents Int
   /// The date the client was told the new price starts.
-  effectiveAt          DateTime
+  effectiveAt   DateTime
   /// When it is safe to switch the price at Stripe without catching an
   /// invoice the client was not warned about.
-  applyAfter           DateTime
-  appliedAt            DateTime?
-  noticeSentAt         DateTime?
+  applyAfter    DateTime
+  appliedAt     DateTime?
+  noticeSentAt  DateTime?
 
   reason                  String?
   createdByStaffProfileId String?
   createdByStaffProfile   StaffProfile? @relation("PriceChanges", fields: [createdByStaffProfileId], references: [id], onDelete: SetNull)
 
-  createdAt            DateTime           @default(now())
+  createdAt DateTime @default(now())
 
   @@index([tenantId, appliedAt])
   @@index([applyAfter])
@@ -1079,15 +1107,15 @@ enum MembershipBillingEventType {
 }
 
 model MembershipBillingEvent {
-  id                    String                      @id @default(cuid())
-  tenantId              String
-  customerMembershipId  String
-  customerMembership    CustomerMembership          @relation(fields: [customerMembershipId], references: [id], onDelete: Cascade)
-  type                  MembershipBillingEventType
-  amountCents           Int?
-  description           String?
-  occurredAt            DateTime                    @default(now())
-  paymentId             String?
+  id                   String                     @id @default(cuid())
+  tenantId             String
+  customerMembershipId String
+  customerMembership   CustomerMembership         @relation(fields: [customerMembershipId], references: [id], onDelete: Cascade)
+  type                 MembershipBillingEventType
+  amountCents          Int?
+  description          String?
+  occurredAt           DateTime                   @default(now())
+  paymentId            String?
 
   @@index([tenantId, customerMembershipId])
 }
@@ -1097,26 +1125,26 @@ model MembershipBillingEvent {
 // ---------------------------------------------------------------------------
 
 model LoyaltyProgramme {
-  id                     String   @id @default(cuid())
-  tenantId               String   @unique
-  tenant                 Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  tenantId String @unique
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  name                   String   @default("Rewards")
-  pointsPerCents         Float    @default(0.01)
-  pointsPerVisit         Int      @default(0)
-  referralPoints         Int      @default(0)
-  birthdayPoints         Int      @default(0)
+  name             String  @default("Rewards")
+  pointsPerCents   Float   @default(0.01)
+  pointsPerVisit   Int     @default(0)
+  referralPoints   Int     @default(0)
+  birthdayPoints   Int     @default(0)
   /// Points for leaving a Google review; shown only if the clinic set a review link.
-  reviewPoints           Int      @default(0)
-  pointsExpiryDays       Int?
-  active                 Boolean  @default(true)
+  reviewPoints     Int     @default(0)
+  pointsExpiryDays Int?
+  active           Boolean @default(true)
 
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  rules       LoyaltyRule[]
-  rewards     LoyaltyReward[]
-  exclusions  LoyaltyExclusion[]
+  rules      LoyaltyRule[]
+  rewards    LoyaltyReward[]
+  exclusions LoyaltyExclusion[]
 }
 
 enum LoyaltyRuleType {
@@ -1128,16 +1156,16 @@ enum LoyaltyRuleType {
 }
 
 model LoyaltyRule {
-  id                  String            @id @default(cuid())
-  loyaltyProgrammeId  String
-  loyaltyProgramme    LoyaltyProgramme  @relation(fields: [loyaltyProgrammeId], references: [id], onDelete: Cascade)
-  type                LoyaltyRuleType
-  multiplier          Float?
-  pointsValue         Int?
-  startAt             DateTime?
-  endAt               DateTime?
-  active              Boolean           @default(true)
-  createdAt           DateTime          @default(now())
+  id                 String           @id @default(cuid())
+  loyaltyProgrammeId String
+  loyaltyProgramme   LoyaltyProgramme @relation(fields: [loyaltyProgrammeId], references: [id], onDelete: Cascade)
+  type               LoyaltyRuleType
+  multiplier         Float?
+  pointsValue        Int?
+  startAt            DateTime?
+  endAt              DateTime?
+  active             Boolean          @default(true)
+  createdAt          DateTime         @default(now())
 
   @@index([loyaltyProgrammeId])
 }
@@ -1150,10 +1178,10 @@ enum LoyaltyRewardType {
 }
 
 model LoyaltyReward {
-  id                  String            @id @default(cuid())
-  tenantId            String
-  loyaltyProgrammeId  String
-  loyaltyProgramme    LoyaltyProgramme  @relation(fields: [loyaltyProgrammeId], references: [id], onDelete: Cascade)
+  id                 String           @id @default(cuid())
+  tenantId           String
+  loyaltyProgrammeId String
+  loyaltyProgramme   LoyaltyProgramme @relation(fields: [loyaltyProgrammeId], references: [id], onDelete: Cascade)
 
   name                String
   description         String?
@@ -1167,20 +1195,20 @@ model LoyaltyReward {
   product             Product?          @relation(fields: [productId], references: [id], onDelete: SetNull)
   active              Boolean           @default(true)
 
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([tenantId])
 }
 
 model LoyaltyExclusion {
-  id                  String            @id @default(cuid())
-  loyaltyProgrammeId  String
-  loyaltyProgramme    LoyaltyProgramme  @relation(fields: [loyaltyProgrammeId], references: [id], onDelete: Cascade)
-  serviceId           String?
-  service             Service?          @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  productId           String?
-  product             Product?          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id                 String           @id @default(cuid())
+  loyaltyProgrammeId String
+  loyaltyProgramme   LoyaltyProgramme @relation(fields: [loyaltyProgrammeId], references: [id], onDelete: Cascade)
+  serviceId          String?
+  service            Service?         @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  productId          String?
+  product            Product?         @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([loyaltyProgrammeId])
 }
@@ -1194,23 +1222,23 @@ enum LoyaltyTransactionType {
 }
 
 model LoyaltyTransaction {
-  id                    String                  @id @default(cuid())
-  tenantId              String
-  tenant                Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customerProfileId     String
-  customerProfile       CustomerProfile         @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  id                String          @id @default(cuid())
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId String
+  customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
 
-  type                  LoyaltyTransactionType
-  points                Int
-  balanceAfter          Int
-  reason                String?
-  relatedOrderId        String?
-  relatedRewardId       String?
+  type                      LoyaltyTransactionType
+  points                    Int
+  balanceAfter              Int
+  reason                    String?
+  relatedOrderId            String?
+  relatedRewardId           String?
   performedByStaffProfileId String?
-  performedByStaffProfile StaffProfile?         @relation(fields: [performedByStaffProfileId], references: [id], onDelete: SetNull)
-  expiresAt             DateTime?
+  performedByStaffProfile   StaffProfile?          @relation(fields: [performedByStaffProfileId], references: [id], onDelete: SetNull)
+  expiresAt                 DateTime?
 
-  createdAt             DateTime                @default(now())
+  createdAt DateTime @default(now())
 
   @@index([tenantId, customerProfileId])
 }
@@ -1224,21 +1252,21 @@ enum AccountCreditTransactionType {
 }
 
 model AccountCreditTransaction {
-  id                    String                        @id @default(cuid())
-  tenantId              String
-  tenant                Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customerProfileId     String
-  customerProfile       CustomerProfile               @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  id                String          @id @default(cuid())
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId String
+  customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
 
-  type                  AccountCreditTransactionType
-  amountCents           Int
-  balanceAfterCents     Int
-  reason                String?
-  relatedOrderId        String?
+  type                      AccountCreditTransactionType
+  amountCents               Int
+  balanceAfterCents         Int
+  reason                    String?
+  relatedOrderId            String?
   performedByStaffProfileId String?
-  performedByStaffProfile StaffProfile?               @relation(fields: [performedByStaffProfileId], references: [id], onDelete: SetNull)
+  performedByStaffProfile   StaffProfile?                @relation(fields: [performedByStaffProfileId], references: [id], onDelete: SetNull)
 
-  createdAt             DateTime                      @default(now())
+  createdAt DateTime @default(now())
 
   @@index([tenantId, customerProfileId])
 }
@@ -1261,9 +1289,9 @@ enum CustomerSegment {
 }
 
 model Promotion {
-  id               String           @id @default(cuid())
-  tenantId         String
-  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   title            String
   description      String?
@@ -1275,10 +1303,10 @@ model Promotion {
   code             String?
   usageLimit       Int?
   perCustomerLimit Int?
-  appOnly          Boolean          @default(false)
-  customerSegment  CustomerSegment  @default(ALL)
+  appOnly          Boolean         @default(false)
+  customerSegment  CustomerSegment @default(ALL)
   segmentTagId     String?
-  active           Boolean          @default(true)
+  active           Boolean         @default(true)
 
   /// Set for a discount meant for one client — from their own profile in
   /// the dashboard, or given automatically on their birthday. Null means
@@ -1286,17 +1314,17 @@ model Promotion {
   customerProfileId String?
   customerProfile   CustomerProfile? @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
   /// Applies itself at checkout, with no code for the client to type.
-  autoApply        Boolean          @default(false)
+  autoApply         Boolean          @default(false)
   /// Only from this basket size up, before tax.
-  minOrderCents    Int?
+  minOrderCents     Int?
 
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  eligibility      PromotionEligibility[]
-  redemptions      PromotionRedemption[]
-  orders           Order[]
-  campaigns        NotificationCampaign[]
+  eligibility PromotionEligibility[]
+  redemptions PromotionRedemption[]
+  orders      Order[]
+  campaigns   NotificationCampaign[]
 
   @@unique([tenantId, code])
   @@index([tenantId, active, startAt, endAt])
@@ -1304,17 +1332,17 @@ model Promotion {
 }
 
 model PromotionEligibility {
-  id               String    @id @default(cuid())
-  promotionId      String
-  promotion        Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
-  serviceId        String?
-  service          Service?  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  productId        String?
-  product          Product?  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  packageId        String?
-  package          Package?  @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  membershipPlanId String?
-  membershipPlan   MembershipPlan? @relation(fields: [membershipPlanId], references: [id], onDelete: Cascade)
+  id                String           @id @default(cuid())
+  promotionId       String
+  promotion         Promotion        @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  serviceId         String?
+  service           Service?         @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  productId         String?
+  product           Product?         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  packageId         String?
+  package           Package?         @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  membershipPlanId  String?
+  membershipPlan    MembershipPlan?  @relation(fields: [membershipPlanId], references: [id], onDelete: Cascade)
   /// A whole category, so a clinic doesn't have to list every product in it.
   productCategoryId String?
   productCategory   ProductCategory? @relation(fields: [productCategoryId], references: [id], onDelete: Cascade)
@@ -1325,15 +1353,15 @@ model PromotionEligibility {
 }
 
 model PromotionRedemption {
-  id                 String          @id @default(cuid())
-  tenantId           String
-  promotionId        String
-  promotion          Promotion       @relation(fields: [promotionId], references: [id], onDelete: Cascade)
-  customerProfileId  String
-  customerProfile    CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
-  orderId            String?
+  id                   String          @id @default(cuid())
+  tenantId             String
+  promotionId          String
+  promotion            Promotion       @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  customerProfileId    String
+  customerProfile      CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  orderId              String?
   discountAppliedCents Int
-  redeemedAt         DateTime        @default(now())
+  redeemedAt           DateTime        @default(now())
 
   @@index([tenantId, promotionId])
   @@index([tenantId, customerProfileId])
@@ -1357,10 +1385,10 @@ model Basket {
   customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
   status            BasketStatus    @default(OPEN)
 
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  items             BasketItem[]
+  items BasketItem[]
 
   @@index([tenantId, customerProfileId, status])
 }
@@ -1373,21 +1401,21 @@ enum CatalogItemType {
 }
 
 model BasketItem {
-  id         String          @id @default(cuid())
-  basketId   String
-  basket     Basket          @relation(fields: [basketId], references: [id], onDelete: Cascade)
-  itemType   CatalogItemType
-  serviceId  String?
-  service    Service?        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  productId  String?
-  product    Product?        @relation(fields: [productId], references: [id], onDelete: Cascade)
-  packageId  String?
-  package    Package?        @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  quantity   Int             @default(1)
+  id             String          @id @default(cuid())
+  basketId       String
+  basket         Basket          @relation(fields: [basketId], references: [id], onDelete: Cascade)
+  itemType       CatalogItemType
+  serviceId      String?
+  service        Service?        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  productId      String?
+  product        Product?        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  packageId      String?
+  package        Package?        @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  quantity       Int             @default(1)
   unitPriceCents Int
 
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([basketId])
 }
@@ -1404,36 +1432,36 @@ enum OrderStatus {
 }
 
 model Order {
-  id                     String          @id @default(cuid())
-  tenantId               String
-  tenant                 Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customerProfileId      String
-  customerProfile        CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  id                String          @id @default(cuid())
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId String
+  customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
 
-  orderNumber            String
-  status                 OrderStatus     @default(PENDING)
-  subtotalCents          Int
-  discountCents          Int             @default(0)
-  taxCents               Int             @default(0)
-  creditAppliedCents     Int             @default(0)
-  loyaltyDiscountCents   Int             @default(0)
-  loyaltyPointsRedeemed  Int             @default(0)
-  totalCents             Int
-  currency               String          @default("EUR")
-  promotionId            String?
-  promotion              Promotion?      @relation(fields: [promotionId], references: [id], onDelete: SetNull)
-  promotionCode          String?
+  orderNumber           String
+  status                OrderStatus @default(PENDING)
+  subtotalCents         Int
+  discountCents         Int         @default(0)
+  taxCents              Int         @default(0)
+  creditAppliedCents    Int         @default(0)
+  loyaltyDiscountCents  Int         @default(0)
+  loyaltyPointsRedeemed Int         @default(0)
+  totalCents            Int
+  currency              String      @default("EUR")
+  promotionId           String?
+  promotion             Promotion?  @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  promotionCode         String?
 
-  placedAt               DateTime        @default(now())
-  paidAt                 DateTime?
+  placedAt DateTime  @default(now())
+  paidAt   DateTime?
 
-  createdAt              DateTime        @default(now())
-  updatedAt               DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  items                  OrderItem[]
-  redeemableItems        RedeemableItem[]
-  payments                Payment[]
-  appointments             Appointment[]
+  items           OrderItem[]
+  redeemableItems RedeemableItem[]
+  payments        Payment[]
+  appointments    Appointment[]
 
   @@unique([tenantId, orderNumber])
   @@index([tenantId, customerProfileId])
@@ -1441,26 +1469,26 @@ model Order {
 }
 
 model OrderItem {
-  id               String           @id @default(cuid())
+  id               String          @id @default(cuid())
   orderId          String
-  order            Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order            Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   itemType         CatalogItemType
   serviceId        String?
-  service          Service?         @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  service          Service?        @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   productId        String?
-  product          Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+  product          Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
   packageId        String?
-  package          Package?         @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  package          Package?        @relation(fields: [packageId], references: [id], onDelete: SetNull)
   membershipPlanId String?
-  membershipPlan   MembershipPlan?  @relation(fields: [membershipPlanId], references: [id], onDelete: SetNull)
+  membershipPlan   MembershipPlan? @relation(fields: [membershipPlanId], references: [id], onDelete: SetNull)
 
-  name             String
-  quantity         Int              @default(1)
-  unitPriceCents   Int
-  totalCents       Int
-  taxCents         Int              @default(0)
+  name           String
+  quantity       Int    @default(1)
+  unitPriceCents Int
+  totalCents     Int
+  taxCents       Int    @default(0)
 
-  redeemableItems  RedeemableItem[]
+  redeemableItems RedeemableItem[]
 
   @@index([orderId])
 }
@@ -1517,41 +1545,41 @@ enum RedeemableStatus {
 /// so a photographed code says nothing about the person holding it. `code` is
 /// the same item in eight characters a receptionist can type.
 model RedeemableItem {
-  id                String            @id @default(cuid())
+  id                String          @id @default(cuid())
   tenantId          String
-  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   customerProfileId String
-  customerProfile   CustomerProfile   @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
   /// Null for an item the clinic gave rather than sold: a gift has no order,
   /// and inventing one would put a sale that never happened in the client's
   /// history and the clinic's figures.
   orderId           String?
-  order             Order?            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order             Order?          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   orderItemId       String?
-  orderItem         OrderItem?        @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  orderItem         OrderItem?      @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
 
-  source            RedeemableSource  @default(PURCHASE)
+  source RedeemableSource @default(PURCHASE)
 
   /// Which unit of that order line this is: 0 and 1 for a quantity of two.
   /// With the unique below, creating the items twice cannot duplicate them.
-  unitIndex         Int
-  itemType          CatalogItemType
+  unitIndex Int
+  itemType  CatalogItemType
   /// The name as it was sold, so a later rename doesn't rewrite history.
-  name              String
+  name      String
 
-  token             String            @unique
-  code              String
-  status            RedeemableStatus  @default(AVAILABLE)
-  expiresAt         DateTime?
+  token     String           @unique
+  code      String
+  status    RedeemableStatus @default(AVAILABLE)
+  expiresAt DateTime?
 
-  redeemedAt        DateTime?
-  redeemedById      String?
-  redeemedBy        User?             @relation("RedeemedBy", fields: [redeemedById], references: [id], onDelete: SetNull)
-  redemptionMethod  RedemptionMethod?
+  redeemedAt       DateTime?
+  redeemedById     String?
+  redeemedBy       User?             @relation("RedeemedBy", fields: [redeemedById], references: [id], onDelete: SetNull)
+  redemptionMethod RedemptionMethod?
   /// Why it was handed over without a code, when staff say.
-  redemptionNote    String?
+  redemptionNote   String?
   /// Refunded after it had already been used — the clinic decides what to do.
-  refundedAfterUse  Boolean           @default(false)
+  refundedAfterUse Boolean           @default(false)
 
   /// Who gave or replaced this item, and why they said they did. Only set
   /// when a staff member issued it rather than a purchase creating it.
@@ -1566,8 +1594,8 @@ model RedeemableItem {
   voidedByStaffProfileId String?
   voidedByStaffProfile   StaffProfile? @relation("VoidedItems", fields: [voidedByStaffProfileId], references: [id], onDelete: SetNull)
 
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([orderItemId, unitIndex])
   @@unique([tenantId, code])
@@ -1578,34 +1606,34 @@ model RedeemableItem {
 }
 
 model Payment {
-  id                    String                @id @default(cuid())
-  tenantId              String
-  tenant                Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  orderId               String?
-  order                 Order?                @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  customerMembershipId  String?
-  customerMembership    CustomerMembership?   @relation(fields: [customerMembershipId], references: [id], onDelete: SetNull)
+  id                   String              @id @default(cuid())
+  tenantId             String
+  tenant               Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderId              String?
+  order                Order?              @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  customerMembershipId String?
+  customerMembership   CustomerMembership? @relation(fields: [customerMembershipId], references: [id], onDelete: SetNull)
 
-  provider              PaymentProviderName   @default(MOCK)
-  providerPaymentId     String?
+  provider            PaymentProviderName @default(MOCK)
+  providerPaymentId   String?
   /// The clinic's connected account the charge was made on. Refunds, reads and
   /// webhook lookups all need it, and it is kept even if the clinic later
   /// disconnects Stripe.
-  stripeAccountId       String?
-  amountCents           Int
+  stripeAccountId     String?
+  amountCents         Int
   /// What the platform took from this charge (application fee). 0 when the
   /// platform takes nothing.
-  applicationFeeCents   Int                   @default(0)
-  currency              String                @default("EUR")
-  status                PaymentStatus         @default(PROCESSING)
-  failureReason         String?
-  method                String?
-  disputedAt            DateTime?
+  applicationFeeCents Int                 @default(0)
+  currency            String              @default("EUR")
+  status              PaymentStatus       @default(PROCESSING)
+  failureReason       String?
+  method              String?
+  disputedAt          DateTime?
 
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  refunds               Refund[]
+  refunds Refund[]
 
   @@index([tenantId, orderId])
   @@index([tenantId, status])
@@ -1619,21 +1647,21 @@ enum RefundStatus {
 }
 
 model Refund {
-  id                    String        @id @default(cuid())
-  tenantId              String
-  tenant                Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  paymentId             String
-  payment               Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  paymentId String
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
-  amountCents           Int
-  reason                String?
-  status                RefundStatus  @default(PENDING)
-  providerRefundId      String?
+  amountCents             Int
+  reason                  String?
+  status                  RefundStatus  @default(PENDING)
+  providerRefundId        String?
   createdByStaffProfileId String?
-  createdByStaffProfile StaffProfile? @relation(fields: [createdByStaffProfileId], references: [id], onDelete: SetNull)
+  createdByStaffProfile   StaffProfile? @relation(fields: [createdByStaffProfileId], references: [id], onDelete: SetNull)
 
-  createdAt             DateTime      @default(now())
-  updatedAt              DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([tenantId, paymentId])
 }
@@ -1657,33 +1685,33 @@ enum CancelledBy {
 }
 
 model Appointment {
-  id                 String             @id @default(cuid())
-  tenantId           String
-  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customerProfileId  String
-  customerProfile    CustomerProfile    @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
-  serviceId          String
-  service            Service            @relation(fields: [serviceId], references: [id], onDelete: NoAction)
-  staffProfileId     String
-  staffProfile       StaffProfile       @relation(fields: [staffProfileId], references: [id], onDelete: NoAction)
-  locationId         String
-  location           Location           @relation(fields: [locationId], references: [id], onDelete: NoAction)
-  customerPackageId  String?
-  customerPackage    CustomerPackage?   @relation(fields: [customerPackageId], references: [id], onDelete: SetNull)
-  orderId            String?
-  order              Order?             @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  id                String           @id @default(cuid())
+  tenantId          String
+  tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId String
+  customerProfile   CustomerProfile  @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  serviceId         String
+  service           Service          @relation(fields: [serviceId], references: [id], onDelete: NoAction)
+  staffProfileId    String
+  staffProfile      StaffProfile     @relation(fields: [staffProfileId], references: [id], onDelete: NoAction)
+  locationId        String
+  location          Location         @relation(fields: [locationId], references: [id], onDelete: NoAction)
+  customerPackageId String?
+  customerPackage   CustomerPackage? @relation(fields: [customerPackageId], references: [id], onDelete: SetNull)
+  orderId           String?
+  order             Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   startAt            DateTime
-  endAt               DateTime
-  status              AppointmentStatus @default(REQUESTED)
-  notes               String?
-  cancellationReason  String?
-  cancelledAt         DateTime?
-  cancelledBy         CancelledBy?
-  reminderSentAt      DateTime?
+  endAt              DateTime
+  status             AppointmentStatus @default(REQUESTED)
+  notes              String?
+  cancellationReason String?
+  cancelledAt        DateTime?
+  cancelledBy        CancelledBy?
+  reminderSentAt     DateTime?
 
-  createdAt           DateTime          @default(now())
-  updatedAt            DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([tenantId, staffProfileId, startAt])
   @@index([tenantId, customerProfileId])
@@ -1709,24 +1737,24 @@ enum ConversationStatus {
 }
 
 model Conversation {
-  id                    String              @id @default(cuid())
-  tenantId              String
-  tenant                Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customerProfileId     String
-  customerProfile       CustomerProfile     @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  id                     String          @id @default(cuid())
+  tenantId               String
+  tenant                 Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId      String
+  customerProfile        CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
   assignedStaffProfileId String?
-  assignedStaffProfile  StaffProfile?       @relation(fields: [assignedStaffProfileId], references: [id], onDelete: SetNull)
+  assignedStaffProfile   StaffProfile?   @relation(fields: [assignedStaffProfileId], references: [id], onDelete: SetNull)
 
-  channel               MessageChannel      @default(IN_APP)
-  status                ConversationStatus  @default(OPEN)
-  lastMessageAt         DateTime            @default(now())
-  unreadForStaff        Boolean             @default(false)
-  unreadForCustomer     Boolean             @default(false)
+  channel           MessageChannel     @default(IN_APP)
+  status            ConversationStatus @default(OPEN)
+  lastMessageAt     DateTime           @default(now())
+  unreadForStaff    Boolean            @default(false)
+  unreadForCustomer Boolean            @default(false)
 
-  createdAt             DateTime            @default(now())
-  updatedAt              DateTime           @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  messages               Message[]
+  messages Message[]
 
   @@index([tenantId, status])
   @@index([tenantId, customerProfileId])
@@ -1739,20 +1767,20 @@ enum MessageSenderType {
 }
 
 model Message {
-  id                    String            @id @default(cuid())
-  tenantId              String
-  tenant                Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversationId        String
-  conversation          Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  senderType            MessageSenderType
-  senderStaffProfileId  String?
-  senderStaffProfile    StaffProfile?     @relation(fields: [senderStaffProfileId], references: [id], onDelete: SetNull)
+  id                   String            @id @default(cuid())
+  tenantId             String
+  tenant               Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversationId       String
+  conversation         Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderType           MessageSenderType
+  senderStaffProfileId String?
+  senderStaffProfile   StaffProfile?     @relation(fields: [senderStaffProfileId], references: [id], onDelete: SetNull)
 
-  body                  String
-  isInternalNote        Boolean           @default(false)
-  attachmentUrl         String?
+  body           String
+  isInternalNote Boolean @default(false)
+  attachmentUrl  String?
 
-  createdAt             DateTime          @default(now())
+  createdAt DateTime @default(now())
 
   @@index([tenantId, conversationId])
 }
@@ -1770,21 +1798,21 @@ enum NotificationType {
 }
 
 model Notification {
-  id                 String            @id @default(cuid())
-  tenantId           String
-  tenant             Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customerProfileId  String
-  customerProfile    CustomerProfile   @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  id                String          @id @default(cuid())
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId String
+  customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
 
-  title              String
-  body               String
-  type               NotificationType
-  linkUrl            String?
-  campaignId         String?
-  campaign           NotificationCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
-  readAt             DateTime?
+  title      String
+  body       String
+  type       NotificationType
+  linkUrl    String?
+  campaignId String?
+  campaign   NotificationCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  readAt     DateTime?
 
-  createdAt          DateTime          @default(now())
+  createdAt DateTime @default(now())
 
   @@index([tenantId, customerProfileId, readAt])
 }
@@ -1805,57 +1833,57 @@ enum NotificationCampaignStatus {
 }
 
 model NotificationCampaign {
-  id                    String                      @id @default(cuid())
-  tenantId              String
-  tenant                Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  name                  String
-  channel               NotificationChannel
-  segment               CustomerSegment             @default(ALL)
-  segmentTagId          String?
-  subject               String?
-  body                  String
-  imageUrl              String?
-  scheduledAt           DateTime?
-  sentAt                DateTime?
-  status                NotificationCampaignStatus  @default(DRAFT)
+  name         String
+  channel      NotificationChannel
+  segment      CustomerSegment            @default(ALL)
+  segmentTagId String?
+  subject      String?
+  body         String
+  imageUrl     String?
+  scheduledAt  DateTime?
+  sentAt       DateTime?
+  status       NotificationCampaignStatus @default(DRAFT)
 
   /// The discount this is announcing, if any: the notification opens it.
-  promotionId           String?
-  promotion             Promotion?                  @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  promotionId             String?
+  promotion               Promotion?       @relation(fields: [promotionId], references: [id], onDelete: SetNull)
   /// A product to open instead of the shop.
-  productId             String?
-  product               Product?                    @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productId               String?
+  product                 Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
   /// Set when this is for one client rather than everyone.
-  customerProfileId     String?
-  customerProfile       CustomerProfile?            @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  customerProfileId       String?
+  customerProfile         CustomerProfile? @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
   /// Marketing obeys consent, quiet hours and the daily cap; a service
   /// message (an order, a redemption) does not.
-  marketing             Boolean                     @default(true)
+  marketing               Boolean          @default(true)
   /// Set for the one message a clinic decides is worth reaching clients who
   /// have already heard from them today. Consent and the sending hours still
   /// apply — this only lifts the daily limit.
-  ignoreDailyLimit      Boolean                     @default(false)
+  ignoreDailyLimit        Boolean          @default(false)
   /// Devices the push service accepted this for.
-  devicesReached        Int                         @default(0)
+  devicesReached          Int              @default(0)
   /// Why the rest were left out, counted per reason. A clinic looking at
   /// "0 devices" should be able to see whether nobody wanted offers, or
   /// everybody had already heard from them today.
-  skippedNoConsent      Int                         @default(0)
-  skippedDailyCap       Int                         @default(0)
-  skippedOutsideHours   Int                         @default(0)
-  skippedNoDevices      Int                         @default(0)
+  skippedNoConsent        Int              @default(0)
+  skippedDailyCap         Int              @default(0)
+  skippedOutsideHours     Int              @default(0)
+  skippedNoDevices        Int              @default(0)
   /// One line for anything that isn't a per-client skip: held for the hours,
   /// or cancelled because the offer was over by the time it ran.
-  outcomeNote           String?
+  outcomeNote             String?
   createdByStaffProfileId String?
-  createdByStaffProfile StaffProfile?               @relation(fields: [createdByStaffProfileId], references: [id], onDelete: SetNull)
+  createdByStaffProfile   StaffProfile?    @relation(fields: [createdByStaffProfileId], references: [id], onDelete: SetNull)
 
-  createdAt             DateTime                    @default(now())
-  updatedAt              DateTime                   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  notifications          Notification[]
-  deliveries              NotificationDelivery[]
+  notifications Notification[]
+  deliveries    NotificationDelivery[]
 
   @@index([tenantId, status])
   @@index([status, scheduledAt])
@@ -1889,23 +1917,23 @@ model BirthdayGreeting {
 }
 
 model NotificationDelivery {
-  id                 String                      @id @default(cuid())
-  tenantId           String
-  tenant             Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  campaignId         String?
-  campaign           NotificationCampaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull)
-  customerProfileId  String
-  customerProfile    CustomerProfile             @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  id                String                @id @default(cuid())
+  tenantId          String
+  tenant            Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaignId        String?
+  campaign          NotificationCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  customerProfileId String
+  customerProfile   CustomerProfile       @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
 
-  channel            NotificationChannel
-  status             NotificationDeliveryStatus  @default(QUEUED)
-  providerMessageId  String?
-  error              String?
-  sentAt             DateTime?
-  deliveredAt        DateTime?
-  openedAt           DateTime?
+  channel           NotificationChannel
+  status            NotificationDeliveryStatus @default(QUEUED)
+  providerMessageId String?
+  error             String?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  openedAt          DateTime?
 
-  createdAt          DateTime                    @default(now())
+  createdAt DateTime @default(now())
 
   @@index([tenantId, campaignId])
   @@index([tenantId, customerProfileId])
@@ -1929,13 +1957,13 @@ model AuditLog {
   actorUser   User?          @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
   actorType   AuditActorType
 
-  action      String
-  entityType  String
-  entityId    String?
-  metadata    Json?
-  reason      String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  reason     String?
 
-  createdAt   DateTime       @default(now())
+  createdAt DateTime @default(now())
 
   @@index([tenantId, entityType, entityId])
   @@index([tenantId, createdAt])
@@ -1948,14 +1976,14 @@ model AuditLog {
 /// One agency-admin "viewing as merchant" session. Open sessions have a null
 /// endedAt. Kept separate from AuditLog so sessions have a real duration.
 model ImpersonationSession {
-  id          String    @id @default(cuid())
+  id          String @id @default(cuid())
   actorUserId String
-  actorUser   User      @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+  actorUser   User   @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
   merchantId  String
-  merchant    Tenant    @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  merchant    Tenant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
-  startedAt   DateTime  @default(now())
-  endedAt     DateTime?
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
 
   @@index([actorUserId])
   @@index([merchantId, startedAt])
@@ -1969,22 +1997,22 @@ model ImpersonationSession {
 /// the agency can edit its own white-label settings at /agency/white-label.
 /// Distinct from TenantBranding, which is a *merchant's* own app branding.
 model AgencySettings {
-  id            String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  name          String   @default("DezaAI")
-  logoLightUrl  String?
-  logoDarkUrl   String?
-  faviconUrl    String?
-  primaryColor  String   @default("#2DD4D9")
+  name         String  @default("DezaAI")
+  logoLightUrl String?
+  logoDarkUrl  String?
+  faviconUrl   String?
+  primaryColor String  @default("#2DD4D9")
 
-  customDomain  String?
-  supportLabel  String?
-  supportUrl    String?
-  senderName    String?
-  loginBgUrl    String?
+  customDomain String?
+  supportLabel String?
+  supportUrl   String?
+  senderName   String?
+  loginBgUrl   String?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 /// Every Stripe event we have already acted on. Stripe retries events and can

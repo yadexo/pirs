@@ -103,46 +103,6 @@ export async function getClientSummary(db: TenantDb, customerProfileId: string):
   };
 }
 
-export interface HomeData {
-  payLaterEnabled: boolean;
-  offers: { id: string; title: string; description: string | null; endsAt: string; imageUrl: string | null; code: string | null }[];
-  locations: { id: string; name: string; address: string; phone: string | null }[];
-  hasPlans: boolean;
-}
-
-export async function getHomeData(db: TenantDb): Promise<HomeData> {
-  const now = new Date();
-  const [settings, offers, locations, plan] = await Promise.all([
-    db.tenantSettings.findFirst({ where: {} }),
-    db.promotion.findMany({
-      where: { active: true, startAt: { lte: now }, endAt: { gte: now } },
-      orderBy: { endAt: "asc" },
-      take: 8,
-    }),
-    db.location.findMany({ where: { active: true }, orderBy: { isPrimary: "desc" } }),
-    db.membershipPlan.findFirst({ where: { active: true }, orderBy: { priceCents: "asc" }, select: { name: true } }),
-  ]);
-
-  return {
-    payLaterEnabled: settings?.payLaterEnabled ?? false,
-    offers: offers.map((o) => ({
-      id: o.id,
-      title: o.title,
-      description: o.description,
-      endsAt: o.endAt.toISOString(),
-      imageUrl: o.imageUrl,
-      code: o.code,
-    })),
-    locations: locations.map((l) => ({
-      id: l.id,
-      name: l.name,
-      address: [l.addressLine1, l.city, l.postalCode].filter(Boolean).join(", "),
-      phone: l.phone,
-    })),
-    hasPlans: !!plan,
-  };
-}
-
 export interface RewardsData {
   rewards: { id: string; name: string; description: string | null; pointsCost: number }[];
   /** `url` is where a row sends the client (e.g. the clinic's Google review page). */

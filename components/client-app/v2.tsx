@@ -118,11 +118,6 @@ export function Radio({ checked, onChange, label }: { checked: boolean; onChange
   );
 }
 
-/**
- * Inactive segments are `text-2`, not the `text-3` the handoff names: on the
- * surface-3 track text-3 measures 4.29:1, below AA, and this app takes a
- * client's zoom away. See docs/design/handoff-gaps.md.
- */
 export function SegmentedControl<T extends string>({
   options,
   value,
@@ -209,6 +204,7 @@ export function ProductCard({
   tags,
   shape = "grid",
   onAdd,
+  onOpen,
   children,
   ...price
 }: {
@@ -220,29 +216,56 @@ export function ProductCard({
   tags?: React.ReactNode;
   shape?: "grid" | "row";
   onAdd?: () => void;
+  /** Opens the detail sheet. */
+  onOpen?: () => void;
   children?: React.ReactNode;
 } & React.ComponentProps<typeof PriceBlock>) {
+  const photo = (
+    <>
+      {imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={imageUrl} alt="" loading="lazy" />
+      ) : (
+        // Never stock imagery: a clinic without a photo gets its own colour
+        // and the first letter, which at least says which product this is.
+        <span className="ph" aria-hidden="true">
+          {name.charAt(0).toUpperCase()}
+        </span>
+      )}
+    </>
+  );
+
+  /**
+   * The photo and the name open the item; the + adds it. They are siblings
+   * rather than nested, because a button inside a button is invalid markup and
+   * browsers disagree about which one a tap belongs to.
+   */
   return (
     <article className={cn("v2-card", shape === "row" && "row")}>
       <div className="photo">
-        {imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={imageUrl} alt="" />
+        {onOpen ? (
+          <button type="button" className="open" onClick={onOpen} aria-label={name}>
+            {photo}
+          </button>
         ) : (
-          // Never stock imagery: a clinic without a photo gets its own colour
-          // and the first letter, which at least says which product this is.
-          <span className="ph" aria-hidden="true">
-            {name.charAt(0).toUpperCase()}
-          </span>
+          photo
         )}
         {tags && <div className="tags">{tags}</div>}
+        {/* The + sits on the photo's corner, as the boards draw it — on a
+            160-wide card there is no room for it beside the price. */}
+        {onAdd && <AddButton label={`Add ${name}`} onClick={onAdd} />}
       </div>
       <div className="body">
-        <h3>{name}</h3>
+        {onOpen ? (
+          <button type="button" className="title" onClick={onOpen}>
+            <h3>{name}</h3>
+          </button>
+        ) : (
+          <h3>{name}</h3>
+        )}
         {meta && <p className="meta">{meta}</p>}
         <div className="foot">
           <PriceBlock {...price} />
-          {onAdd && <AddButton label={`Add ${name}`} onClick={onAdd} />}
         </div>
         {children}
       </div>

@@ -18,7 +18,7 @@ import {
 } from "@/lib/actions/client-app";
 import type { ClientSummary } from "@/lib/client-app-data";
 import { BookingSheet } from "../shop/booking-sheet";
-import type { ShopService } from "../shop/shop-view";
+import type { BookableService } from "../shop/booking-sheet";
 
 export interface ApptRow {
   id: string;
@@ -574,13 +574,9 @@ export function ProfileView({
             ? ({
                 id: reschedule.appt.serviceId,
                 name: reschedule.appt.serviceName,
-                description: null,
                 priceCents: 0,
                 durationMinutes: reschedule.appt.durationMinutes,
-                images: [],
-                bookable: true,
-                categoryName: "",
-              } satisfies ShopService)
+              } satisfies BookableService)
             : null
         }
         onClose={() => setReschedule(null)}

@@ -4,7 +4,13 @@ import * as React from "react";
 import { Sheet, useToast } from "@/components/client-app/ui";
 import { getBookingOptionsForServiceAction, getClientSlotsAction, clientBookAction, clientOrderStatusAction, clientAbandonOrderAction } from "@/lib/actions/client-app";
 import { CardPayment, type PaymentHandoff } from "../card-payment";
-import type { ShopService } from "./shop-view";
+/** All this sheet needs of a treatment; the shop's cards carry much more. */
+export interface BookableService {
+  id: string;
+  name: string;
+  priceCents: number;
+  durationMinutes: number;
+}
 
 interface Options {
   durationMinutes: number;
@@ -28,7 +34,7 @@ export function BookingSheet({
   merchantSlug: string;
   /** For showing a deposit amount in the clinic's own currency. */
   currency: string;
-  service: ShopService | null;
+  service: BookableService | null;
   /** Set when rescheduling an existing appointment. */
   appointmentId?: string;
   onClose: () => void;

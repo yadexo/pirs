@@ -18,6 +18,7 @@ import type { TenantDb } from "@/lib/tenant-db";
 import { isPromotionUsed, NO_USAGE, type PromotionUsage } from "@/lib/promotion-usage";
 import { rolloutPlanPrice, type RolloutResult } from "@/lib/membership-price-rollout";
 import { pricingOptionsSchema, toStoredPricingOptions, EMPTY_PRICING } from "@/lib/pricing-options";
+import { recordPrice } from "@/lib/price-history";
 import { sendCampaignNow } from "@/lib/campaign-send";
 import { marketingAudience, marketingWindowFor } from "@/lib/marketing";
 import { instantFromLocal, isWithinWindow, nextSendableTime } from "@/lib/marketing-window";
@@ -424,6 +425,9 @@ export async function saveServiceAction(merchantId: string, id: string | null, f
       savedId = (await ctx.db.service.create({ data: values as never })).id;
     }
     await saveTagsAndResults(ctx.db, "service", savedId, shared);
+    // Keep the price trail: a struck-through "was" has to be the lowest price
+    // of the last 30 days, and that is only knowable from a record of changes.
+    await recordPrice(ctx.db, { tenantId: ctx.merchantId, kind: "SERVICE", id: savedId, priceCents: values.priceCents });
     await ctx.audit(id ? "service.updated" : "service.created", "Service", savedId, { name: data.name });
     await revalidateMerchant(merchantId);
     return { id: savedId };
@@ -519,6 +523,7 @@ export async function saveProductAction(merchantId: string, id: string | null, f
       rethrowUnique(err, "sku", "Another product already uses this SKU");
     }
     await saveTagsAndResults(ctx.db, "product", savedId, shared);
+    await recordPrice(ctx.db, { tenantId: ctx.merchantId, kind: "PRODUCT", id: savedId, priceCents: fields.priceCents });
     await ctx.audit(id ? "product.updated" : "product.created", "Product", savedId, { name: data.name });
     await revalidateMerchant(merchantId);
     return { id: savedId };
