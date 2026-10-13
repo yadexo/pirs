@@ -4,6 +4,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
 import { qrSvgPath } from "@/lib/qr";
+import { formatNumber } from "@/lib/client-format";
 
 /* ------------------------------------------------------------------ icons */
 
@@ -18,6 +19,7 @@ export const PATHS: Record<string, string> = {
   user: '<circle cx="12" cy="7.2" r="3.4"/><path d="M5 20c.9-3.7 3.5-5.6 7-5.6s6.1 1.9 7 5.6"/>',
   search: '<circle cx="11" cy="11" r="6.3"/><path d="m15.8 15.8 4.7 4.7"/>',
   chevR: '<path d="m9.5 6 6 6-6 6"/>',
+  chevL: '<path d="m14.5 6-6 6 6 6"/>',
   chevD: '<path d="m6 9.5 6 6 6-6"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   minus: '<path d="M5 12h14"/>',
@@ -162,6 +164,7 @@ export function QrCode({ value, label = "QR code" }: { value: string; label?: st
 export function Sheet({
   open,
   onClose,
+  onBack,
   title,
   full,
   children,
@@ -169,6 +172,8 @@ export function Sheet({
 }: {
   open: boolean;
   onClose: () => void;
+  /** Shown as a back arrow beside the title — a sheet with steps in it. */
+  onBack?: () => void;
   title?: string;
   full?: boolean;
   children?: React.ReactNode;
@@ -223,7 +228,20 @@ export function Sheet({
           }}
         />
         <div className="sheet-body">
-          {title && <div className="sheet-title">{title}</div>}
+          {/* Back, title, close — the row the handoff puts on every sheet. */}
+          {(title || onBack) && (
+            <div className="sheet-head">
+              {onBack && (
+                <button type="button" className="nav" aria-label="Back" onClick={onBack}>
+                  <Icon name="chevL" size={24} />
+                </button>
+              )}
+              {title && <div className="sheet-title">{title}</div>}
+              <button type="button" className="nav close" aria-label="Close" onClick={onClose}>
+                <Icon name="close" size={22} />
+              </button>
+            </div>
+          )}
           {children}
           {cta && <div className="sticky-cta">{cta}</div>}
         </div>
@@ -339,5 +357,7 @@ export function CountUp({ to, className }: { to: number; className?: string }) {
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
   }, [to]);
-  return <span className={cn("tabular", className)}>{n.toLocaleString()}</span>;
+  // Pinned: a phone set to Dutch would write "1.234" where the server wrote
+  // "1,234", and React would throw the hydrated tree away. See client-format.
+  return <span className={cn("tabular", className)}>{formatNumber(n)}</span>;
 }

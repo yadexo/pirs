@@ -33,6 +33,24 @@ Decided: one word, **Credit**, in the client app and the clinic portal — not
 "Patient App Cash" and not "account credit". The handoff uses "Patient App
 Cash" throughout. The copy change lands in the screen stages, not here.
 
+## Promo code at checkout
+
+The handoff's checkout has an "Add a promo code" row. The app has promo codes
+(`lib/promo-codes.ts`) but no client-facing action to apply one: `clientCheckoutAction`
+takes a loyalty reward and nothing else. The slot is filled with "Use a reward",
+which is the thing a client can actually do today. Wiring a code through
+checkout is a payment-logic change and belongs in its own piece of work.
+
+## Prices that include VAT, and prices that do not
+
+The handoff assumes VAT-inclusive prices throughout ("Total incl. VAT", "All
+prices include VAT"). The app also supports adding tax on top, per clinic, via
+`TenantSettings.taxRateBasisPoints` — the seed clinic uses 7.25%. The cart now
+adds that tax the same way `clientCheckoutAction` does, so the figure under
+"Total incl. VAT" is the figure charged either way. Worth deciding whether a
+tax-on-top clinic should see a different label; "incl. VAT" is at least true
+for both.
+
 ## Member points multiplier
 
 The handoff shows a points multiplier on the membership card. The app has no

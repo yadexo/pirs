@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useBasePath } from "./base-path";
 import { Sheet, Stepper, EmptyState, Icon, money, useToast } from "@/components/client-app/ui";
+import { Button, Switch, Tag } from "@/components/client-app/v2";
 import {
   clientSetCartQtyAction,
   clientCheckoutAction,
@@ -16,6 +17,16 @@ import { cartTotals } from "@/lib/cart-totals";
 import { CardPayment, type PaymentHandoff } from "./card-payment";
 import { PaymentResult } from "./payment-result";
 
+/**
+ * The buy flow: cart, checkout, payment, result — one sheet, four stages, so a
+ * client can step back without losing what they chose.
+ *
+ * Nothing here decides a price. The lines, the discount and the credit are all
+ * read back from the server, and clientCheckoutAction works the same sums out
+ * again from the database when it charges. What this screen shows is a
+ * statement of what the server will do, not an instruction to it.
+ */
+
 interface Reward {
   id: string;
   name: string;
@@ -26,14 +37,30 @@ interface Reward {
 
 type Stage = "cart" | "pay" | "card" | "done";
 
+const TITLES: Record<Stage, string> = { cart: "Your cart", pay: "Checkout", card: "Payment", done: "" };
+
 export function CartSheet({
   merchantSlug,
+  merchantName,
   currency,
+  pointsPerCents,
+  taxRateBasisPoints,
+  clientName,
+  clientEmail,
+  clientPhone,
   open,
   onClose,
 }: {
   merchantSlug: string;
+  merchantName: string;
   currency: string;
+  /** Same rate checkout uses: points = floor(amount in cents × rate). */
+  pointsPerCents: number;
+  /** Zero for a clinic whose prices already include VAT. See cart-totals.ts. */
+  taxRateBasisPoints: number;
+  clientName: string;
+  clientEmail: string | null;
+  clientPhone: string | null;
   open: boolean;
   onClose: () => void;
 }) {
@@ -46,7 +73,6 @@ export function CartSheet({
   const [rewards, setRewards] = React.useState<Reward[]>([]);
   const [rewardId, setRewardId] = React.useState<string | null>(null);
   const [pickingReward, setPickingReward] = React.useState(false);
-  const [method, setMethod] = React.useState<"card" | "later">("card");
   /** The client's spendable credit, and whether this order should use it. */
   const [credit, setCredit] = React.useState(0);
   const [useCredit, setUseCredit] = React.useState(true);
@@ -55,7 +81,7 @@ export function CartSheet({
   const [memberNote, setMemberNote] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [result, setResult] = React.useState<{ orderNumber: string; pointsEarned: number } | null>(null);
+  const [result, setResult] = React.useState<{ orderNumber: string } | null>(null);
   /** Set when the clinic takes real cards: the client confirms in the Payment Element. */
   const [handoff, setHandoff] = React.useState<{ payment: PaymentHandoff; orderNumber: string; totalCents: number } | null>(null);
 
@@ -107,7 +133,9 @@ export function CartSheet({
     autoDiscountCents: autoDiscount?.discountCents ?? 0,
     creditAvailableCents: credit,
     useCredit,
+    taxRateBasisPoints,
   });
+  const pointsToEarn = Math.floor(total * pointsPerCents);
 
   async function setQty(id: string, qty: number) {
     const res = await clientSetCartQtyAction(merchantSlug, id, qty);
@@ -131,7 +159,7 @@ export function CartSheet({
       setStage("card");
       return;
     }
-    setResult({ orderNumber: res.orderNumber, pointsEarned: res.pointsEarned });
+    setResult({ orderNumber: res.orderNumber });
     setStage("done");
     await refresh();
     router.refresh();
@@ -145,7 +173,7 @@ export function CartSheet({
    */
   async function afterCardPayment() {
     if (!handoff) return;
-    setResult({ orderNumber: handoff.orderNumber, pointsEarned: 0 });
+    setResult({ orderNumber: handoff.orderNumber });
     setStage("done");
     setHandoff(null);
     await refresh();
@@ -159,41 +187,45 @@ export function CartSheet({
     await refresh();
   }
 
-  const title = stage === "done" ? "Order confirmed" : stage === "card" ? "Payment" : stage === "pay" ? "Checkout" : "Your cart";
+  /*
+   * The final button always says what it costs: "Pay €132.50", never "Place
+   * order", which would hide the one number the client is agreeing to. When
+   * credit covers the whole order there is no payment to make, so it says
+   * "Confirm order" and no amount is quoted.
+   */
+  const footer =
+    stage === "done" ? undefined : stage === "card" ? undefined : items.length === 0 ? undefined : stage === "pay" ? (
+      <Button amount={settledByCreditAlone ? undefined : total} currency={currency} loading={pending} onClick={pay}>
+        {settledByCreditAlone ? "Confirm order" : "Pay"}
+      </Button>
+    ) : (
+      <Button amount={total} currency={currency} onClick={() => setStage("pay")}>
+        Checkout
+      </Button>
+    );
 
   return (
     <Sheet
       open={open}
       onClose={onClose}
-      title={title}
-      cta={
-        stage === "done" ? (
-          <button className="btn-black" onClick={onClose}>
-            Done
-          </button>
-        ) : stage === "card" ? undefined : items.length === 0 ? undefined : stage === "pay" ? (
-          <button className="btn-black" disabled={pending} onClick={pay}>
-            {pending ? "Processing…" : total === 0 ? "Place order" : `Pay ${money(total, currency)}`}
-          </button>
-        ) : (
-          <button className="btn-black" onClick={() => setStage("pay")}>
-            Checkout · {money(total, currency)}
-          </button>
-        )
-      }
+      title={TITLES[stage] || undefined}
+      onBack={stage === "pay" ? () => setStage("cart") : undefined}
+      cta={footer}
     >
       {stage === "card" && handoff ? (
         <CardPayment
-            payment={handoff.payment}
-            orderNumber={handoff.orderNumber}
-            amountCents={handoff.totalCents}
-            currency={currency}
+          payment={handoff.payment}
+          orderNumber={handoff.orderNumber}
+          amountCents={handoff.totalCents}
+          currency={currency}
           onPaid={afterCardPayment}
           onCancel={cancelCardPayment}
         />
       ) : stage === "done" && result ? (
         <PaymentResult
           merchantSlug={merchantSlug}
+          merchantName={merchantName}
+          currency={currency}
           orderNumber={result.orderNumber}
           bare
           onClose={onClose}
@@ -209,166 +241,172 @@ export function CartSheet({
           text="Your cart is empty"
           sub="Add something from the shop to get started."
           cta={
-            <button
-              className="btn-black"
+            <Button
               onClick={() => {
                 onClose();
                 router.push(`${base}/shop`);
               }}
             >
               Browse the shop
-            </button>
+            </Button>
           }
         />
       ) : (
-        <>
-          {items.map((l) => (
-            <CartRow key={l.id} line={l} currency={currency} editable={stage === "cart"} onQty={setQty} />
-          ))}
-
-          <div className="optrow">
-            <span>Subtotal</span>
-            <span style={{ flex: 1 }} />
-            <b className="tabular">{money(subtotal, currency)}</b>
-          </div>
-
-          {reward ? (
-            <div className="optrow">
-              <span>{reward.name}</span>
-              <span style={{ flex: 1 }} />
-              <b className="tabular">−{money(discount, currency)}</b>
-              <button aria-label="Remove reward" onClick={() => setRewardId(null)} style={{ color: "var(--muted)" }}>
-                <Icon name="close" size={16} />
-              </button>
-            </div>
-          ) : (
-            stage === "cart" &&
-            rewards.length > 0 && (
-              <button className="optrow" onClick={() => setPickingReward(true)}>
-                <span>Apply reward</span>
-                <span style={{ flex: 1 }} />
-                <Icon name="chevR" size={18} />
-              </button>
-            )
-          )}
-
-          {autoDiscount && (
-            <div className="optrow">
-              <span>{autoDiscount.title}</span>
-              <span style={{ flex: 1 }} />
-              <b className="tabular">−{money(autoDiscount.discountCents, currency)}</b>
-            </div>
-          )}
-
-          {credit > 0 && (
-            <div className="optrow">
-              <span>{creditUsed > 0 ? "Account credit" : `Account credit (${money(credit, currency)} available)`}</span>
-              <span style={{ flex: 1 }} />
-              {creditUsed > 0 ? (
-                <>
-                  <b className="tabular">−{money(creditUsed, currency)}</b>
-                  <button aria-label="Don't use my credit" onClick={() => setUseCredit(false)} style={{ color: "var(--muted)" }}>
-                    <Icon name="close" size={16} />
-                  </button>
-                </>
-              ) : (
-                <button className="press" style={{ fontSize: 14 }} onClick={() => setUseCredit(true)}>
-                  Use it
+        <div className="v2-buy">
+          {stage === "pay" && (
+            <>
+              <h3 className="grouphead">Your details</h3>
+              <div className="v2-details">
+                <div>
+                  <b>{clientName}</b>
+                  <span>{[clientEmail, clientPhone].filter(Boolean).join(" · ")}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    router.push(`${base}/profile?tab=settings`);
+                  }}
+                >
+                  Edit
                 </button>
+              </div>
+
+              <div className="v2-options">
+                {credit > 0 && (
+                  <div className="row">
+                    <span className="ic" aria-hidden="true">
+                      <Icon name="tag" size={20} />
+                    </span>
+                    <span className="txt">
+                      <b>Use Credit</b>
+                      <span>{money(credit, currency)} available</span>
+                    </span>
+                    <Switch checked={useCredit} onChange={setUseCredit} label="Use Credit on this order" />
+                  </div>
+                )}
+                {rewards.length > 0 && (
+                  <button type="button" className="row" onClick={() => setPickingReward(true)}>
+                    <span className="ic" aria-hidden="true">
+                      <Icon name="gift" size={20} />
+                    </span>
+                    <span className="txt">
+                      <b>{reward ? reward.name : "Use a reward"}</b>
+                      {reward && <span>−{money(discount, currency)}</span>}
+                    </span>
+                    <Icon name="chevR" size={20} />
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+
+          {stage === "cart" &&
+            items.map((l) => <CartRow key={l.id} line={l} currency={currency} onQty={setQty} />)}
+
+          {stage === "pay" && (
+            <div className="v2-lines">
+              {items.map((l) => (
+                <div className="line" key={l.id}>
+                  <span>
+                    {l.name}
+                    {l.quantity > 1 ? ` × ${l.quantity}` : ""}
+                  </span>
+                  <b className="tabular">{money(l.unitPriceCents * l.quantity, currency)}</b>
+                </div>
+              ))}
+              {autoDiscount && (
+                <div className="line off">
+                  <span>{autoDiscount.title}</span>
+                  <b className="tabular">−{money(autoDiscount.discountCents, currency)}</b>
+                </div>
+              )}
+              {reward && (
+                <div className="line off">
+                  <span>{reward.name}</span>
+                  <b className="tabular">−{money(discount, currency)}</b>
+                </div>
+              )}
+              {creditUsed > 0 && (
+                <div className="line off">
+                  <span>Credit</span>
+                  <b className="tabular">−{money(creditUsed, currency)}</b>
+                </div>
               )}
             </div>
           )}
 
-          {memberNote && (
-            <p style={{ fontSize: 14, color: "var(--muted)", padding: "0 2px" }}>{memberNote}</p>
+          {stage === "cart" && autoDiscount && (
+            <div className="v2-saving">
+              <Tag kind="soft">{autoDiscount.source === "MEMBERSHIP" ? "MEMBER" : "OFFER"}</Tag>
+              <span>
+                {autoDiscount.title} · −{money(autoDiscount.discountCents, currency)}
+              </span>
+            </div>
           )}
 
-          {stage === "pay" &&
-            (settledByCreditAlone ? (
-              // There is nothing left to charge, so offering a card would be
-              // asking for something that will not be used.
-              <>
-                <div className="grouplab">Payment</div>
-                <div className="optrow" style={{ gap: 8 }}>
-                  <Icon name="check" size={20} />
-                  <span>Paid with account credit</span>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="grouplab">Payment</div>
-                <button className={`optrow ${method === "card" ? "on" : ""}`} onClick={() => setMethod("card")}>
-                  <span className="rad" />
-                  <Icon name="card" size={20} /> Card on file
-                </button>
-                <button className={`optrow ${method === "later" ? "on" : ""}`} onClick={() => setMethod("later")}>
-                  <span className="rad" />
-                  <span className="klarna" style={{ width: 32, height: 32, borderRadius: 8, fontSize: 10 }}>
-                    Klarna.
-                  </span>
-                  Pay later in 3 instalments
-                </button>
-              </>
-            ))}
+          {memberNote && <p className="v2-note">{memberNote}</p>}
 
-          <div className="optrow" style={{ border: 0 }}>
-            <span style={{ fontWeight: 600 }}>Total</span>
-            <span style={{ flex: 1 }} />
-            <b className="tabular" style={{ fontSize: 20 }}>
-              {money(total, currency)}
-            </b>
+          <div className="v2-totals">
+            <div className="row total">
+              <span>Total incl. VAT</span>
+              <b className="tabular">{money(total, currency)}</b>
+            </div>
+            {pointsToEarn > 0 && (
+              <div className="row earn">
+                <span>You{stage === "pay" ? "’ll" : ""} earn</span>
+                <b className="tabular">+{pointsToEarn} points</b>
+              </div>
+            )}
           </div>
 
-          {error && <p style={{ color: "var(--danger)", fontSize: 14 }}>{error}</p>}
+          {/* Everything that is going to be charged is above the button. */}
+          <p className="v2-nocosts">No extra costs.</p>
 
-          <Sheet
-            open={pickingReward}
-            onClose={() => setPickingReward(false)}
-            title="Apply a reward"
-          >
+          {stage === "pay" && settledByCreditAlone && (
+            // There is nothing left to charge, so offering a payment method
+            // would be asking for something that will not be used.
+            <div className="v2-paidwith">
+              <Icon name="check" size={20} />
+              <span>Paid with Credit</span>
+            </div>
+          )}
+
+          {error && (
+            <p className="v2-error" role="alert">
+              {error}
+            </p>
+          )}
+
+          <Sheet open={pickingReward} onClose={() => setPickingReward(false)} title="Use a reward">
             {rewards.map((r) => (
               <button
                 key={r.id}
-                className="optrow"
+                className={`optrow ${rewardId === r.id ? "on" : ""}`}
                 onClick={() => {
-                  setRewardId(r.id);
+                  setRewardId(rewardId === r.id ? null : r.id);
                   setPickingReward(false);
-                  toast(`${r.name} applied`);
+                  if (rewardId !== r.id) toast(`${r.name} applied`);
                 }}
               >
                 <span className="rad" />
                 <span style={{ flex: 1 }}>
                   {r.name}
                   <br />
-                  <span style={{ color: "var(--muted)", fontSize: 14 }}>{r.pointsCost} points</span>
+                  <span style={{ color: "var(--text-2)", fontSize: "var(--caption-size)" }}>{r.pointsCost} points</span>
                 </span>
-                <b>
-                  −
-                  {r.discountAmountCents != null
-                    ? money(r.discountAmountCents, currency)
-                    : `${r.discountPercent}%`}
-                </b>
+                <b>−{r.discountAmountCents != null ? money(r.discountAmountCents, currency) : `${r.discountPercent}%`}</b>
               </button>
             ))}
           </Sheet>
-        </>
+        </div>
       )}
     </Sheet>
   );
 }
 
 /** Swipe left to reveal remove; releasing past the threshold deletes the line. */
-function CartRow({
-  line,
-  currency,
-  editable,
-  onQty,
-}: {
-  line: CartLine;
-  currency: string;
-  editable: boolean;
-  onQty: (id: string, qty: number) => Promise<void>;
-}) {
+function CartRow({ line, currency, onQty }: { line: CartLine; currency: string; onQty: (id: string, qty: number) => Promise<void> }) {
   const [dx, setDx] = React.useState(0);
   const startX = React.useRef<number | null>(null);
 
@@ -376,10 +414,9 @@ function CartRow({
     <div className="crow">
       <div className="delbg">Remove</div>
       <div
-        className="cin"
+        className="cin v2-cartline"
         style={{ transform: dx ? `translateX(${dx}px)` : undefined, transition: startX.current !== null ? "none" : undefined }}
         onPointerDown={(e) => {
-          if (!editable) return;
           startX.current = e.clientX;
         }}
         onPointerMove={(e) => {
@@ -392,23 +429,21 @@ function CartRow({
           startX.current = null;
         }}
       >
-        {line.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={line.imageUrl} alt="" width={52} height={52} style={{ width: 52, height: 52, borderRadius: 12, objectFit: "cover", flex: "none" }} />
-        ) : (
-          <span style={{ width: 52, height: 52, borderRadius: 12, background: "var(--pill-bg)", flex: "none" }} />
-        )}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <b style={{ fontSize: 15, display: "block" }}>{line.name}</b>
-          <span className="tabular" style={{ fontSize: 14, color: "var(--muted)" }}>
-            {money(line.unitPriceCents, currency)}
-          </span>
+        <div className="thumb">
+          {line.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={line.imageUrl} alt="" />
+          ) : (
+            <span aria-hidden="true">{line.name.charAt(0).toUpperCase()}</span>
+          )}
         </div>
-        {editable ? (
+        <div className="info">
+          <b>{line.name}</b>
+        </div>
+        <div className="right">
+          <b className="tabular">{money(line.unitPriceCents, currency)}</b>
           <Stepper value={line.quantity} min={0} onChange={(q) => void onQty(line.id, q)} />
-        ) : (
-          <span className="tabular" style={{ color: "var(--muted)" }}>×{line.quantity}</span>
-        )}
+        </div>
       </div>
     </div>
   );

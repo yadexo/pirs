@@ -2723,3 +2723,477 @@
   flex-wrap: wrap;
   row-gap: var(--space-1);
 }
+
+/* ======================================================================== */
+/* Cart, checkout, payment and the result — Pirs v2.                        */
+/* ======================================================================== */
+
+/* The sheet header: back, title, close. */
+.client-app .sheet-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-bottom: var(--space-4);
+}
+.client-app .sheet-head .sheet-title {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  font-size: var(--title-1-size);
+  line-height: var(--title-1-line);
+  font-weight: 800;
+  color: var(--ink);
+}
+.client-app .sheet-head .nav {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+  color: var(--ink);
+}
+.client-app .sheet-head .nav.close {
+  background: var(--surface-2);
+  width: 40px;
+  height: 40px;
+}
+
+.client-app .v2-buy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.client-app .v2-buy .grouphead {
+  font-size: var(--title-3-size);
+  line-height: var(--title-3-line);
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* ------------------------------------------------------------- cart lines */
+.client-app .v2-cartline {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+}
+.client-app .v2-cartline .thumb {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--brand-soft);
+  display: grid;
+  place-items: center;
+  font-size: var(--title-3-size);
+  font-weight: 800;
+  color: var(--brand-strong);
+}
+.client-app .v2-cartline .thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.client-app .v2-cartline .info {
+  flex: 1;
+  min-width: 0;
+}
+.client-app .v2-cartline .info b {
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  font-weight: 600;
+  color: var(--ink);
+}
+.client-app .v2-cartline .right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+.client-app .v2-cartline .right b {
+  font-size: var(--title-3-size);
+  font-weight: 800;
+  color: var(--ink);
+}
+
+/* -------------------------------------------------------------- checkout */
+.client-app .v2-details {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+}
+.client-app .v2-details div {
+  flex: 1;
+  min-width: 0;
+}
+.client-app .v2-details b {
+  display: block;
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  font-weight: 700;
+  color: var(--ink);
+}
+.client-app .v2-details span {
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+.client-app .v2-details button {
+  flex: none;
+  font-size: var(--small-size);
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.client-app .v2-options {
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.client-app .v2-options .row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+}
+.client-app .v2-options .row + .row {
+  border-top: 1px solid var(--line);
+}
+.client-app .v2-options .ic {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+}
+.client-app .v2-options .txt {
+  flex: 1;
+  min-width: 0;
+}
+.client-app .v2-options .txt b {
+  display: block;
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  font-weight: 600;
+  color: var(--ink);
+}
+.client-app .v2-options .txt span {
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-2);
+}
+
+.client-app .v2-lines .line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  color: var(--text-2);
+}
+.client-app .v2-lines .line b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.client-app .v2-lines .line.off,
+.client-app .v2-lines .line.off b {
+  color: var(--brand-strong);
+}
+
+.client-app .v2-saving {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  font-size: var(--small-size);
+  line-height: var(--small-line);
+  color: var(--text-2);
+}
+.client-app .v2-note {
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-2);
+}
+
+/* The totals block: the one number the client is agreeing to. */
+.client-app .v2-totals {
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-3);
+}
+.client-app .v2-totals .row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 2px 0;
+}
+.client-app .v2-totals .total {
+  font-size: var(--title-3-size);
+  line-height: var(--title-3-line);
+  font-weight: 700;
+  color: var(--ink);
+}
+.client-app .v2-totals .total b {
+  font-weight: 800;
+}
+.client-app .v2-totals .earn {
+  font-size: var(--small-size);
+  line-height: var(--small-line);
+  font-weight: 600;
+  color: var(--brand-strong);
+}
+.client-app .v2-nocosts {
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-3);
+}
+.client-app .v2-paidwith {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--success-tint);
+  color: var(--success);
+  font-size: var(--body-size);
+  font-weight: 700;
+}
+.client-app .v2-error {
+  font-size: var(--small-size);
+  line-height: var(--small-line);
+  color: var(--danger);
+}
+
+/* --------------------------------------------------------------- payment */
+.client-app .v2-pay .wallet[hidden] {
+  display: none;
+}
+.client-app .v2-pay .wallet .or {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+  font-size: var(--caption-size);
+  color: var(--text-3);
+}
+.client-app .v2-pay .wallet .or i {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+.client-app .v2-pay .err {
+  margin-top: var(--space-3);
+  font-size: var(--small-size);
+  color: var(--danger);
+}
+.client-app .v2-pay .go {
+  margin-top: var(--space-5);
+}
+.client-app .v2-pay .cancel {
+  width: 100%;
+  margin-top: var(--space-3);
+  font-size: var(--caption-size);
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* ---------------------------------------------------------------- result */
+.client-app .v2-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding-top: var(--space-2);
+}
+.client-app .v2-result .head {
+  text-align: center;
+}
+.client-app .v2-result .mark {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto var(--space-4);
+  border-radius: var(--radius-full);
+  color: #ffffff;
+}
+.client-app .v2-result .mark.ok {
+  background: var(--success);
+  box-shadow: 0 0 0 10px var(--success-tint);
+}
+.client-app .v2-result .mark.bad {
+  background: var(--danger);
+  box-shadow: 0 0 0 10px var(--danger-tint);
+}
+.client-app .v2-result .mark.waiting {
+  background: var(--warning);
+  box-shadow: 0 0 0 10px var(--warning-tint);
+}
+.client-app .v2-result h2 {
+  font-size: var(--title-1-size);
+  line-height: var(--title-1-line);
+  font-weight: 800;
+  color: var(--ink);
+}
+.client-app .v2-result .head p {
+  margin-top: var(--space-2);
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  color: var(--text-2);
+}
+
+/* Next step: the one thing left to do, in the app's own black. */
+.client-app .v2-next {
+  padding: var(--space-5);
+  border-radius: var(--radius-xl);
+  background: var(--ink);
+  color: #ffffff;
+}
+.client-app .v2-next .top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.client-app .v2-next .ic {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.14);
+  display: grid;
+  place-items: center;
+}
+.client-app .v2-next .lead {
+  display: block;
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: rgba(255, 255, 255, 0.72);
+}
+.client-app .v2-next b {
+  font-size: var(--title-3-size);
+  line-height: var(--title-3-line);
+  font-weight: 700;
+}
+.client-app .v2-next p {
+  margin-top: var(--space-3);
+  font-size: var(--small-size);
+  line-height: var(--small-line);
+  color: rgba(255, 255, 255, 0.8);
+}
+.client-app .v2-next .go {
+  margin-top: var(--space-4);
+  background: var(--bg);
+  color: var(--ink);
+  height: 56px;
+  border-radius: var(--radius-md);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.client-app .v2-earned {
+  display: block;
+  width: 100%;
+  padding: var(--space-5);
+  border-radius: var(--radius-xl);
+  background: var(--surface-2);
+  text-align: left;
+}
+.client-app .v2-earned .top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--brand-strong);
+}
+.client-app .v2-earned .top b {
+  font-size: var(--title-3-size);
+  line-height: var(--title-3-line);
+  font-weight: 800;
+}
+.client-app .v2-earned .bar {
+  display: block;
+  height: 8px;
+  margin-top: var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--line-strong);
+  overflow: hidden;
+}
+.client-app .v2-earned .bar span {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--brand);
+}
+.client-app .v2-earned .note {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: var(--small-size);
+  line-height: var(--small-line);
+  color: var(--text-2);
+}
+
+.client-app .v2-receipt {
+  padding: var(--space-5);
+  border-radius: var(--radius-xl);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.client-app .v2-receipt .top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.client-app .v2-receipt .top b {
+  font-size: var(--title-3-size);
+  line-height: var(--title-3-line);
+  font-weight: 800;
+  color: var(--ink);
+}
+.client-app .v2-receipt .line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  color: var(--text-2);
+}
+.client-app .v2-receipt .line.total {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+  color: var(--ink);
+  font-weight: 700;
+}
+.client-app .v2-receipt .paidwith {
+  margin-top: var(--space-2);
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-3);
+}
+.client-app .v2-result .outside {
+  font-size: var(--small-size);
+  line-height: var(--small-line);
+  color: var(--text-2);
+  text-align: center;
+}

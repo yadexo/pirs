@@ -19,11 +19,20 @@ export interface CartTotalsInput {
   /** What the client has, not what this order takes. */
   creditAvailableCents: number;
   useCredit: boolean;
+  /**
+   * The clinic's tax rate, in basis points. A clinic whose prices already
+   * include VAT leaves it at zero; one that adds tax on top has it here, and
+   * the preview has to add it too — the cart calls its figure "Total incl.
+   * VAT", and that has to be true.
+   */
+  taxRateBasisPoints?: number;
 }
 
 export interface CartTotals {
-  /** The bill before credit: items less every discount. */
+  /** The bill before credit: items less every discount, plus tax. */
   billCents: number;
+  /** Tax on the discounted basket, worked out the way checkout works it out. */
+  taxCents: number;
   creditUsedCents: number;
   /** What a card has to cover. */
   totalCents: number;
@@ -35,11 +44,17 @@ export interface CartTotals {
 }
 
 export function cartTotals(input: CartTotalsInput): CartTotals {
-  const billCents = Math.max(0, input.subtotalCents - input.rewardDiscountCents - input.autoDiscountCents);
+  const taxableCents = Math.max(0, input.subtotalCents - input.rewardDiscountCents - input.autoDiscountCents);
+  // The same order of operations as clientCheckoutAction: tax on the basket
+  // after discounts, and credit off the bill after tax — the tax was on what
+  // the client bought, however they end up paying for it.
+  const taxCents = Math.round((taxableCents * (input.taxRateBasisPoints ?? 0)) / 10000);
+  const billCents = taxableCents + taxCents;
   const creditUsedCents = input.useCredit ? Math.max(0, Math.min(input.creditAvailableCents, billCents)) : 0;
   const totalCents = Math.max(0, billCents - creditUsedCents);
   return {
     billCents,
+    taxCents,
     creditUsedCents,
     totalCents,
     settledByCreditAlone: totalCents === 0 && creditUsedCents > 0,

@@ -3,7 +3,8 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon, Sheet, money } from "@/components/client-app/ui";
-import { clientOrderStatusAction } from "@/lib/actions/client-app";
+import { Button, Tag } from "@/components/client-app/v2";
+import { clientOrderStatusAction, clientOrderReceiptAction } from "@/lib/actions/client-app";
 import { useBasePath } from "./base-path";
 import { phaseFor, shouldAskAgain, POLL_MS, type Phase } from "./payment-phase";
 
@@ -21,8 +22,23 @@ import { phaseFor, shouldAskAgain, POLL_MS, type Phase } from "./payment-phase";
  * thing to say — so the result is shown here too rather than only inside.
  */
 
+type Receipt = Extract<Awaited<ReturnType<typeof clientOrderReceiptAction>>, { ok: true }>;
+
+/** "ideal" from the provider becomes something a client would recognise. */
+const METHOD_NAMES: Record<string, string> = {
+  ideal: "iDEAL | Wero",
+  wero: "iDEAL | Wero",
+  card: "card",
+  klarna: "Klarna",
+  apple_pay: "Apple Pay",
+  google_pay: "Google Pay",
+  credit: "Credit",
+};
+
 export function PaymentResult({
   merchantSlug,
+  merchantName,
+  currency,
   orderNumber,
   bare,
   outsideApp,
@@ -30,6 +46,8 @@ export function PaymentResult({
   onRetry,
 }: {
   merchantSlug: string;
+  merchantName?: string;
+  currency?: string;
   orderNumber: string;
   /** Render without a sheet of its own — for use inside one. */
   bare?: boolean;
@@ -45,7 +63,7 @@ export function PaymentResult({
   const router = useRouter();
   const base = useBasePath();
   const [phase, setPhase] = React.useState<Phase>("confirming");
-  const [details, setDetails] = React.useState<{ totalCents: number; pointsEarned: number } | null>(null);
+  const [receipt, setReceipt] = React.useState<Receipt | null>(null);
   const [gaveUp, setGaveUp] = React.useState(false);
 
   React.useEffect(() => {
@@ -58,9 +76,12 @@ export function PaymentResult({
 
       const next = phaseFor(res);
       setPhase(next);
-      if (res && !("error" in res)) setDetails({ totalCents: res.totalCents, pointsEarned: res.pointsEarned });
       // The rest of the app — balances, items, history — is now out of date.
-      if (next === "paid") router.refresh();
+      if (next === "paid") {
+        router.refresh();
+        const full = await clientOrderReceiptAction(orderNumber).catch(() => null);
+        if (!stop && full && "ok" in full) setReceipt(full);
+      }
 
       if (shouldAskAgain(next, Date.now() - startedAt)) timer = setTimeout(() => void check(), POLL_MS);
       else if (next === "confirming") setGaveUp(true);
@@ -83,90 +104,167 @@ export function PaymentResult({
     };
   }, [merchantSlug, orderNumber, router]);
 
+  const method = receipt?.paymentMethod ? (METHOD_NAMES[receipt.paymentMethod] ?? receipt.paymentMethod) : null;
+  const nextReward = receipt?.nextReward ?? null;
+  const progress = nextReward ? Math.min(100, Math.round((receipt!.pointsBalance / nextReward.pointsCost) * 100)) : 0;
+
   const body = (
-    <div style={{ textAlign: "center", padding: "24px 0 8px" }}>
+    <div className="v2-result">
       {phase === "confirming" && !gaveUp && (
-        <>
+        <div className="head">
           <span className="ca-spinner" aria-hidden="true" />
-          <p className="ca-resulttitle">Confirming your payment…</p>
-          <p className="ca-resultbody">This usually takes a few seconds. You can leave this open.</p>
-        </>
+          <h2>Confirming your payment…</h2>
+          <p>This usually takes a few seconds. You can leave this open.</p>
+        </div>
       )}
 
       {phase === "confirming" && gaveUp && (
-        <>
-          <p style={{ fontSize: 40, margin: 0 }} aria-hidden="true">
-            ⏳
-          </p>
-          <p className="ca-resulttitle">Still waiting on your bank</p>
-          <p className="ca-resultbody">
+        <div className="head">
+          <span className="mark waiting" aria-hidden="true">
+            <Icon name="clock" size={32} />
+          </span>
+          <h2>Still waiting on your bank</h2>
+          <p>
             Your payment for {orderNumber} hasn&apos;t been confirmed yet. Nothing is lost — it will appear in your order history as soon as it
             lands.
           </p>
-        </>
+        </div>
       )}
 
       {phase === "paid" && (
         <>
-          <p style={{ fontSize: 44, margin: 0, color: "var(--accent-green, #2e7d32)" }} aria-hidden="true">
-            ✓
-          </p>
-          <p className="ca-resulttitle">Payment received</p>
-          <p className="ca-resultbody">
-            {orderNumber}
-            {details ? ` · ${money(details.totalCents)}` : ""}
-            {details && details.pointsEarned > 0 ? ` · +${details.pointsEarned} points` : ""}
-          </p>
-          <button className="btn-black" style={{ marginTop: 18 }} onClick={() => router.push(`${base}/profile?tab=items`)}>
-            See what you bought
-          </button>
+          <div className="head">
+            <span className="mark ok" aria-hidden="true">
+              <Icon name="check" size={34} />
+            </span>
+            <h2>Payment complete</h2>
+            <p>
+              {receipt?.firstName ? `Thanks, ${receipt.firstName}. ` : ""}
+              {receipt?.email ? `Your receipt is on its way to ${receipt.email}.` : "Your receipt is on its way."}
+            </p>
+          </div>
+
+          {/* Next step. Booking links come in a later stage; until then every
+              order ends the same way — collect it at the desk. */}
+          <div className="v2-next">
+            <div className="top">
+              <span className="ic" aria-hidden="true">
+                <Icon name="qr" size={22} />
+              </span>
+              <span>
+                <span className="lead">Next step</span>
+                <b>Your items are ready</b>
+              </span>
+            </div>
+            <p>Show your code at the desk when you visit.</p>
+            <Button variant="grey" className="go" onClick={() => router.push(`${base}/profile?tab=items`)}>
+              View my items
+            </Button>
+          </div>
+
+          {receipt && receipt.pointsEarned > 0 && (
+            <button type="button" className="v2-earned" onClick={() => router.push(`${base}/rewards`)}>
+              <span className="top">
+                <b>+{receipt.pointsEarned} points earned</b>
+                <Icon name="chevR" size={20} />
+              </span>
+              {nextReward && (
+                <>
+                  <span className="bar" aria-hidden="true">
+                    <span style={{ width: `${progress}%` }} />
+                  </span>
+                  <span className="note">
+                    You now have {receipt.pointsBalance} points. {nextReward.pointsCost - receipt.pointsBalance} more for your {nextReward.name}.
+                  </span>
+                </>
+              )}
+            </button>
+          )}
+
+          {receipt && (
+            <div className="v2-receipt">
+              <div className="top">
+                <b>Order {orderNumber}</b>
+                <Tag kind="success">PAID</Tag>
+              </div>
+              {receipt.lines.map((l, i) => (
+                <div className="line" key={i}>
+                  <span>
+                    {l.name}
+                    {l.quantity > 1 ? ` × ${l.quantity}` : ""}
+                  </span>
+                  <span className="tabular">{money(l.totalCents, currency)}</span>
+                </div>
+              ))}
+              {receipt.discountCents > 0 && (
+                <div className="line">
+                  <span>{receipt.discountTitle ?? "Discount"}</span>
+                  <span className="tabular">−{money(receipt.discountCents, currency)}</span>
+                </div>
+              )}
+              {receipt.loyaltyDiscountCents > 0 && (
+                <div className="line">
+                  <span>Reward</span>
+                  <span className="tabular">−{money(receipt.loyaltyDiscountCents, currency)}</span>
+                </div>
+              )}
+              {receipt.creditAppliedCents > 0 && (
+                <div className="line">
+                  <span>Credit</span>
+                  <span className="tabular">−{money(receipt.creditAppliedCents, currency)}</span>
+                </div>
+              )}
+              <div className="line total">
+                <b>Total paid, incl. VAT</b>
+                <b className="tabular">{money(receipt.totalCents, currency)}</b>
+              </div>
+              {method && <p className="paidwith">Paid with {method}</p>}
+            </div>
+          )}
+
+          <Button variant="outline" className="home" onClick={() => (onClose ? onClose() : router.push(base))}>
+            Back to home
+          </Button>
         </>
       )}
 
       {phase === "failed" && (
         <>
-          <p style={{ fontSize: 44, margin: 0, color: "var(--danger)" }} aria-hidden="true">
-            ✕
-          </p>
-          <p className="ca-resulttitle">Payment didn&apos;t go through</p>
-          <p className="ca-resultbody">Nothing was charged, and your basket is still here.</p>
-          <button className="btn-black" style={{ marginTop: 18 }} onClick={() => (onRetry ? onRetry() : router.push(`${base}/shop`))}>
-            Try again
-          </button>
+          <div className="head">
+            <span className="mark bad" aria-hidden="true">
+              <Icon name="close" size={32} />
+            </span>
+            <h2>Payment didn&apos;t go through</h2>
+            <p>Nothing was charged, and your basket is still here.</p>
+          </div>
+          <Button onClick={() => (onRetry ? onRetry() : router.push(`${base}/shop`))}>Try again</Button>
         </>
       )}
 
       {phase === "unknown" && (
         <>
-          <p className="ca-resulttitle">We couldn&apos;t check that payment</p>
-          <p className="ca-resultbody">Open your order history to see where it stands.</p>
-          <button className="btn-black" style={{ marginTop: 18 }} onClick={() => router.push(`${base}/profile?tab=settings`)}>
-            Order history
-          </button>
+          <div className="head">
+            <h2>We couldn&apos;t check that payment</h2>
+            <p>Open your order history to see where it stands.</p>
+          </div>
+          <Button onClick={() => router.push(`${base}/profile?tab=settings`)}>Order history</Button>
         </>
       )}
 
       {outsideApp && phase !== "confirming" && (
-        <p className="ca-resultbody" style={{ marginTop: 20 }}>
-          You&apos;re in a browser tab, not the app. Close this tab and open the app from your Home Screen — everything here is saved.
+        <p className="outside">
+          You&apos;re in a browser tab, not the app{merchantName ? ` for ${merchantName}` : ""}. Close this tab and open the app from your Home
+          Screen — everything here is saved.
         </p>
       )}
     </div>
   );
 
   // Inside another sheet it draws no sheet of its own.
-  if (bare) return <div style={{ padding: "0 var(--pad-x)" }}>{body}</div>;
+  if (bare) return body;
   return (
     <Sheet open onClose={onClose ?? (() => undefined)} title="Your payment">
       {body}
-      {phase !== "confirming" && (
-        <button className="press" style={{ width: "100%", marginTop: 6, fontSize: 14, color: "var(--muted)" }} onClick={onClose}>
-          Close
-        </button>
-      )}
-      <span style={{ display: "none" }}>
-        <Icon name="check" size={1} />
-      </span>
     </Sheet>
   );
 }

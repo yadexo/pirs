@@ -2,15 +2,22 @@
 
 import * as React from "react";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
-import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import { Elements, ExpressCheckoutElement, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { money } from "@/components/client-app/ui";
+import { Button } from "@/components/client-app/v2";
 
 /**
- * Card details for a charge on the clinic's own Stripe account.
+ * Paying for a charge on the clinic's own Stripe account.
  *
- * Stripe.js is loaded with the clinic's account id, so the payment sheet knows
- * whose payment it is and which methods that clinic accepts — the same
- * component later carries Apple Pay and iDEAL | Wero without changing here.
+ * Stripe.js is loaded with the clinic's account id, so the sheet knows whose
+ * payment it is and which methods that clinic accepts.
+ *
+ * The brand marks — Apple Pay's button, iDEAL, Wero, Klarna, the card networks
+ * — are all drawn by Stripe's own Elements, which is the only way to show them
+ * unchanged without shipping copies of other people's trademarks. The Express
+ * Checkout Element renders Apple Pay's official button, to Apple's rules about
+ * size, corner radius and wording; the Payment Element renders each method's
+ * own mark beside its row. Nothing here draws a logo by hand.
  *
  * Nothing on this screen decides the outcome. It confirms with Stripe and then
  * asks our server what actually happened; the webhook is what settles the
@@ -61,7 +68,7 @@ export function CardPayment({
 }) {
   if (!payment.publishableKey) {
     return (
-      <p style={{ color: "var(--danger)", fontSize: 15, padding: "12px 0" }}>
+      <p style={{ color: "var(--danger)", fontSize: "var(--small-size)", padding: "12px 0" }}>
         This clinic&apos;s payments aren&apos;t set up completely yet. Please pay at the clinic.
       </p>
     );
@@ -73,7 +80,16 @@ export function CardPayment({
         clientSecret: payment.clientSecret,
         appearance: {
           theme: "flat",
-          variables: { colorPrimary: "#0b0d12", colorText: "#1b2233", colorDanger: "#e5484d", borderRadius: "14px", fontSizeBase: "15px" },
+          variables: {
+            colorPrimary: "#0d0d0d",
+            colorText: "#0d0d0d",
+            colorTextSecondary: "#545450",
+            colorBackground: "#f5f5f4",
+            colorDanger: "#c42b1c",
+            borderRadius: "16px",
+            fontSizeBase: "16px",
+            spacingUnit: "4px",
+          },
         },
       }}
     >
@@ -101,15 +117,20 @@ function PayForm({
   const elements = useElements();
   const [busy, setBusy] = React.useState(false);
   const [ready, setReady] = React.useState(false);
+  /** False until Stripe says the device actually offers a wallet. */
+  const [hasWallet, setHasWallet] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!stripe || !elements || busy) return;
-    setBusy(true);
+  const returnUrl =
+    typeof orderNumber === "string"
+      ? `?order=${encodeURIComponent(orderNumber)}`
+      : `?membership=1`;
+
+  /** Shared by the wallet button and the Pay button; only the trigger differs. */
+  const confirm = React.useCallback(async () => {
+    if (!stripe || !elements) return;
     setError(null);
 
-    // Shows the Apple Pay / Google Pay sheet when one of those is chosen.
     const submitted = await elements.submit();
     if (submitted.error) {
       setError(submitted.error.message ?? "Check your payment details.");
@@ -119,16 +140,10 @@ function PayForm({
 
     const { error: confirmError } = await stripe.confirmPayment({
       elements,
-      // Card payments stay on this page; bank methods still redirect and come
-      // back to the clinic's app.
-      // iDEAL and Klarna leave the site entirely; the order number is how the
-      // page they come back to knows what to report.
-      confirmParams: {
-        return_url:
-          typeof orderNumber === "string"
-            ? `${window.location.origin}${window.location.pathname}?order=${encodeURIComponent(orderNumber)}`
-            : `${window.location.origin}${window.location.pathname}?membership=1`,
-      },
+      // Cards and wallets stay on this page; iDEAL, Wero and Klarna leave the
+      // site entirely, and the order number is how the page they come back to
+      // knows what to report.
+      confirmParams: { return_url: `${window.location.origin}${window.location.pathname}${returnUrl}` },
       redirect: "if_required",
     });
     setBusy(false);
@@ -137,20 +152,48 @@ function PayForm({
       return;
     }
     onPaid();
+  }, [stripe, elements, returnUrl, onPaid]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    await confirm();
   }
 
   return (
-    <form onSubmit={submit} style={{ paddingTop: 4 }}>
-      <PaymentElement onReady={() => setReady(true)} options={{ layout: "tabs" }} />
+    <form onSubmit={submit} className="v2-pay">
+      {/*
+        Apple Pay and Google Pay, as their owners' own buttons. The element
+        hides itself on a device that offers neither, so there is no empty
+        slot and no "Apple Pay" written on an Android.
+      */}
+      <div className="wallet" hidden={!hasWallet}>
+        <ExpressCheckoutElement
+          options={{ buttonHeight: 48, layout: { maxColumns: 1, maxRows: 2 } }}
+          onReady={(event) => setHasWallet(!!event.availablePaymentMethods)}
+          onConfirm={() => {
+            setBusy(true);
+            void confirm();
+          }}
+        />
+        <span className="or">
+          <i /> or <i />
+        </span>
+      </div>
+
+      <PaymentElement onReady={() => setReady(true)} options={{ layout: "accordion" }} />
+
       {error && (
-        <p role="alert" style={{ color: "var(--danger)", fontSize: 14, marginTop: 12 }}>
+        <p role="alert" className="err">
           {error}
         </p>
       )}
-      <button className="btn-black" type="submit" disabled={!stripe || !ready || busy} style={{ width: "100%", marginTop: 16 }}>
-        {busy ? "Paying…" : (payLabel ?? `Pay ${money(amountCents, currency)}`)}
-      </button>
-      <button type="button" className="press" onClick={onCancel} disabled={busy} style={{ width: "100%", marginTop: 10, fontSize: 14, color: "var(--muted)" }}>
+
+      <Button type="submit" disabled={!stripe || !ready || busy} loading={busy} className="go">
+        {payLabel ?? `Pay ${money(amountCents, currency)}`}
+      </Button>
+      <button type="button" className="cancel" onClick={onCancel} disabled={busy}>
         Cancel
       </button>
     </form>

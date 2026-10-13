@@ -11,6 +11,8 @@ import { clientAddToCartAction } from "@/lib/actions/client-app";
 import type { HomeSections, ShopCard } from "@/lib/client-app-home";
 import { homeOrder } from "@/lib/home-layout";
 import type { ClientSummary } from "@/lib/client-app-data";
+import { formatShortDay } from "@/lib/client-format";
+import { useClinicTimeZone } from "./base-path";
 
 /**
  * Home, Pirs v2.
@@ -20,7 +22,7 @@ import type { ClientSummary } from "@/lib/client-app-data";
  * bought anything would otherwise open the app to three empty shelves.
  */
 
-const shortDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+
 
 export function HomeView({
   merchantSlug,
@@ -39,6 +41,7 @@ export function HomeView({
 }) {
   const router = useRouter();
   const base = useBasePath();
+  const timeZone = useClinicTimeZone();
   const { refresh } = useCart();
   const { toast } = useToast();
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -142,7 +145,7 @@ export function HomeView({
                 <div className="info">
                   <b>{b.name}</b>
                   <span>
-                    {shortDate(b.lastBoughtAt)} · {money(b.lastPaidCents, currency)}
+                    {formatShortDay(b.lastBoughtAt, timeZone)} · {money(b.lastPaidCents, currency)}
                   </span>
                 </div>
                 <Button
@@ -180,7 +183,7 @@ export function HomeView({
                 </span>
                 <b>{o.title}</b>
                 <span className="meta">
-                  {o.scope ? `${o.scope} · ` : ""}until {shortDate(o.endsAt)}
+                  {o.scope ? `${o.scope} · ` : ""}until {formatShortDay(o.endsAt, timeZone)}
                 </span>
               </button>
             ))}

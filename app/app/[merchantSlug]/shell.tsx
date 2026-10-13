@@ -4,7 +4,7 @@ import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Icon, ToastProvider, money } from "@/components/client-app/ui";
-import { BasePathProvider, useBasePath } from "./base-path";
+import { BasePathProvider, ClinicTimeZoneProvider, useBasePath } from "./base-path";
 import { isStandalone } from "@/components/client-app/pwa";
 import { PaymentResult } from "./payment-result";
 import { CartProvider, useCart } from "./cart-context";
@@ -27,6 +27,12 @@ export function ClientAppShell({
   merchantName,
   logoUrl,
   currency,
+  timeZone,
+  pointsPerCents,
+  taxRateBasisPoints,
+  clientName,
+  clientEmail,
+  clientPhone,
   rewardsDot,
   children,
 }: {
@@ -36,6 +42,16 @@ export function ClientAppShell({
   merchantName: string;
   logoUrl: string | null;
   currency: string;
+  /** The clinic's time zone, for every date and time the app prints. */
+  timeZone: string;
+  /** Same rate checkout uses: points = floor(amount in cents × rate). */
+  pointsPerCents: number;
+  /** Zero for a clinic whose prices already include VAT. See cart-totals.ts. */
+  taxRateBasisPoints: number;
+  /** Shown back to the client at checkout, so they can check it before paying. */
+  clientName: string;
+  clientEmail: string | null;
+  clientPhone: string | null;
   /** A reward just became affordable — surfaces a dot on the Rewards tab. */
   rewardsDot: boolean;
   children: React.ReactNode;
@@ -43,17 +59,24 @@ export function ClientAppShell({
   return (
     <ToastProvider>
       <BasePathProvider base={base}>
+        <ClinicTimeZoneProvider timeZone={timeZone}>
         <CartProvider merchantSlug={merchantSlug}>
           <Frame
             merchantSlug={merchantSlug}
             merchantName={merchantName}
             logoUrl={logoUrl}
             currency={currency}
+            pointsPerCents={pointsPerCents}
+            taxRateBasisPoints={taxRateBasisPoints}
+            clientName={clientName}
+            clientEmail={clientEmail}
+            clientPhone={clientPhone}
             rewardsDot={rewardsDot}
           >
             {children}
           </Frame>
         </CartProvider>
+        </ClinicTimeZoneProvider>
       </BasePathProvider>
     </ToastProvider>
   );
@@ -64,6 +87,11 @@ function Frame({
   merchantName,
   logoUrl,
   currency,
+  pointsPerCents,
+  taxRateBasisPoints,
+  clientName,
+  clientEmail,
+  clientPhone,
   rewardsDot,
   children,
 }: {
@@ -71,6 +99,11 @@ function Frame({
   merchantName: string;
   logoUrl: string | null;
   currency: string;
+  pointsPerCents: number;
+  taxRateBasisPoints: number;
+  clientName: string;
+  clientEmail: string | null;
+  clientPhone: string | null;
   rewardsDot: boolean;
   children: React.ReactNode;
 }) {
@@ -216,6 +249,8 @@ function Frame({
       {returnedOrder && (
         <PaymentResult
           merchantSlug={merchantSlug}
+          merchantName={merchantName}
+          currency={currency}
           orderNumber={returnedOrder}
           outsideApp={outsideApp}
           onClose={() => router.replace(pathname)}
@@ -227,7 +262,18 @@ function Frame({
       )}
 
       <SearchSheet merchantSlug={merchantSlug} currency={currency} open={searchOpen} onClose={() => setSearchOpen(false)} />
-      <CartSheet merchantSlug={merchantSlug} currency={currency} open={open} onClose={closeCart} />
+      <CartSheet
+        merchantSlug={merchantSlug}
+        merchantName={merchantName}
+        currency={currency}
+        pointsPerCents={pointsPerCents}
+        taxRateBasisPoints={taxRateBasisPoints}
+        clientName={clientName}
+        clientEmail={clientEmail}
+        clientPhone={clientPhone}
+        open={open}
+        onClose={closeCart}
+      />
     </div>
   );
 }

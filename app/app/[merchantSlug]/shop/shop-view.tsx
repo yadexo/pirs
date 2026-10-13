@@ -571,7 +571,7 @@ export function ShopView({
               orderNumber={{ membership: true }}
               amountCents={firstPayment.amountCents}
               currency={currency}
-              payLabel={`Pay ${money(firstPayment.amountCents, currency)} and start`}
+              payLabel={`Pay ${money(firstPayment.amountCents, currency)} and join`}
               onPaid={() => {
                 setFirstPayment(null);
                 // The clinic's Stripe account confirms it; the plan switches on

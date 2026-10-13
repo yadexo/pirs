@@ -733,6 +733,82 @@ export async function clientOrderStatusAction(
   };
 }
 
+/**
+ * The receipt for one of this client's own orders: the lines, what came off,
+ * what they paid and how, and where their points stand after it.
+ *
+ * Read-only, and it decides nothing — clientOrderStatusAction is still what
+ * says whether the payment landed. This exists because the result screen owes
+ * the client an account of the order, and reading it back is not the same
+ * question as "did it go through".
+ */
+export async function clientOrderReceiptAction(
+  orderNumber: string,
+): Promise<
+  | { error: string }
+  | {
+      ok: true;
+      email: string | null;
+      firstName: string;
+      lines: { name: string; quantity: number; totalCents: number }[];
+      discountCents: number;
+      discountTitle: string | null;
+      creditAppliedCents: number;
+      loyaltyDiscountCents: number;
+      totalCents: number;
+      /** "ideal", "card", "klarna" — as the provider named it. */
+      paymentMethod: string | null;
+      pointsEarned: number;
+      pointsBalance: number;
+      nextReward: { name: string; pointsCost: number } | null;
+      /** Items this order left the client to collect at the desk. */
+      itemsToCollect: number;
+    }
+> {
+  const { db, user } = await requireCustomerContext();
+  const order = await db.order.findFirst({
+    where: { orderNumber, customerProfileId: user.customerProfileId! },
+    select: {
+      id: true,
+      discountCents: true,
+      creditAppliedCents: true,
+      loyaltyDiscountCents: true,
+      totalCents: true,
+      promotion: { select: { title: true } },
+      items: { select: { name: true, quantity: true, totalCents: true } },
+      payments: { where: { status: "SUCCEEDED" }, orderBy: { createdAt: "desc" }, take: 1, select: { method: true, provider: true } },
+    },
+  });
+  if (!order) return { error: "That order no longer exists." };
+
+  const [profile, points, rewards, itemsToCollect] = await Promise.all([
+    db.customerProfile.findFirst({ where: { id: user.customerProfileId! }, select: { firstName: true, loyaltyPointsBalance: true, user: { select: { email: true } } } }),
+    db.loyaltyTransaction.findFirst({ where: { relatedOrderId: order.id, type: "EARNED" }, select: { points: true } }),
+    db.loyaltyReward.findMany({ where: { active: true }, orderBy: { pointsCost: "asc" }, select: { name: true, pointsCost: true } }),
+    db.redeemableItem.count({ where: { orderId: order.id, status: "AVAILABLE" } }),
+  ]);
+
+  const balance = profile?.loyaltyPointsBalance ?? 0;
+  const payment = order.payments[0] ?? null;
+
+  return {
+    ok: true,
+    email: profile?.user.email ?? null,
+    firstName: profile?.firstName ?? "",
+    lines: order.items.map((i) => ({ name: i.name, quantity: i.quantity, totalCents: i.totalCents })),
+    discountCents: order.discountCents,
+    discountTitle: order.promotion?.title ?? null,
+    creditAppliedCents: order.creditAppliedCents,
+    loyaltyDiscountCents: order.loyaltyDiscountCents,
+    totalCents: order.totalCents,
+    paymentMethod: payment?.method ?? (payment?.provider === "ACCOUNT_CREDIT" ? "credit" : null),
+    pointsEarned: points?.points ?? 0,
+    pointsBalance: balance,
+    nextReward: rewards.find((r) => r.pointsCost > balance) ?? null,
+    itemsToCollect,
+  };
+}
+
 /** The client gave up in the Payment Element: let the stock and points go. */
 export async function clientAbandonOrderAction(slug: string, orderNumber: string): Promise<{ ok: true }> {
   const { db, user } = await requireCustomerContext();
