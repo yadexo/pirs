@@ -61,8 +61,8 @@ export default async function ClientsPage({
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-6">
-      <MerchantPageHeader title="Client Profiles" merchantName={ctx.merchantName} />
+    <div className="mx-auto max-w-[1180px]">
+      <MerchantPageHeader title="Clients" description="Everyone who has an account in your app." />
       <div className="mt-5">
         <ClientsTable
           merchantId={merchantId}

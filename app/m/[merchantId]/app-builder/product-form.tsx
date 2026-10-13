@@ -529,7 +529,7 @@ export function ProductPanelForm({ merchantId, currency, item, options, errors, 
         )}
         <CheckboxField
           name="cashBalanceBlocked"
-          label="Cash balance cannot be used for this product"
+          label="Credit cannot be used for this product"
           description="Clients pay for this with a card; their credit stays untouched."
           defaultChecked={Boolean(item.cashBalanceBlocked)}
         />

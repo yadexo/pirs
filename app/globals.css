@@ -3,55 +3,52 @@
 @tailwind utilities;
 
 /**
- * Clinic portal and agency panel tokens. Every colour here comes from this
- * block — components must never hardcode a hex value.
+ * Clinic portal and agency panel tokens — now the Pirs v2 roles.
  *
- * These are the v1 names with the v1 values, and the portal deliberately still
- * looks exactly as it did: it moves to the Pirs v2 system in its own stage.
- * The shared v2 roles live in app/design-tokens.css and are imported before
- * this file; the two sets share no names, so neither overrides the other.
- * When the portal switches, the mapping is:
+ * The portal's own names stay: every page and component references them
+ * through Tailwind (bg-app, text-ink, border-border …), and re-pointing them
+ * here moves the whole portal onto the shared system in one place rather than
+ * rewriting several hundred class names. The values all come from
+ * app/design-tokens.css, which the root layout imports first.
  *
- *   --bg-app       -> --surface-2      --text-primary -> --ink
- *   --bg-surface   -> --bg             --text-muted   -> --text-2
- *   --border       -> --line           --text-faint   -> --text-3
- *   --primary      -> --brand          --accent-green -> --success
- *   --primary-soft -> --brand-soft     --accent-amber -> --warning
- *   --radius-card  -> --radius-md      --accent-red   -> --danger
- *   --shadow-card  -> --elev-raised    --font-sans    -> --font-ui
- *
- * The one thing that already crosses over is the typeface: the root layout
- * loads Hanken Grotesk for both apps, and --font-sans keeps Inter here until
- * the portal's stage.
+ * The one genuine change in meaning is --primary. In v1 it was the platform's
+ * teal, the same for every clinic; it is now the clinic's own brand colour,
+ * resolved per request by lib/brand-tokens.ts and set on the shell. A portal
+ * opened for a clinic with no colour set falls back to the token file's.
  */
 :root {
-  --bg-app: #f7f9fc;
-  --bg-surface: #ffffff;
-  --border: #edf1f6;
+  --bg-app: var(--surface-2);
+  --bg-surface: var(--bg);
+  --border: var(--line);
 
-  --text-primary: #0f172a;
-  --text-muted: #64748b;
-  --text-faint: #94a3b8;
+  --text-primary: var(--ink);
+  --text-muted: var(--text-2);
+  --text-faint: var(--text-3);
 
-  --primary: #2dd4d9;
-  --primary-hover: #22bfc4;
-  --primary-soft: #e8fbfc;
+  /* The clinic's colour, not the platform's. */
+  --primary: var(--brand-strong);
+  --primary-hover: var(--brand-deep);
+  --primary-soft: var(--brand-soft);
 
-  --accent-purple: #7c6bf5;
-  --accent-indigo: #4f5bd5;
-  --accent-green: #16a34a;
-  --accent-amber: #f59e0b;
-  --accent-red: #ef4444;
-  --accent-cyan: #06b6d4;
-  --accent-pink: #ec4899;
+  /* Kept for the few places that still name a colour directly — charts,
+     category dots. They are v2 roles now, not a second palette. */
+  --accent-purple: var(--brand-deep);
+  --accent-indigo: var(--brand-strong);
+  --accent-green: var(--success);
+  --accent-amber: var(--warning);
+  --accent-red: var(--danger);
+  --accent-cyan: var(--brand);
+  --accent-pink: var(--brand-soft);
 
-  --chart-line: #4c6ef5;
+  --chart-line: var(--ink);
 
-  --radius-card: 12px;
-  --radius-pill: 9999px;
-  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04);
+  /* The portal's cards are radius 20 with no shadow — the kit is explicit
+     that a grey page with white cards needs no elevation to separate them. */
+  --radius-card: var(--radius-lg);
+  --radius-pill: var(--radius-full);
+  --shadow-card: none;
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-sans: var(--font-ui);
 }
 
 html,
@@ -106,4 +103,504 @@ body {
   .live-dot::after {
     animation: none;
   }
+}
+
+/* ======================================================================== */
+/* Clinic portal kit — Pirs v2.                                             */
+/*                                                                          */
+/* The portal reads the same tokens as the client app. These are the pieces */
+/* every portal page is built from: the shell, the top bar, page headers,    */
+/* cards, tables, stat tiles, drawers and notices.                           */
+/* ======================================================================== */
+
+.pk-shell {
+  display: flex;
+  min-height: 100vh;
+  background: var(--surface-2);
+}
+
+/* ------------------------------------------------------------- sidebar */
+/**
+ * 256 on a desktop, 84 icon-only under 1200 — the width that fits is a
+ * property of the screen, so it is a media query rather than a toggle
+ * somebody has to find and remember.
+ */
+.pk-sidebar {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: 256px;
+  height: 100vh;
+  padding: var(--space-4);
+  background: var(--bg);
+  border-right: 1px solid var(--line);
+}
+.pk-clinic {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  min-width: 0;
+}
+.pk-clinic .mark {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--brand-strong);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+}
+.pk-clinic .who {
+  min-width: 0;
+  flex: 1;
+}
+.pk-clinic .who b {
+  display: block;
+  font-size: var(--small-size);
+  line-height: var(--small-line);
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pk-clinic .switch {
+  display: block;
+  font-size: var(--caption-size);
+  color: var(--text-2);
+}
+
+.pk-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: var(--space-5);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.pk-navrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 48px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--ink);
+  font-size: var(--small-size);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.pk-navrow:hover {
+  background: var(--surface-2);
+}
+.pk-navrow .ic {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+}
+/* The active page is the one black thing in the bar. */
+.pk-navrow.on {
+  background: var(--ink);
+  color: #ffffff;
+  font-weight: 700;
+}
+.pk-navrow.on .ic {
+  color: #ffffff;
+}
+.pk-navrow.on:hover {
+  background: var(--ink);
+}
+
+.pk-foot {
+  margin-top: var(--space-4);
+}
+.pk-user {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+.pk-user .avatar {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  font-size: var(--caption-size);
+  font-weight: 700;
+}
+.pk-user .txt {
+  flex: 1;
+  min-width: 0;
+}
+.pk-user .txt b {
+  display: block;
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pk-user .txt span {
+  font-size: var(--caption-size);
+  color: var(--text-2);
+  text-transform: capitalize;
+}
+.pk-user .out {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+}
+.pk-user .out:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+/* Tablet: icons only, same order, labels become the accessible name. */
+@media (max-width: 1199px) {
+  .pk-sidebar {
+    width: 84px;
+    padding: var(--space-3);
+    align-items: center;
+  }
+  .pk-clinic {
+    justify-content: center;
+    padding: var(--space-2);
+    width: 100%;
+  }
+  .pk-clinic .who {
+    display: none;
+  }
+  .pk-navrow {
+    justify-content: center;
+    padding: 0;
+    width: 56px;
+  }
+  .pk-navrow .lab {
+    display: none;
+  }
+  .pk-user .txt,
+  .pk-user .out {
+    display: none;
+  }
+  .pk-user {
+    justify-content: center;
+  }
+}
+
+/* ------------------------------------------------------------- top bar */
+.pk-main {
+  min-width: 0;
+  flex: 1;
+}
+.pk-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  height: 72px;
+  padding: 0 40px;
+}
+/* The three top-bar actions are white buttons with a ring, on the grey page. */
+.pk-topbar .pk-topbtn,
+.pk-topbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 48px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  font-size: var(--small-size);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pk-topbar .pk-topbtn:hover,
+.pk-topbar button:hover {
+  background: var(--surface-2);
+}
+
+.pk-page {
+  padding: 0 40px 48px;
+}
+@media (max-width: 1199px) {
+  .pk-topbar {
+    padding: 0 24px;
+  }
+  .pk-page {
+    padding: 0 24px 48px;
+  }
+}
+
+/* --------------------------------------------------------- page header */
+.pk-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-6);
+}
+.pk-head h1 {
+  font-size: 32px;
+  line-height: 38px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.pk-head .sub {
+  margin-top: var(--space-1);
+  font-size: var(--small-size);
+  line-height: var(--small-line);
+  color: var(--text-2);
+}
+.pk-head .actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* --------------------------------------------------------------- cards */
+/* A grey page with white cards needs no elevation to separate them. */
+.pk-card {
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+.pk-cardhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.pk-cardhead h2 {
+  font-size: var(--title-2-size);
+  line-height: var(--title-2-line);
+  font-weight: 800;
+  color: var(--ink);
+}
+
+/* ----------------------------------------------------------- stat tiles */
+.pk-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-4);
+}
+.pk-stat {
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+}
+.pk-stat .lab {
+  display: block;
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  font-weight: 600;
+  color: var(--text-2);
+}
+.pk-stat .val {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 800;
+  color: var(--ink);
+}
+/* A change is never colour alone: the arrow and the word carry it. */
+.pk-stat .chg {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--space-2);
+  font-size: var(--caption-size);
+  line-height: var(--caption-line);
+  color: var(--text-2);
+}
+.pk-stat .chg.up {
+  color: var(--success);
+}
+.pk-stat .chg.down {
+  color: var(--danger);
+}
+/* An empty tile says when the number will appear, rather than sitting at 0. */
+.pk-stat.empty .val {
+  color: var(--disabled);
+}
+
+/* -------------------------------------------------------------- tables */
+.pk-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.pk-table thead th {
+  height: 44px;
+  padding: 0 var(--space-4);
+  background: var(--surface-2);
+  font-size: var(--caption-size);
+  font-weight: 600;
+  color: var(--text-2);
+  text-align: left;
+  white-space: nowrap;
+}
+.pk-table thead th:first-child {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+.pk-table thead th:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.pk-table tbody td {
+  height: 64px;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--small-size);
+  color: var(--text-2);
+  vertical-align: middle;
+}
+.pk-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.pk-table tbody td:first-child {
+  color: var(--ink);
+  font-weight: 600;
+}
+.pk-table tbody tr:hover td {
+  background: var(--surface-2);
+}
+
+/* ------------------------------------------------------------- notices */
+.pk-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  font-size: var(--small-size);
+  line-height: var(--small-line);
+}
+.pk-notice .ic {
+  flex: none;
+  margin-top: 2px;
+}
+.pk-notice .txt {
+  flex: 1;
+  min-width: 0;
+}
+.pk-notice b {
+  display: block;
+  font-weight: 700;
+}
+.pk-notice-info {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.pk-notice-info b {
+  color: var(--ink);
+}
+.pk-notice-warn {
+  background: var(--warning-tint);
+  color: var(--warning);
+}
+.pk-notice-ok {
+  background: var(--success-tint);
+  color: var(--success);
+}
+
+/* -------------------------------------------------------------- badges */
+.pk-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--caption-size);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.pk-badge-neutral {
+  background: var(--surface-3);
+  color: var(--text-2);
+}
+.pk-badge-ok {
+  background: var(--success-tint);
+  color: var(--success);
+}
+.pk-badge-warn {
+  background: var(--warning-tint);
+  color: var(--warning);
+}
+.pk-badge-bad {
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+.pk-badge-brand {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+/**
+ * Every table in the portal, without touching each one's markup.
+ *
+ * The kit asks for a grey 44-tall header row with 14px labels, 64-tall body
+ * rows with a hairline between them, and the first column bold. Tables are
+ * built in a dozen places with their own Tailwind classes; setting the shape
+ * here means they all get it, and a new one is right by default.
+ */
+.pk-shell table thead tr {
+  background: var(--surface-2);
+}
+.pk-shell table thead th {
+  height: 44px;
+  padding: 0 var(--space-4);
+  font-size: var(--caption-size);
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text-2);
+  border-bottom: 0;
+  white-space: nowrap;
+}
+.pk-shell table thead th:first-child {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+.pk-shell table thead th:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.pk-shell table tbody td {
+  height: 64px;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--small-size);
+  color: var(--text-2);
+  border-bottom: 1px solid var(--line);
+}
+.pk-shell table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.pk-shell table tbody td:first-child {
+  color: var(--ink);
+  font-weight: 600;
 }

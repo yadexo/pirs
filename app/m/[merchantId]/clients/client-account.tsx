@@ -108,7 +108,7 @@ export function ClientAccountPanel({
     <div className="space-y-5">
       <section className="space-y-3">
         <div className="rounded-[12px] border border-border bg-app px-4 py-3">
-          <span className="block text-[11px] uppercase tracking-wide text-ink-faint">Account credit</span>
+          <span className="block text-[11px] uppercase tracking-wide text-ink-faint">Credit</span>
           <span className="tabular block text-[22px] font-semibold">{formatMoney(account.creditCents, currency)}</span>
         </div>
 

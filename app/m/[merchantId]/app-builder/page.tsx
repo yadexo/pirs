@@ -48,8 +48,11 @@ export default async function AppBuilderPage({
   const currency = branding?.currency ?? DEFAULT_CURRENCY;
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-6">
-      <MerchantPageHeader title="App Builder" merchantName={ctx.merchantName} />
+    <div className="mx-auto max-w-[1180px]">
+      <MerchantPageHeader
+        title="App Builder"
+        description="Everything your clients see in the app. Changes go live as soon as you save."
+      />
 
       <div className="mt-5 flex items-end justify-between border-b border-border">
         <nav className="no-scrollbar flex gap-5 overflow-x-auto">

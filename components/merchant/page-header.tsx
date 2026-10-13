@@ -1,37 +1,31 @@
 import * as React from "react";
-import { ScanQrButton } from "./scan-qr";
-import { RedeemButton } from "./redeem";
 
 /**
- * The top bar shared by every sub-account page: page title on the left,
- * merchant identity, Redeem and Scan QR on the right.
+ * A portal page's header: title, one line of context, actions on the right.
  *
- * Redeem lives here rather than in the sidebar on purpose — the sidebar is a
- * fixed six items, and this is something staff do from whatever page they
- * happen to be on.
+ * Redeem and Scan QR used to live here and are now in the shell's top bar —
+ * they are things somebody at the desk does from whatever page they happen to
+ * be on, so they should not come and go with the page. What is left is the
+ * page's own identity and at most one black button.
  */
 export function MerchantPageHeader({
   title,
-  merchantName,
+  description,
   children,
 }: {
   title: React.ReactNode;
-  merchantName: string;
-  /** Page-specific controls that sit left of the merchant identity. */
+  /** One line saying what this page is for, or what the numbers cover. */
+  description?: React.ReactNode;
+  /** The page's own actions. At most one of them is a Primary. */
   children?: React.ReactNode;
 }) {
   return (
-    <header className="flex flex-wrap items-center justify-between gap-3">
-      <h1 className="text-[26px] font-semibold leading-8">{title}</h1>
-      <div className="flex items-center gap-2">
-        {children}
-        <span className="hidden text-[13px] text-ink-muted sm:inline">{merchantName}</span>
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-soft text-[11px] font-semibold text-primary">
-          {merchantName.charAt(0).toUpperCase()}
-        </span>
-        <RedeemButton />
-        <ScanQrButton />
+    <header className="pk-head">
+      <div className="min-w-0">
+        <h1>{title}</h1>
+        {description && <p className="sub">{description}</p>}
       </div>
+      {children && <div className="actions">{children}</div>}
     </header>
   );
 }

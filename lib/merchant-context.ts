@@ -18,8 +18,12 @@ export interface MerchantContext {
   /** Non-null only for agency admins, for the sidebar switcher. */
   switchableMerchants: SwitchableMerchant[] | null;
   support: SupportLink | null;
+  /** The clinic's own colour, for the portal shell's brand roles. */
+  accentColor: string | null;
+  /** The clinic's slug, for the top bar's "View app". */
+  merchantSlug: string;
   /** Who is looking, from the live account — for showing or hiding edit controls. */
-  viewer: { role: LiveAccount["role"]; permissions: LiveAccount["permissions"] };
+  viewer: { name: string; role: LiveAccount["role"]; permissions: LiveAccount["permissions"] };
 }
 
 /**
@@ -74,11 +78,13 @@ export async function requireMerchantContext(merchantId: string): Promise<Mercha
   return {
     merchantId,
     merchantName: merchant.branding?.businessName ?? merchant.name,
+    accentColor: merchant.branding?.primaryColor ?? null,
+    merchantSlug: merchant.slug,
     db: getTenantDb(merchantId),
     impersonating,
     switchableMerchants,
     support,
-    viewer: { role: user.role, permissions: user.permissions },
+    viewer: { name: user.name ?? user.email ?? "", role: user.role, permissions: user.permissions },
   };
 }
 

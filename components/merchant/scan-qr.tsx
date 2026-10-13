@@ -40,7 +40,7 @@ export function ScanQrButton() {
       <Button size="sm" onClick={() => setOpen(true)}>
         <QrCode className="h-3.5 w-3.5" /> Scan QR
       </Button>
-      <Drawer open={open} onClose={() => setOpen(false)} title="Check in a client" subtitle="Scan the code in their app." width="max-w-md">
+      <Drawer open={open} onClose={() => setOpen(false)} title="Check in a client" subtitle="Scan the code in their app.">
         {open && <CheckInFlow merchantId={merchantId} onClose={() => setOpen(false)} />}
       </Drawer>
     </>

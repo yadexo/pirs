@@ -194,7 +194,7 @@ function ClientDrawer({
   }, [client]);
 
   return (
-    <Drawer open={!!client} onClose={onClose} title={client?.name ?? ""} subtitle={client?.email} width="max-w-xl">
+    <Drawer open={!!client} onClose={onClose} title={client?.name ?? ""} subtitle={client?.email} width="max-w-[560px]">
       {client && (
         <>
           <div className="mb-4 flex gap-4 border-b border-border">
@@ -219,7 +219,7 @@ function ClientDrawer({
               <Row label="Last visit" value={date(client.lastVisit)} />
               <Row label="Joined" value={date(client.joined)} />
               <Row label="Loyalty points" value={`${client.points} pts`} />
-              <Row label="Account credit" value={formatMoney(client.creditCents)} />
+              <Row label="Credit" value={formatMoney(client.creditCents)} />
               <Row label="Membership" value={client.isMember ? "Active" : "None"} />
             </dl>
           ) : tab === "account" ? (

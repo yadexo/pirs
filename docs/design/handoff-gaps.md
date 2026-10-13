@@ -81,8 +81,27 @@ The handoff's shop shows single treatments only. The app sells session packages
 and those need their own card, their own detail state and their own place on the
 client record. Later stage.
 
-## Settings placeholders
+## The portal's sidebar is six items, not the handoff's four
 
-Nine App Builder → Settings sections and the portal's own settings are not in
-the handoff at all. They are real screens with real forms; they will need a
-design pass of their own rather than being derived from the client app's.
+The handoff's sidebar is Dashboard, Clients, App Builder, Shop Summary. The
+portal's is Home, Appointments, Client Profiles, Shop Summary, Memberships,
+App Builder — six, fixed, and enforced by `tests/nav.test.ts` so that it cannot
+quietly grow. Appointments and Memberships are real pages with no home in the
+handoff's four.
+
+Reconciling them is an information-architecture decision, not a visual one:
+either those two pages move inside Clients and App Builder, or the handoff's
+sidebar gains them. Stage 5 left the six as they are and restyled them.
+
+## Settings sections are not placeholders
+
+An earlier note here said the nine App Builder → Settings sections were
+placeholder text. They are not, and have not been for some time: General,
+Branding, Team, Locations, Loyalty rules, Booking, Notifications, Integrations
+and Audit log all read and write real data. Nothing in stage 5 had to be left
+as a placeholder.
+
+What the handoff adds to them is new behaviour rather than new styling — the
+per-treatment booking links that Booking's notice counts, the Text check in the
+offer and product editors, and session package transfer and expiry. Those are
+features, and were explicitly outside stage 5.

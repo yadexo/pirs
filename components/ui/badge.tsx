@@ -3,13 +3,14 @@ import { cn } from "@/lib/utils";
 
 type Tone = "neutral" | "success" | "warning" | "danger" | "info" | "brand";
 
+/** Always a labelled badge; the colour repeats the word, it never replaces it. */
 const toneClasses: Record<Tone, string> = {
-  neutral: "bg-surface-subtle text-ink-muted",
-  success: "bg-success/10 text-success",
-  warning: "bg-warning/10 text-warning",
-  danger: "bg-danger/10 text-danger",
-  info: "bg-info/10 text-info",
-  brand: "bg-brand-primary/10 text-brand-primary",
+  neutral: "bg-[var(--surface-3)] text-[var(--text-2)]",
+  success: "bg-[var(--success-tint)] text-[var(--success)]",
+  warning: "bg-[var(--warning-tint)] text-[var(--warning)]",
+  danger: "bg-[var(--danger-tint)] text-[var(--danger)]",
+  info: "bg-[var(--surface-2)] text-[var(--text-2)]",
+  brand: "bg-[var(--brand-soft)] text-[var(--brand-strong)]",
 };
 
 export function Badge({
@@ -20,7 +21,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium",
+        "inline-flex h-[26px] items-center gap-1 rounded-[8px] px-2 text-[14px] font-bold",
         toneClasses[tone],
         className,
       )}

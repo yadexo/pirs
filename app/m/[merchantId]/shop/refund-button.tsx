@@ -69,7 +69,7 @@ export function RefundButton({ merchantId, orderId, orderNumber }: { merchantId:
       <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>
         Refund
       </Button>
-      <Drawer open={open} onClose={() => setOpen(false)} title={`Refund ${orderNumber}`} subtitle="The money goes back to the client's card." width="max-w-md">
+      <Drawer open={open} onClose={() => setOpen(false)} title={`Refund ${orderNumber}`} subtitle="The money goes back to the client's card.">
         {info === "loading" ? (
           <div className="flex h-32 items-center justify-center text-ink-muted">
             <Loader2 className="h-4 w-4 animate-spin" />

@@ -337,7 +337,7 @@ export function CatalogTab({
         onClose={close}
         onBack={editor.mode === "open" ? close : undefined}
         title={title}
-        width="max-w-xl"
+        width="max-w-[560px]"
         footer={
           editor.mode === "open" ? (
             <div className="flex w-full flex-wrap items-center justify-between gap-2">

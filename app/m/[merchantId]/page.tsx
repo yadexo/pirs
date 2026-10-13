@@ -28,8 +28,11 @@ export default async function MerchantHomePage({
   const metrics = await getHomeMetrics(ctx.db, range);
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-6">
-      <MerchantPageHeader title={`${greeting()} ${ctx.merchantName} 👋`} merchantName={ctx.merchantName} />
+    <div className="mx-auto max-w-[1180px]">
+      <MerchantPageHeader
+        title={`${greeting()}, ${ctx.merchantName}`}
+        description={`Here's how ${ctx.merchantName} is doing. All amounts include VAT.`}
+      />
 
       <div className="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-3">
         <Panel className="p-5 lg:col-span-2">

@@ -52,7 +52,9 @@ export function SettingsTab({
   stripeNotice: string | null;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-[180px_1fr]">
+    // Second-level navigation on the left, as the handoff draws it; the
+    // section's own header and its one Primary live inside the card.
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-[220px_1fr]">
       <nav className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible" aria-label="Settings sections">
         {SETTINGS_SECTIONS.map((s) => (
           <Link
@@ -60,8 +62,8 @@ export function SettingsTab({
             href={`/m/${merchantId}/app-builder?tab=settings&section=${s.key}`}
             aria-current={section === s.key ? "page" : undefined}
             className={cn(
-              "shrink-0 rounded-[10px] px-3 py-2 text-[13px] transition-colors",
-              section === s.key ? "bg-primary-soft font-medium text-primary" : "text-ink-muted hover:bg-app",
+              "flex h-12 shrink-0 items-center rounded-[14px] px-4 text-[15px] transition-colors",
+              section === s.key ? "bg-[var(--ink)] font-bold text-white" : "text-ink hover:bg-surface",
             )}
           >
             {s.label}
@@ -69,10 +71,10 @@ export function SettingsTab({
         ))}
       </nav>
 
-      <Panel className="p-5">
-        <h3 className="text-[14px] font-medium">{SETTINGS_SECTIONS.find((s) => s.key === section)?.label}</h3>
-        <p className="mt-1 text-[12px] text-ink-muted">{DESCRIPTIONS[section]}</p>
-        <div className="mt-5">
+      <Panel className="p-6">
+        <h3 className="text-[22px] font-extrabold leading-7 text-ink">{SETTINGS_SECTIONS.find((s) => s.key === section)?.label}</h3>
+        <p className="mt-1 text-[15px] text-ink-muted">{DESCRIPTIONS[section]}</p>
+        <div className="mt-6">
           {data.section === "general" && <GeneralSection merchantId={merchantId} data={data} canEdit={canEdit} />}
           {data.section === "branding" && <BrandingSection merchantId={merchantId} data={data} canEdit={canEdit} />}
           {data.section === "team" && <TeamSection merchantId={merchantId} data={data} canEdit={canEdit} />}

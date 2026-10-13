@@ -89,8 +89,8 @@ export default async function ShopSummaryPage({
   });
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-6">
-      <MerchantPageHeader title="Shop Summary" merchantName={ctx.merchantName} />
+    <div className="mx-auto max-w-[1180px]">
+      <MerchantPageHeader title="Shop Summary" description="What sold, and what it came to. All amounts include VAT." />
 
       <div className="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-3">
         <div className="grid grid-cols-2 gap-3 lg:col-span-1">

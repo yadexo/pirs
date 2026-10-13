@@ -39,7 +39,7 @@ export function RedeemButton() {
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
         <Ticket className="h-3.5 w-3.5" /> Redeem
       </Button>
-      <Drawer open={open} onClose={() => setOpen(false)} title="Redeem an item" subtitle="Scan the code in the client's app." width="max-w-md">
+      <Drawer open={open} onClose={() => setOpen(false)} title="Redeem an item" subtitle="Scan the code in the client's app.">
         {open && <RedeemFlow merchantId={merchantId} onClose={() => setOpen(false)} />}
       </Drawer>
     </>

@@ -51,8 +51,8 @@ export default async function AppointmentsPage({
   });
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-6">
-      <MerchantPageHeader title="Appointments" merchantName={ctx.merchantName} />
+    <div className="mx-auto max-w-[1180px]">
+      <MerchantPageHeader title="Appointments" description="What clients have booked, and what they asked for." />
       <AppointmentsView
         merchantId={merchantId}
         status={status}

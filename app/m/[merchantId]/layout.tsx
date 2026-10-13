@@ -17,10 +17,14 @@ export default async function MerchantLayout({
     <MerchantShell
       merchantId={ctx.merchantId}
       merchantName={ctx.merchantName}
+      merchantSlug={ctx.merchantSlug}
+      accentColor={ctx.accentColor}
       support={ctx.support}
       pathname={pathname}
       impersonating={ctx.impersonating}
       switchableMerchants={ctx.switchableMerchants}
+      viewerName={ctx.viewer.name}
+      viewerRole={ctx.viewer.role}
     >
       {children}
     </MerchantShell>
