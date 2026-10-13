@@ -767,6 +767,8 @@ export async function clientOrderReceiptAction(
       nextReward: { name: string; pointsCost: number } | null;
       /** Items this order left the client to collect at the desk. */
       itemsToCollect: number;
+      /** Treatments in this order the clinic gave a booking page. */
+      toBook: { name: string; url: string }[];
     }
 > {
   const { db, user } = await requireCustomerContext();
@@ -780,7 +782,7 @@ export async function clientOrderReceiptAction(
       totalCents: true,
       taxCents: true,
       promotion: { select: { title: true } },
-      items: { select: { name: true, quantity: true, totalCents: true } },
+      items: { select: { name: true, quantity: true, totalCents: true, service: { select: { schedulingUrl: true } } } },
       payments: { where: { status: "SUCCEEDED" }, orderBy: { createdAt: "desc" }, take: 1, select: { method: true, provider: true } },
     },
   });
@@ -814,6 +816,11 @@ export async function clientOrderReceiptAction(
     pointsBalance: balance,
     nextReward: rewards.find((r) => r.pointsCost > balance) ?? null,
     itemsToCollect,
+    // One Book button per treatment that has a page to book on; an order with
+    // none of them leads with the items instead.
+    toBook: order.items
+      .filter((i) => !!i.service?.schedulingUrl)
+      .map((i) => ({ name: i.name, url: i.service!.schedulingUrl! })),
   };
 }
 

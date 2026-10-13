@@ -1,4 +1,7 @@
+import Link from "next/link";
+import { AlertTriangle } from "lucide-react";
 import { requireMerchantContext } from "@/lib/merchant-context";
+import { Button } from "@/components/ui/button";
 import { MerchantPageHeader } from "@/components/merchant/page-header";
 import { Panel } from "@/components/ui/primitives";
 import { LineChart } from "@/components/ui/line-chart";
@@ -25,7 +28,16 @@ export default async function MerchantHomePage({
   const { range = "7d" } = await searchParams;
   const ctx = await requireMerchantContext(merchantId);
 
-  const metrics = await getHomeMetrics(ctx.db, range);
+  const [metrics, unbookable] = await Promise.all([
+    getHomeMetrics(ctx.db, range),
+    // Treatments clients can buy but cannot book. Worth the top of the page:
+    // every one of them is a client left holding something unusable.
+    ctx.db.service.findMany({
+      where: { archivedAt: null, active: true, OR: [{ schedulingUrl: null }, { schedulingUrl: "" }] },
+      orderBy: { name: "asc" },
+      select: { name: true },
+    }),
+  ]);
 
   return (
     <div className="mx-auto max-w-[1180px]">
@@ -33,6 +45,25 @@ export default async function MerchantHomePage({
         title={`${greeting()}, ${ctx.merchantName}`}
         description={`Here's how ${ctx.merchantName} is doing. All amounts include VAT.`}
       />
+
+      {unbookable.length > 0 && (
+        <div className="pk-notice pk-notice-warn mb-6">
+          <AlertTriangle className="ic h-5 w-5" aria-hidden="true" />
+          <div className="txt">
+            <b>
+              Setup: {unbookable.length} treatment{unbookable.length === 1 ? " has" : "s have"} no booking link
+            </b>
+            <span>
+              Clients can buy {unbookable.slice(0, 2).map((s) => s.name).join(" and ")}
+              {unbookable.length > 2 ? ` and ${unbookable.length - 2} more` : ""}, but can&apos;t book {unbookable.length === 1 ? "it" : "them"} from
+              the app.
+            </span>
+          </div>
+          <Link href={`/m/${merchantId}/app-builder?tab=products&type=service`} className="shrink-0">
+            <Button variant="outline">Add booking links</Button>
+          </Link>
+        </div>
+      )}
 
       <div className="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-3">
         <Panel className="p-5 lg:col-span-2">

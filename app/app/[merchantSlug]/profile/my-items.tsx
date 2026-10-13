@@ -26,6 +26,8 @@ export interface ClientItem {
   purchasedAt: string;
   redeemedAt: string | null;
   expiresAt: string | null;
+  /** The clinic's booking page for this treatment, when it has one. */
+  bookingUrl: string | null;
 }
 
 const STATUS_LABEL: Record<ClientItem["status"], string> = {
@@ -85,18 +87,26 @@ export function MyItems({ items }: { items: ClientItem[] }) {
           <h2>Ready to use</h2>
           <div className="list">
             {available.map((item) => (
-              <button key={item.id} type="button" className="row" onClick={() => setOpen(item)}>
-                <span className="thumb" aria-hidden="true">
-                  <Icon name="qr" size={20} />
-                </span>
-                <span className="txt">
-                  <b>{item.name}</b>
-                  {/* Booking links come in a later stage; until then every item
-                      is collected the same way. */}
-                  <span>Show your code at the desk</span>
-                </span>
-                <Icon name="chevR" size={20} />
-              </button>
+              <div key={item.id} className="rowwrap">
+                <button type="button" className="row" onClick={() => setOpen(item)}>
+                  <span className="thumb" aria-hidden="true">
+                    <Icon name="qr" size={20} />
+                  </span>
+                  <span className="txt">
+                    <b>{item.name}</b>
+                    <span>{item.bookingUrl ? "Ready to book" : "Show your code at the desk"}</span>
+                  </span>
+                  <Icon name="chevR" size={20} />
+                </button>
+                {/* Only when the clinic has given this treatment a page to
+                    book on; otherwise the row above is the whole story. */}
+                {item.bookingUrl && (
+                  <a className="book" href={item.bookingUrl} target="_blank" rel="noreferrer">
+                    Book appointment
+                    <Icon name="share" size={16} />
+                  </a>
+                )}
+              </div>
             ))}
           </div>
         </section>

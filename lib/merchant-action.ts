@@ -28,7 +28,18 @@ export interface MerchantActionContext {
 }
 
 /** Thrown for anything the caller should see as a plain message. */
-export class ActionError extends Error {}
+/**
+ * A refusal the client should see. `fieldErrors` puts the message under the
+ * field it is about, which is the difference between "something is wrong" and
+ * "this box needs a link".
+ */
+export class ActionError extends Error {
+  readonly fieldErrors?: Record<string, string>;
+  constructor(message: string, fieldErrors?: Record<string, string>) {
+    super(message);
+    this.fieldErrors = fieldErrors;
+  }
+}
 
 const NOT_ALLOWED = "You don't have access to do that.";
 
@@ -110,7 +121,7 @@ export async function runAction<T extends object>(body: () => Promise<T>): Promi
   try {
     return { ok: true, ...(await body()) };
   } catch (err) {
-    if (err instanceof ActionError) return { error: err.message };
+    if (err instanceof ActionError) return err.fieldErrors ? { error: err.message, fieldErrors: err.fieldErrors } : { error: err.message };
     if (err instanceof z.ZodError) {
       const fieldErrors: Record<string, string> = {};
       for (const issue of err.issues) {

@@ -32,6 +32,8 @@ export interface CatalogItem {
   id: string;
   name: string;
   meta: string;
+  /** Something the clinic must fix before clients can use this. */
+  warning?: string;
   priceCents: number | null;
   active: boolean;
 }
@@ -322,6 +324,7 @@ export function CatalogTab({
                     <span className="block text-[11px] text-ink-muted">{item.meta}</span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
+                    {item.warning && <Pill tone="amber">{item.warning}</Pill>}
                     {item.priceCents !== null && <span className="tabular text-[13px] font-medium">{formatMoney(item.priceCents, currency)}</span>}
                     <Pill tone={item.active ? "green" : "neutral"}>{item.active ? "Visible" : "Hidden"}</Pill>
                   </span>

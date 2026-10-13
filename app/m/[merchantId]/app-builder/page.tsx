@@ -183,7 +183,17 @@ async function loadItems(
       typeFilter === "service" ? [] : db.product.findMany({ where: { archivedAt: null, ...nameFilter }, orderBy: { name: "asc" } }),
     ]);
     return [
-      ...services.map((s) => ({ kind: "service" as const, id: s.id, name: s.name, meta: `Treatment · ${s.durationMinutes} min`, priceCents: s.priceCents, active: s.active })),
+      ...services.map((s) => ({
+        kind: "service" as const,
+        id: s.id,
+        name: s.name,
+        meta: `Treatment · ${s.durationMinutes} min`,
+        // A treatment clients can buy but cannot book: worth saying on the row
+        // rather than only inside the editor.
+        warning: s.schedulingUrl ? undefined : "Booking link missing",
+        priceCents: s.priceCents,
+        active: s.active,
+      })),
       ...products.map((p) => ({ kind: "product" as const, id: p.id, name: p.name, meta: `Product · ${p.inventoryQuantity} in stock`, priceCents: p.priceCents, active: p.active })),
     ];
   }

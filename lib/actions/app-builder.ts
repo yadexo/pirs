@@ -402,6 +402,12 @@ export async function saveServiceAction(merchantId: string, id: string | null, f
       active: formBool(fd, "active"),
     });
     const shared = readShopItemFields(fd);
+    // A treatment is bought in the app and booked on the clinic's own page.
+    // Without the link the client is left holding something they cannot use,
+    // so it is refused here rather than discovered by them later.
+    if (!shared.schedulingUrl) {
+      throw new ActionError("Add the booking link to save.", { schedulingUrl: "Add the link clients use to book this treatment" });
+    }
     const { categoryName, ...fields } = data;
     const values = {
       ...fields,

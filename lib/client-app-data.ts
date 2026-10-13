@@ -37,6 +37,12 @@ export interface RedeemableItemRow {
   purchasedAt: string;
   redeemedAt: string | null;
   expiresAt: string | null;
+  /**
+   * The clinic's own booking page for this treatment, when it has one. Null
+   * for a product, a gift card, or a treatment the clinic has not set a link
+   * for — then the item is collected at the desk and no Book button is shown.
+   */
+  bookingUrl: string | null;
 }
 
 /**
@@ -49,7 +55,19 @@ export async function getRedeemableItems(db: TenantDb, customerProfileId: string
     where: { customerProfileId },
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     take: 60,
-    select: { id: true, name: true, status: true, code: true, token: true, createdAt: true, redeemedAt: true, expiresAt: true },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      code: true,
+      token: true,
+      createdAt: true,
+      redeemedAt: true,
+      expiresAt: true,
+      // Through the line it was sold on, so a treatment renamed since still
+      // points at the right booking page.
+      orderItem: { select: { service: { select: { schedulingUrl: true } } } },
+    },
   });
   return rows.map((r) => ({
     id: r.id,
@@ -60,6 +78,7 @@ export async function getRedeemableItems(db: TenantDb, customerProfileId: string
     purchasedAt: r.createdAt.toISOString(),
     redeemedAt: r.redeemedAt?.toISOString() ?? null,
     expiresAt: r.expiresAt?.toISOString() ?? null,
+    bookingUrl: r.orderItem?.service?.schedulingUrl || null,
   }));
 }
 

@@ -151,7 +151,17 @@ describe("clinic product panel", () => {
     const res = await B.saveServiceAction(
       clinic,
       null,
-      form({ name: "Borrowed", categoryName: "Injectables", price: "100", practitionerId: rivalPractitionerId, active: "on", taxable: "on" }),
+      // A booking link too, so this exercises the practitioner check rather
+      // than stopping at the missing-link one.
+      form({
+        name: "Borrowed",
+        categoryName: "Injectables",
+        price: "100",
+        schedulingUrl: "https://clinic.example/book",
+        practitionerId: rivalPractitionerId,
+        active: "on",
+        taxable: "on",
+      }),
     );
     expect(res).toMatchObject({ fieldErrors: { practitionerId: expect.stringMatching(/no longer works here/) } });
   });

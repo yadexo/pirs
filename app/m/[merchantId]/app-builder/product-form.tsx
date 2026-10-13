@@ -444,16 +444,25 @@ export function ProductPanelForm({ merchantId, currency, item, options, errors, 
           </datalist>
         </div>
         <TextAreaField label="Product description" name="description" defaultValue={str(item.description)} errors={errors} rows={5} />
-        <TextField
-          label="Scheduling link"
-          name="schedulingUrl"
-          type="url"
-          inputMode="url"
-          placeholder="https://"
-          defaultValue={str(item.schedulingUrl)}
-          errors={errors}
-          hint="Optional. Where clients book this, if you book outside the app."
-        />
+        {/*
+          A treatment is bought in the app and booked on the clinic's own
+          page, so without this the client is left holding something they
+          cannot use. Products and gift cards are collected at the desk and
+          have nothing to book, so they do not show the field at all.
+        */}
+        {kind === "service" ? (
+          <TextField
+            label="Booking link"
+            name="schedulingUrl"
+            type="url"
+            inputMode="url"
+            placeholder="https://"
+            defaultValue={str(item.schedulingUrl)}
+            errors={errors}
+            required
+            hint="Opens your own booking page. Clients go there after they buy, from My items and from the payment screen."
+          />
+        ) : null}
         <TagPicker saved={options.tags} initial={savedTags} />
         <>
           <TextField

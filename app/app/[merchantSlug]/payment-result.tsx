@@ -106,6 +106,7 @@ export function PaymentResult({
 
   const method = receipt?.paymentMethod ? (METHOD_NAMES[receipt.paymentMethod] ?? receipt.paymentMethod) : null;
   const nextReward = receipt?.nextReward ?? null;
+  const toBook = receipt?.toBook ?? [];
   const progress = nextReward ? Math.min(100, Math.round((receipt!.pointsBalance / nextReward.pointsCost) * 100)) : 0;
 
   const body = (
@@ -144,22 +145,51 @@ export function PaymentResult({
             </p>
           </div>
 
-          {/* Next step. Booking links come in a later stage; until then every
-              order ends the same way — collect it at the desk. */}
+          {/*
+            The next step is whatever is actually left to do. A treatment the
+            clinic gave a booking page to is booked — one button per treatment,
+            because an order with three of them needs three appointments. An
+            order with none leads with the items, which are collected at the
+            desk, and so does a clinic that has set no links at all.
+          */}
           <div className="v2-next">
             <div className="top">
               <span className="ic" aria-hidden="true">
-                <Icon name="qr" size={22} />
+                <Icon name={toBook.length > 0 ? "calendar" : "qr"} size={22} />
               </span>
               <span>
                 <span className="lead">Next step</span>
-                <b>Your items are ready</b>
+                <b>
+                  {toBook.length === 0
+                    ? "Your items are ready"
+                    : toBook.length === 1
+                      ? "Book your treatment"
+                      : "Book your treatments"}
+                </b>
               </span>
             </div>
-            <p>Show your code at the desk when you visit.</p>
-            <Button variant="grey" className="go" onClick={() => router.push(`${base}/profile?tab=items`)}>
-              View my items
-            </Button>
+            {toBook.length === 0 ? (
+              <>
+                <p>Show your code at the desk when you visit.</p>
+                <Button variant="grey" className="go" onClick={() => router.push(`${base}/profile?tab=items`)}>
+                  View my items
+                </Button>
+              </>
+            ) : (
+              <>
+                {/* Anything else in the same order is still waiting at the desk. */}
+                {receipt && receipt.itemsToCollect > toBook.length && <p>The rest of your order is ready at the desk.</p>}
+                <div className="books">
+                  {toBook.map((t) => (
+                    <a key={t.url + t.name} className="book" href={t.url} target="_blank" rel="noreferrer">
+                      <span>{t.name}</span>
+                      <b>Book</b>
+                    </a>
+                  ))}
+                </div>
+                <p className="later">You can also book later in My items.</p>
+              </>
+            )}
           </div>
 
           {receipt && receipt.pointsEarned > 0 && (

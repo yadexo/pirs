@@ -148,14 +148,19 @@ export function HomeView({
                     {formatShortDay(b.lastBoughtAt, timeZone)} · {money(b.lastPaidCents, currency)}
                   </span>
                 </div>
-                <Button
-                  variant="outline"
-                  className="again"
-                  loading={busy === b.id}
-                  onClick={() => void add(b.kind, b.id, b.name)}
-                >
-                  Buy again
-                </Button>
+                <div className="acts">
+                  <Button variant="outline" className="again" loading={busy === b.id} onClick={() => void add(b.kind, b.id, b.name)}>
+                    Buy again
+                  </Button>
+                  {/* Side by side when the clinic gave this treatment a page
+                      to book on; Buy again alone when it did not. */}
+                  {b.bookingUrl && (
+                    <a className="bookagain" href={b.bookingUrl} target="_blank" rel="noreferrer">
+                      Book
+                      <Icon name="share" size={14} />
+                    </a>
+                  )}
+                </div>
               </div>
             ))}
           </div>

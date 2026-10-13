@@ -3860,3 +3860,76 @@
 /* The membership tab keeps its current cards: the clinic portal stage has not
    reached it, and its aliases still resolve. Only its gutter is aligned with
    the other two tabs. */
+
+/* ---------------------------------------------- booking links per treatment */
+/**
+ * A treatment is bought in the app and booked on the clinic's own page, so
+ * these all open a link the clinic set. None of them appear for a treatment
+ * with no link, or for a product — those are collected at the desk, and a
+ * button that went nowhere would be worse than no button.
+ */
+.client-app .v2-items .rowwrap + .rowwrap {
+  border-top: 1px solid var(--line);
+}
+.client-app .v2-items .rowwrap .book {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: 48px;
+  margin: 0 var(--space-4) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--ink);
+  color: #ffffff;
+  font-size: var(--small-size);
+  font-weight: 700;
+}
+.client-app .v2-next .books {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+.client-app .v2-next .book {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: var(--small-size);
+}
+.client-app .v2-next .book b {
+  flex: none;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: var(--caption-size);
+  font-weight: 700;
+}
+.client-app .v2-next .later {
+  font-size: var(--caption-size);
+  color: rgba(255, 255, 255, 0.72);
+}
+.client-app .v2-again .acts {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+.client-app .v2-again .bookagain {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--ink);
+  color: #ffffff;
+  font-size: var(--caption-size);
+  font-weight: 700;
+  white-space: nowrap;
+}

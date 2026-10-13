@@ -62,8 +62,19 @@ describe("App Builder actions", () => {
     await rawDb.user.deleteMany({ where: { id: { in: [agencyId] } } });
   });
 
+  // A treatment now needs the clinic's own booking page before it can be
+  // saved — see "refuses a treatment with no booking link" below.
   const service = (over: Record<string, string | boolean | undefined> = {}) =>
-    fd({ name: "Consultation", categoryName: "General", durationMinutes: "45", price: "60", active: true, taxable: true, ...over });
+    fd({
+      name: "Consultation",
+      categoryName: "General",
+      durationMinutes: "45",
+      price: "60",
+      schedulingUrl: "https://clinic.example/book",
+      active: true,
+      taxable: true,
+      ...over,
+    });
 
   describe("services and products", () => {
     it("creates a service, with its category, visible to the client app's query", async () => {
@@ -154,6 +165,26 @@ describe("App Builder actions", () => {
 
       const trail = await rawDb.priceHistory.findMany({ where: { productId: id }, orderBy: { recordedAt: "asc" } });
       expect(trail.map((r) => r.priceCents)).toEqual([4900, 3900]);
+    });
+
+    /**
+     * A treatment is bought in the app and booked on the clinic's own page.
+     * Saving one without that page leaves a client holding something they
+     * cannot use, so it is refused at the form rather than discovered later.
+     */
+    it("refuses a treatment with no booking link, and says which field", async () => {
+      signIn("owner");
+      const res = await A.saveServiceAction(clinic, null, service({ name: "Unbookable", schedulingUrl: undefined }));
+      expect(res).toMatchObject({ error: expect.stringMatching(/booking link/i) });
+      expect((res as { fieldErrors?: Record<string, string> }).fieldErrors?.schedulingUrl).toMatch(/book/i);
+      expect(await rawDb.service.findFirst({ where: { tenantId: clinic, name: "Unbookable" } })).toBeNull();
+    });
+
+    it("still saves a product without one, because there is nothing to book", async () => {
+      signIn("owner");
+      expect(await A.saveProductAction(clinic, null, fd({ name: "No booking needed", categoryName: "Care", price: "10", inventoryQuantity: "1", active: true }))).toMatchObject({
+        ok: true,
+      });
     });
 
     it("rejects a duplicate SKU with a field message instead of crashing", async () => {
