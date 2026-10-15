@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { clientBasePath, currentClientBasePath, getPublicClinic, shortAppName } from "@/lib/public-clinic";
 import { clientAppScope } from "@/lib/portal-hosts";
 import { InstallPrompt, ServiceWorker } from "@/components/client-app/pwa";
+import { LaunchImageLinks, Splash } from "@/components/client-app/splash";
 import { ZoomLock } from "@/components/client-app/zoom-lock";
 import { clientAppViewport } from "@/lib/client-app-viewport";
 import { getClientSummary, getRewardsData } from "@/lib/client-app-data";
@@ -66,9 +67,19 @@ export default async function ClientAppLayout({
     "--merchant-accent": ctx.merchant.accentColor ?? undefined,
   } as React.CSSProperties;
 
+  // Cached per request — generateMetadata above already called this once.
+  const publicClinic = await getPublicClinic(merchantSlug);
+  const splash = (
+    <>
+      <Splash name={ctx.merchant.name} logoUrl={ctx.merchant.appIconUrl} color={ctx.merchant.accentColor} background={ctx.merchant.launchBackground} />
+      {publicClinic && <LaunchImageLinks base={base} version={publicClinic.version} />}
+    </>
+  );
+
   if (!ctx.customerProfileId) {
     return (
       <div className="client-app" style={style}>
+        {splash}
         <Onboarding merchantSlug={merchantSlug} merchantName={ctx.merchant.name} logoUrl={ctx.merchant.logoUrl} />
         <ServiceWorker scope={scope} />
         <ZoomLock />
@@ -88,6 +99,7 @@ export default async function ClientAppLayout({
 
   return (
     <div className="client-app" style={style}>
+      {splash}
       <ClientAppShell
         base={base}
         merchantSlug={merchantSlug}

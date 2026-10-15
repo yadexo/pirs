@@ -85,6 +85,15 @@
   --radius-2xl: 32px;
   --radius-full: 999px;
 
+  /* --------------------------------------------------------------- motion */
+  /* One pair of tokens for every sheet, screen fade and splash animation in
+     the client app, so "smooth and short" means the same thing everywhere.
+     Reduce Motion is handled once, globally, in client-app.css — nothing
+     that uses these needs its own media query. */
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+  --ease-standard: cubic-bezier(0.32, 0.72, 0, 1);
+
   /* ----------------------------------------------------------- elevation */
   /* Cards are grey fills, so "flat" really is nothing. */
   --elev-flat: none;

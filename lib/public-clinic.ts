@@ -11,6 +11,8 @@ export interface PublicClinic {
   appIconUrl: string | null;
   logoUrl: string | null;
   color: string | null;
+  /** "brand" | "white" — the launch screen's background behind the logo. */
+  launchBackground: string;
   /** Changes whenever branding changes — used to bust cached icons. */
   version: string;
 }
@@ -27,7 +29,7 @@ export const getPublicClinic = cache(async (slug: string): Promise<PublicClinic 
       slug: true,
       name: true,
       status: true,
-      branding: { select: { businessName: true, appIconUrl: true, logoUrl: true, primaryColor: true, updatedAt: true } },
+      branding: { select: { businessName: true, appIconUrl: true, logoUrl: true, primaryColor: true, launchBackground: true, updatedAt: true } },
     },
   });
   if (!tenant || tenant.status !== "ACTIVE") return null;
@@ -39,6 +41,7 @@ export const getPublicClinic = cache(async (slug: string): Promise<PublicClinic 
     appIconUrl: b?.appIconUrl ?? null,
     logoUrl: b?.logoUrl ?? null,
     color: b?.primaryColor ?? null,
+    launchBackground: b?.launchBackground ?? "brand",
     version: String(b?.updatedAt.getTime() ?? 0),
   };
 });

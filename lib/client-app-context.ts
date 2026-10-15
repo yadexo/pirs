@@ -12,7 +12,10 @@ export interface ClientAppMerchant {
   slug: string;
   name: string;
   logoUrl: string | null;
+  appIconUrl: string | null;
   accentColor: string | null;
+  /** "brand" | "white" — the launch screen's background behind the logo. */
+  launchBackground: string;
   currency: string;
   contactPhone: string | null;
   addressLine1: string | null;
@@ -55,7 +58,9 @@ export async function getClientAppContext(merchantSlug: string): Promise<ClientA
     slug: tenant.slug,
     name: branding?.businessName ?? tenant.name,
     logoUrl: branding?.logoUrl ?? null,
+    appIconUrl: branding?.appIconUrl ?? null,
     accentColor: branding?.primaryColor ?? null,
+    launchBackground: branding?.launchBackground ?? "brand",
     currency: branding?.currency ?? DEFAULT_CURRENCY,
     contactPhone: branding?.contactPhone ?? null,
     addressLine1: branding?.addressLine1 ?? null,

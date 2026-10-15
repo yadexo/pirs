@@ -135,6 +135,9 @@ model TenantBranding {
   secondaryColor String  @default("#0891b2")
   accentColor    String  @default("#f59e0b")
   coverImageUrl  String?
+  /// The launch screen's background, behind the app icon: the brand colour
+  /// above, or white when that reads better against the logo. "brand" | "white".
+  launchBackground String @default("brand")
 
   contactEmail String?
   contactPhone String?

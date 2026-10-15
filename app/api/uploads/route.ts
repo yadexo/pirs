@@ -89,8 +89,12 @@ async function appIconProblem(buffer: Buffer): Promise<string | null> {
   try {
     const { width, height } = await sharp(buffer).metadata();
     if (!width || !height) return "That file isn't an image we can read.";
-    if (width !== height) return `App icons must be square. This one is ${width}×${height}.`;
-    if (width < MIN_APP_ICON_PX) return `App icons must be at least ${MIN_APP_ICON_PX}×${MIN_APP_ICON_PX} pixels (1024×1024 is best). This one is ${width}×${height}.`;
+    // Square isn't required any more: a non-square upload is centred on the
+    // brand colour instead of cropped (lib/app-icon.ts). Both sides still
+    // need enough resolution to read sharply at the 180pt iOS renders it at.
+    if (width < MIN_APP_ICON_PX || height < MIN_APP_ICON_PX) {
+      return `App icons must be at least ${MIN_APP_ICON_PX}×${MIN_APP_ICON_PX} pixels (1024×1024 square is best). This one is ${width}×${height}.`;
+    }
     return null;
   } catch {
     return "That file isn't an image we can read.";

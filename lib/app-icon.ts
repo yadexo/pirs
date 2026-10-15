@@ -79,13 +79,23 @@ export async function renderAppIcon(
 
   if (source) {
     try {
+      // A square upload fills the tile edge to edge, same as always, on the
+      // same white backing transparency has always flattened to. A non-square
+      // one (a wordmark, a logo on a wide lockup) would lose its edges to
+      // that same crop, so it's centred on the brand colour instead — never
+      // cropped into something the clinic didn't upload.
+      const { width, height } = await sharp(source).metadata();
+      const square = !!width && !!height && Math.abs(width - height) / Math.max(width, height) < 0.02;
+      const fit = square ? ("cover" as const) : ("contain" as const);
+      const canvas = square ? "#ffffff" : background;
+
       if (!maskable) {
         // iOS rounds the corners itself and shows transparency as black.
-        return await sharp(source).resize(size, size, { fit: "cover" }).flatten({ background: "#ffffff" }).png().toBuffer();
+        return await sharp(source).resize(size, size, { fit, background: canvas }).flatten({ background: canvas }).png().toBuffer();
       }
       const inner = Math.round(size * 0.8);
-      const art = await sharp(source).resize(inner, inner, { fit: "cover" }).png().toBuffer();
-      return await sharp({ create: { width: size, height: size, channels: 4, background: "#ffffff" } })
+      const art = await sharp(source).resize(inner, inner, { fit, background: canvas }).png().toBuffer();
+      return await sharp({ create: { width: size, height: size, channels: 4, background: canvas } })
         .composite([{ input: art, gravity: "center" }])
         .png()
         .toBuffer();
@@ -97,5 +107,44 @@ export async function renderAppIcon(
   const text = escapeXml(monogram(name));
   const fontSize = Math.round(size * (maskable ? 0.32 : 0.4) * (text.length > 1 ? 0.85 : 1));
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><rect width="100%" height="100%" fill="${background}"/><text x="50%" y="50%" dy="0.35em" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="${fontSize}" fill="#ffffff">${text}</text></svg>`;
+  return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+/**
+ * The static image iOS shows the instant the installed app opens, before any
+ * of this app's own HTML or JS exists — the same logo and background as
+ * `<Splash>` (components/client-app/splash.tsx), pre-rendered per screen size
+ * so there is nothing to compute at launch.
+ */
+export async function renderLaunchImage(
+  source: Buffer | null,
+  { width, height }: { width: number; height: number },
+  { name, color, background }: { name: string; color: string | null; background: string },
+): Promise<Buffer> {
+  const canvas = background === "white" ? "#ffffff" : color && HEX.test(color) ? color : "#0b0d12";
+  const onCanvas = canvas === "#ffffff" ? "#111318" : "#ffffff";
+  // About a third of the shorter edge — big enough to read on a dark lock
+  // screen flash of a launch, small enough not to look like an app icon.
+  const mark = Math.round(Math.min(width, height) * 0.32);
+
+  const art =
+    (source &&
+      (await sharp(source)
+        .resize(mark, mark, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .png()
+        .toBuffer()
+        .catch(() => null))) ||
+    (await monogramTile(mark, name, onCanvas));
+
+  return sharp({ create: { width, height, channels: 4, background: canvas } })
+    .composite([{ input: art, gravity: "center" }])
+    .png()
+    .toBuffer();
+}
+
+async function monogramTile(size: number, name: string, textColor: string): Promise<Buffer> {
+  const text = escapeXml(monogram(name));
+  const fontSize = Math.round(size * 0.55);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><text x="50%" y="50%" dy="0.35em" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="${fontSize}" fill="${textColor}">${text}</text></svg>`;
   return sharp(Buffer.from(svg)).png().toBuffer();
 }

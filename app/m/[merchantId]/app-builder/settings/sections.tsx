@@ -6,6 +6,7 @@ import { Check, Copy, Download, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Drawer, Pill } from "@/components/ui/primitives";
+import { cn } from "@/lib/utils";
 import {
   CheckboxField,
   FormSection,
@@ -204,10 +205,62 @@ export function GeneralSection({ merchantId, data, canEdit }: { merchantId: stri
 // Branding
 // ---------------------------------------------------------------------------
 
+/** A rough approximation of the generated icon — the real one (lib/app-icon.ts)
+ *  always does the right thing regardless of how close this preview gets. */
+function HomeScreenIconPreview({ logoUrl, color, name }: { logoUrl: string | null; color: string; name: string }) {
+  return (
+    <div
+      className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden shadow-sm"
+      style={{ borderRadius: "22%", background: color }}
+      aria-hidden="true"
+    >
+      {logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={logoUrl} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <span className="text-[22px] font-bold text-white">{(name || "C").charAt(0).toUpperCase()}</span>
+      )}
+    </div>
+  );
+}
+
+function LaunchScreenPreview({
+  logoUrl,
+  color,
+  name,
+  background,
+}: {
+  logoUrl: string | null;
+  color: string;
+  name: string;
+  background: "brand" | "white";
+}) {
+  const bg = background === "white" ? "#ffffff" : color;
+  const onBg = background === "white" ? "#111318" : "#ffffff";
+  return (
+    <div
+      className="flex h-28 w-16 shrink-0 flex-col items-center justify-center rounded-[14px] border border-border shadow-sm"
+      style={{ background: bg }}
+      aria-hidden="true"
+    >
+      {logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={logoUrl} alt="" className="h-8 w-8 object-contain" />
+      ) : (
+        <span className="text-[16px] font-bold" style={{ color: onBg }}>
+          {(name || "C").charAt(0).toUpperCase()}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function BrandingSection({ merchantId, data, canEdit }: { merchantId: string; data: Data<"branding">; canEdit: boolean }) {
   const b = data.branding;
   const [color, setColor] = React.useState(str(b?.primaryColor) || "#0f766e");
   const [name, setName] = React.useState(str(b?.businessName));
+  const [appIconUrl, setAppIconUrl] = React.useState<string | null>(b?.appIconUrl ?? null);
+  const [launchBackground, setLaunchBackground] = React.useState<"brand" | "white">(b?.launchBackground === "white" ? "white" : "brand");
   const { currencies, timeZones } = data;
 
   return (
@@ -225,8 +278,13 @@ export function BrandingSection({ merchantId, data, canEdit }: { merchantId: str
                 purpose="app-icon"
                 defaultValue={b?.appIconUrl}
                 errors={errors}
-                hint="Square, at least 512×512 (1024×1024 is best). Becomes the icon when clients add your app to their home screen."
+                onChange={(urls) => setAppIconUrl(urls[0] ?? null)}
+                hint="At least 512×512. Square fills the icon edge to edge; any other shape is centred on your brand colour. Becomes the icon when clients add your app to their home screen."
               />
+            </div>
+            <div className="flex items-center gap-3">
+              <HomeScreenIconPreview logoUrl={appIconUrl} color={color} name={name} />
+              <p className="max-w-xs text-[12px] text-ink-muted">How this looks as a home-screen icon, rounded the way iOS rounds it.</p>
             </div>
             <div className="flex flex-wrap items-end gap-4">
               <div>
@@ -268,6 +326,36 @@ export function BrandingSection({ merchantId, data, canEdit }: { merchantId: str
                 </span>
               </div>
             </div>
+          </FormSection>
+          <FormSection title="Launch screen">
+            <p className="-mt-1 text-[12px] text-ink-muted">What clients see for an instant when they open your installed app — your app icon above, centred on a background you choose.</p>
+            <div className="flex flex-wrap items-center gap-6">
+              <div className="flex gap-3" role="radiogroup" aria-label="Launch screen background">
+                {(["brand", "white"] as const).map((opt) => (
+                  <label
+                    key={opt}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2 rounded-[10px] border px-3 py-2 text-[13px] font-medium",
+                      launchBackground === opt ? "border-ink" : "border-border",
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="launchBackground"
+                      value={opt}
+                      checked={launchBackground === opt}
+                      onChange={() => setLaunchBackground(opt)}
+                      className="h-3.5 w-3.5"
+                    />
+                    {opt === "brand" ? "Brand colour" : "White"}
+                  </label>
+                ))}
+              </div>
+              <LaunchScreenPreview logoUrl={appIconUrl} color={color} name={name} background={launchBackground} />
+            </div>
+            <p className="rounded-[10px] bg-surface-subtle px-3 py-2 text-[12px] text-ink-muted">
+              Clients need to remove and re-add the app to their home screen to see a new icon.
+            </p>
           </FormSection>
           <FormSection title="Contact">
             <div className="grid gap-3 sm:grid-cols-2">

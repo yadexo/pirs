@@ -211,10 +211,15 @@ describe("clinic settings", () => {
       return { status: res.status, json: (await res.json()) as { error?: string; url?: string } };
     };
 
-    it("refuses non-square and small icons, and accepts a proper one", async () => {
+    it("refuses icons below the minimum size on either side, accepts square or non-square above it", async () => {
       asOwner();
-      expect((await send(await png(600, 400))).json.error).toMatch(/must be square/);
       expect((await send(await png(256, 256))).json.error).toMatch(/at least 512/);
+      expect((await send(await png(1024, 400))).json.error).toMatch(/at least 512/);
+      // Non-square no longer gets rejected — it's centred on the brand colour
+      // instead (lib/app-icon.ts), not cropped.
+      const wide = await send(await png(1024, 600));
+      expect(wide.status).toBe(200);
+      expect(wide.json.url).toMatch(/\.png$/);
       const ok = await send(await png(1024, 1024));
       expect(ok.status).toBe(200);
       expect(ok.json.url).toMatch(/\.png$/);

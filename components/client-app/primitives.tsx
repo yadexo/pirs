@@ -244,7 +244,11 @@ export function BottomSheet({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
+      <div
+        className="absolute inset-0 animate-[sheet-backdrop-in_var(--duration-base)_var(--ease-standard)] bg-black/40"
+        onClick={onClose}
+        aria-hidden="true"
+      />
       <div
         ref={sheetRef}
         role="dialog"
@@ -253,8 +257,8 @@ export function BottomSheet({
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
-        className="safe-bottom relative flex max-h-[88dvh] w-full max-w-[480px] animate-[sheet-in_220ms_cubic-bezier(0.32,0.72,0,1)] flex-col rounded-t-[var(--radius-sheet)] bg-[var(--bg-surface)]"
-        style={{ transform: `translateY(${dragY}px)`, transition: dragY === 0 ? "transform 180ms ease" : "none" }}
+        className="safe-bottom relative flex max-h-[88dvh] w-full max-w-[480px] animate-[sheet-in_var(--duration-base)_var(--ease-standard)] flex-col rounded-t-[var(--radius-sheet)] bg-[var(--bg-surface)]"
+        style={{ transform: `translateY(${dragY}px)`, transition: dragY === 0 ? "transform var(--duration-base) var(--ease-standard)" : "none" }}
       >
         <div className="flex justify-center pt-2.5">
           <span className="h-1 w-9 rounded-full bg-[var(--faint)]" />
@@ -263,7 +267,10 @@ export function BottomSheet({
         <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">{children}</div>
         {footer && <div className="safe-bottom border-t border-[var(--hairline)] px-6 py-4">{footer}</div>}
       </div>
-      <style>{`@keyframes sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }`}</style>
+      <style>{`
+        @keyframes sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes sheet-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+      `}</style>
     </div>
   );
 }

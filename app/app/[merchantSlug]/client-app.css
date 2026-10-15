@@ -386,6 +386,77 @@
   }
 }
 
+/* The launch screen, from components/client-app/splash.tsx. Fixed over
+   everything while it's up; .ca-splash-out plays it back out and the inline
+   script removes the node once that finishes. Reduce Motion kills both
+   animations via this file's one blanket rule, same as everywhere else. */
+.ca-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ca-splash-mark {
+  width: 96px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: ca-splash-in var(--duration-base) var(--ease-standard);
+}
+.ca-splash-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.ca-splash-mark span {
+  font-size: 40px;
+  font-weight: 700;
+}
+.ca-splash-out {
+  animation: ca-splash-fade var(--duration-base) var(--ease-standard) forwards;
+  pointer-events: none;
+}
+@keyframes ca-splash-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes ca-splash-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Every tab and screen gets this once, from app/app/[merchantSlug]/template.tsx
+   — a short fade-and-rise on mount, which Next gives a fresh one of on every
+   navigation (unlike layout.tsx). Reduce Motion is handled by this file's one
+   blanket `prefers-reduced-motion` rule, so this needs no media query of its
+   own — that rule's `!important` wins regardless of where either sits. */
+.ca-page-enter {
+  animation: ca-page-in var(--duration-base) var(--ease-standard);
+}
+@keyframes ca-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* ------------------------------------------------------- GlossSurface */
 .gloss {
   position: relative;

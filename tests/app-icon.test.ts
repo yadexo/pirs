@@ -29,6 +29,24 @@ describe("clinic app icons", () => {
     }
   });
 
+  it("centres a non-square upload on the brand colour instead of cropping it", async () => {
+    // A square source still fills the tile edge to edge — its own colour
+    // should be the corner pixel, not the brand colour.
+    const squareSource = await sharp({ create: { width: 1024, height: 1024, channels: 3, background: "#ff0000" } }).png().toBuffer();
+    const squareOut = await sharp(await renderAppIcon(squareSource, { size: 200, maskable: false }, { name: "Glow", color: "#00ff00" }))
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    expect([...squareOut.data.subarray(0, 3)]).toEqual([255, 0, 0]);
+
+    // A wide, non-square source is padded instead of cropped: the corner is
+    // the brand colour, not the source's own colour.
+    const wideSource = await sharp({ create: { width: 1024, height: 400, channels: 3, background: "#ff0000" } }).png().toBuffer();
+    const wideOut = await sharp(await renderAppIcon(wideSource, { size: 200, maskable: false }, { name: "Glow", color: "#00ff00" }))
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    expect([...wideOut.data.subarray(0, 3)]).toEqual([0, 255, 0]);
+  });
+
   it("falls back to a monogram tile for no icon or a broken upload", async () => {
     for (const source of [null, Buffer.from("not an image")]) {
       const png = await renderAppIcon(source, { size: 192, maskable: false }, { name: "Riverside <Clinic>", color: "#0f766e" });
