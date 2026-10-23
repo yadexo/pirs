@@ -5,10 +5,14 @@ import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { rawDb } from "@/lib/db";
 import { requireRole } from "@/lib/rbac";
-import { hashPassword } from "@/lib/password";
 import { slugify } from "@/lib/utils";
 import { writeAuditLog } from "@/lib/audit";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
+import { issuePasswordToken, INVITE_TTL_MS } from "@/lib/password-tokens";
+import { appUrl } from "@/lib/app-url";
+import { getEmailProvider } from "@/lib/providers/notifications";
+import { senderFor } from "@/lib/emails/sender";
+import { welcomeClinicOwnerEmail } from "@/lib/emails/templates";
 
 const createSchema = z.object({
   name: z.string().min(2, "Business name is required").max(120),
@@ -39,9 +43,6 @@ export async function createMerchantAction(_prevState: unknown, formData: FormDa
   if (await rawDb.tenant.findUnique({ where: { slug } })) {
     slug = `${slug}-${randomBytes(3).toString("hex")}`;
   }
-
-  const tempPassword = randomBytes(9).toString("base64url");
-  const passwordHash = await hashPassword(tempPassword);
 
   const merchant = await rawDb.$transaction(async (tx) => {
     const created = await tx.tenant.create({
@@ -75,7 +76,9 @@ export async function createMerchantAction(_prevState: unknown, formData: FormDa
       data: {
         tenantId: created.id,
         email: parsed.data.contactEmail.toLowerCase(),
-        passwordHash,
+        // Not a hash any password can match; set from the welcome link below.
+        passwordHash: "!invited",
+        status: "INVITED",
         role: "TENANT_ADMIN",
       },
     });
@@ -92,24 +95,51 @@ export async function createMerchantAction(_prevState: unknown, formData: FormDa
       },
     });
 
-    return created;
+    return { tenant: created, ownerId: owner.id };
   });
 
   await writeAuditLog({
-    tenantId: merchant.id,
+    tenantId: merchant.tenant.id,
     actorUserId: user.id,
     actorType: "PLATFORM_ADMIN",
     action: "merchant.created",
     entityType: "Tenant",
-    entityId: merchant.id,
+    entityId: merchant.tenant.id,
+  });
+
+  // A login link, not a password shown on screen or mailed in the clear —
+  // the owner sets their own, the same way a staff invite works.
+  const token = await issuePasswordToken(merchant.ownerId, INVITE_TTL_MS);
+  const loginUrl = `${appUrl()}/set-password?token=${encodeURIComponent(token)}`;
+
+  const agency = await rawDb.agencySettings.findFirst({
+    select: { name: true, senderName: true, logoLightUrl: true, primaryColor: true },
+  });
+  const agencyName = agency?.senderName || agency?.name || "DezaAI";
+  // Same derivation as the owner's own staff profile above — the form has no
+  // separate "your name" field, only the clinic's.
+  const [ownerFirstName] = parsed.data.name.split(" ");
+  const template = welcomeClinicOwnerEmail({
+    branding: { name: agencyName, logoUrl: agency?.logoLightUrl ?? null, color: agency?.primaryColor ?? null },
+    ownerName: ownerFirstName || parsed.data.name,
+    clinicName: parsed.data.name,
+    loginUrl,
+  });
+  const result = await getEmailProvider().send({
+    to: parsed.data.contactEmail,
+    subject: template.subject,
+    body: template.text,
+    html: template.html,
+    from: senderFor(agencyName),
   });
 
   revalidatePath("/agency");
   return {
     success: true as const,
-    merchantId: merchant.id,
+    merchantId: merchant.tenant.id,
     email: parsed.data.contactEmail,
-    tempPassword,
+    loginUrl,
+    emailed: result.status === "SENT",
   };
 }
 

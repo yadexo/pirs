@@ -42,25 +42,33 @@ export async function requestPasswordResetAction(_prev: FormState, fd: FormData)
     where: clinicSlug
       ? { email, role: "CUSTOMER", status: "ACTIVE", tenant: { slug: clinicSlug, status: "ACTIVE" } }
       : { email, role: { in: ["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF"] }, status: "ACTIVE" },
-    select: { id: true, tenant: { select: { name: true, branding: { select: { businessName: true } } } } },
+    select: {
+      id: true,
+      tenant: { select: { name: true, branding: { select: { businessName: true, logoUrl: true, primaryColor: true } } } },
+    },
   });
 
   if (account) {
     const token = await issuePasswordToken(account.id, RESET_TTL_MS);
-    const link = `${appUrl()}/set-password?token=${encodeURIComponent(token)}`;
-    const place = account.tenant?.branding?.businessName ?? account.tenant?.name ?? "your account";
-    await getEmailProvider().send({
-      to: email,
-      subject: `Reset your password for ${place}`,
-      body: [
-        `Someone asked to reset the password for ${place}.`,
-        "",
-        "Choose a new password here. The link works once, for one hour:",
-        link,
-        "",
-        "If this wasn't you, ignore this email and your password stays the same.",
-      ].join("\n"),
-    });
+    const resetUrl = `${appUrl()}/set-password?token=${encodeURIComponent(token)}`;
+
+    // A platform admin has no clinic — the agency's own identity stands in,
+    // the same as the welcome email a new clinic owner gets.
+    let place: string;
+    let branding: { name: string; logoUrl: string | null; color: string | null };
+    if (account.tenant) {
+      place = account.tenant.branding?.businessName ?? account.tenant.name;
+      branding = { name: place, logoUrl: account.tenant.branding?.logoUrl ?? null, color: account.tenant.branding?.primaryColor ?? null };
+    } else {
+      const agency = await rawDb.agencySettings.findFirst({ select: { name: true, senderName: true, logoLightUrl: true, primaryColor: true } });
+      place = agency?.senderName || agency?.name || "DezaAI";
+      branding = { name: place, logoUrl: agency?.logoLightUrl ?? null, color: agency?.primaryColor ?? null };
+    }
+
+    const { passwordResetEmail } = await import("@/lib/emails/templates");
+    const { senderFor } = await import("@/lib/emails/sender");
+    const template = passwordResetEmail({ branding, resetUrl });
+    await getEmailProvider().send({ to: email, subject: template.subject, body: template.text, html: template.html, from: senderFor(place) });
   }
   return { sent: true };
 }

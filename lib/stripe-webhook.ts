@@ -238,7 +238,7 @@ async function activateMembershipPeriod(subscriptionId: string, invoice: Stripe.
     });
     // After the membership is on, and unable to affect it: a notification
     // that fails must not have Stripe retry a payment already applied.
-    await notifyMembershipActive(membership.id).catch((err) =>
+    await notifyMembershipActive(membership.id, paidCents, invoice.currency?.toUpperCase()).catch((err) =>
       console.error("[stripe-webhook] membership notice not sent:", err instanceof Error ? err.message : err),
     );
   }

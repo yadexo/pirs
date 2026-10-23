@@ -10,9 +10,9 @@ import type { ChannelProvider, NotificationSendResult } from "./types";
  * The From domain must be verified in Resend, or delivery is refused.
  */
 export class ResendEmailProvider implements ChannelProvider {
-  async send(params: { to: string; subject?: string; body: string; html?: string }): Promise<NotificationSendResult> {
+  async send(params: { to: string; subject?: string; body: string; html?: string; from?: string }): Promise<NotificationSendResult> {
     const apiKey = process.env.RESEND_API_KEY;
-    const from = process.env.EMAIL_FROM;
+    const from = params.from ?? process.env.EMAIL_FROM;
     if (!apiKey || !from) {
       return { providerMessageId: "", status: "FAILED", error: "RESEND_API_KEY and EMAIL_FROM must both be set." };
     }

@@ -33,16 +33,15 @@ export function AddMerchantButton() {
         {created ? (
           <div className="space-y-4">
             <p className="text-[13px] text-ink-muted">
-              Share these one-time credentials with the merchant. The password is shown only once.
+              {created.emailed
+                ? `A welcome email with a login link was sent to ${created.email}.`
+                : "The welcome email could not be sent — share this login link with the owner yourself. It works once, for 7 days."}
             </p>
-            <div className="rounded-[10px] bg-app p-3 text-[12px]">
-              <p>
-                Email: <span className="font-mono">{created.email}</span>
-              </p>
-              <p className="mt-1">
-                Temporary password: <span className="font-mono">{created.tempPassword}</span>
-              </p>
-            </div>
+            {!created.emailed && (
+              <div className="rounded-[10px] bg-app p-3 text-[12px]">
+                <p className="break-all font-mono">{created.loginUrl}</p>
+              </div>
+            )}
             <Link href={`/m/${created.merchantId}`} className="inline-block text-[13px] font-medium text-primary underline">
               Go to merchant →
             </Link>

@@ -2,6 +2,7 @@ import "server-only";
 import type { TenantDb } from "@/lib/tenant-db";
 import { adjustLoyaltyPoints } from "@/lib/loyalty";
 import { recordActivity } from "@/lib/activity";
+import { notifyOrderConfirmation } from "@/lib/client-notifications";
 
 /**
  * What happens to an order once its payment settles.
@@ -81,6 +82,11 @@ export async function completePaidOrder(db: TenantDb, orderId: string): Promise<
     summary: `Paid for order ${order.orderNumber}`,
     amountCents: order.totalCents,
   });
+
+  // Every order gets a receipt, however it was paid for — including the two
+  // paths (credit alone, the mock provider) that settle here directly rather
+  // than through the webhook, which previously got none at all.
+  await notifyOrderConfirmation(order.id).catch((err) => console.error("[order-completion] receipt not sent:", err instanceof Error ? err.message : err));
 
   return { completed: true, pointsEarned };
 }

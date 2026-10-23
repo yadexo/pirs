@@ -1,6 +1,10 @@
 import "server-only";
 import { rawDb } from "@/lib/db";
 import { notifyClientQuietly } from "@/lib/web-push";
+import type { EmailBranding } from "@/lib/emails/layout";
+import type { EmailTemplate } from "@/lib/emails/templates";
+import { senderFor } from "@/lib/emails/sender";
+import { formatDay } from "@/lib/client-format";
 
 /**
  * The notifications the app sends by itself, off the back of something that
@@ -13,7 +17,10 @@ import { notifyClientQuietly } from "@/lib/web-push";
 
 interface OrderRecipient {
   userId: string;
+  email: string | null;
+  firstName: string;
   clinicName: string;
+  branding: EmailBranding;
   slug: string;
   orderNumber: string;
   currency: string;
@@ -26,14 +33,20 @@ async function recipientForOrder(orderId: string): Promise<OrderRecipient | null
     select: {
       orderNumber: true,
       currency: true,
-      customerProfile: { select: { userId: true } },
-      tenant: { select: { name: true, slug: true, branding: { select: { businessName: true } } } },
+      customerProfile: { select: { userId: true, firstName: true, user: { select: { email: true } } } },
+      tenant: {
+        select: { name: true, slug: true, branding: { select: { businessName: true, logoUrl: true, primaryColor: true } } },
+      },
     },
   });
   if (!order?.customerProfile?.userId) return null;
+  const clinicName = order.tenant.branding?.businessName ?? order.tenant.name;
   return {
     userId: order.customerProfile.userId,
-    clinicName: order.tenant.branding?.businessName ?? order.tenant.name,
+    email: order.customerProfile.user?.email ?? null,
+    firstName: order.customerProfile.firstName,
+    clinicName,
+    branding: { name: clinicName, logoUrl: order.tenant.branding?.logoUrl ?? null, color: order.tenant.branding?.primaryColor ?? null },
     slug: order.tenant.slug,
     orderNumber: order.orderNumber,
     currency: order.currency,
@@ -71,21 +84,21 @@ function absoluteClientUrl(path: string): string {
  * not undo it. Without an email provider configured this does nothing, which
  * is the mock provider's job to report in development.
  */
-async function emailClientQuietly(customerProfileId: string, message: { subject: string; body: string }): Promise<void> {
+/**
+ * Sends a fully-built, branded template. Service mail about the client's own
+ * order, account or money, so emailConsent (which is about marketing offers)
+ * is deliberately not consulted here — the same rule the push side follows.
+ * Never throws: called from the Stripe webhook and from cron, where an
+ * exception would have the event retried after it has already been applied.
+ */
+async function sendBrandedEmail(to: string | null, clinicName: string, template: EmailTemplate): Promise<void> {
+  if (!to) return;
   try {
-    const profile = await rawDb.customerProfile.findUnique({
-      where: { id: customerProfileId },
-      select: { user: { select: { email: true } }, emailConsent: true },
-    });
-    const to = profile?.user?.email;
-    if (!to) return;
-    // Service mail about their own money, so emailConsent (which is about
-    // marketing) is deliberately not consulted — the same rule the push side
-    // follows.
     const { getEmailProvider } = await import("@/lib/providers/notifications");
-    await getEmailProvider().send({ to, subject: message.subject, body: message.body });
+    const result = await getEmailProvider().send({ to, subject: template.subject, body: template.text, html: template.html, from: senderFor(clinicName) });
+    if (result.status === "FAILED") console.error(`[client-notifications] email to ${to} failed:`, result.error);
   } catch (err) {
-    console.error(`[client-notifications] email to ${customerProfileId} not sent:`, err instanceof Error ? err.message : err);
+    console.error(`[client-notifications] email to ${to} not sent:`, err instanceof Error ? err.message : err);
   }
 }
 
@@ -112,6 +125,35 @@ export async function notifyOrderPaid(orderId: string, amountCents: number): Pro
   });
 }
 
+/**
+ * The receipt email: every order, however it was paid for — card, iDEAL,
+ * credit alone — gets one. Called from completePaidOrder itself
+ * (lib/order-completion.ts), the one place every payment path settles
+ * through, so this never depends on which of them fired.
+ */
+export async function notifyOrderConfirmation(orderId: string): Promise<void> {
+  const [to, order] = await Promise.all([
+    recipientForOrder(orderId),
+    rawDb.order.findUnique({
+      where: { id: orderId },
+      select: { totalCents: true, taxCents: true, items: { select: { name: true, quantity: true, totalCents: true } } },
+    }),
+  ]);
+  if (!to || !order) return;
+  const { orderReceiptEmail } = await import("@/lib/emails/templates");
+  const template = orderReceiptEmail({
+    branding: to.branding,
+    firstName: to.firstName,
+    orderNumber: to.orderNumber,
+    lines: order.items,
+    totalCents: order.totalCents,
+    vatCents: order.taxCents,
+    currency: to.currency,
+    myItemsUrl: absoluteClientUrl(clinicPath(to.slug, "/profile?tab=items")),
+  });
+  await sendBrandedEmail(to.email, to.clinicName, template);
+}
+
 /** One of the client's items has just been collected at the clinic. */
 export async function notifyItemRedeemed(customerUserId: string, clinicName: string, slug: string, itemName: string): Promise<void> {
   await notifyClientQuietly(customerUserId, {
@@ -133,6 +175,13 @@ export async function notifyRefundProcessed(orderId: string, amountCents: number
     icon: clinicPath(to.slug, "/app-icon/192.png"),
     tag: `order-refund-${orderId}`,
   });
+
+  const { refundConfirmationEmail } = await import("@/lib/emails/templates");
+  await sendBrandedEmail(
+    to.email,
+    to.clinicName,
+    refundConfirmationEmail({ branding: to.branding, firstName: to.firstName, orderNumber: to.orderNumber, amountCents, currency: to.currency, fully }),
+  );
 }
 
 /** Who to tell about their own balance, and how to address them. */
@@ -141,13 +190,21 @@ async function recipientForClient(customerProfileId: string) {
     where: { id: customerProfileId },
     select: {
       userId: true,
-      tenant: { select: { name: true, slug: true, branding: { select: { businessName: true, currency: true } } } },
+      firstName: true,
+      user: { select: { email: true } },
+      tenant: {
+        select: { name: true, slug: true, branding: { select: { businessName: true, currency: true, logoUrl: true, primaryColor: true } } },
+      },
     },
   });
   if (!profile?.userId) return null;
+  const clinicName = profile.tenant.branding?.businessName ?? profile.tenant.name;
   return {
     userId: profile.userId,
-    clinicName: profile.tenant.branding?.businessName ?? profile.tenant.name,
+    email: profile.user?.email ?? null,
+    firstName: profile.firstName,
+    clinicName,
+    branding: { name: clinicName, logoUrl: profile.tenant.branding?.logoUrl ?? null, color: profile.tenant.branding?.primaryColor ?? null } as EmailBranding,
     slug: profile.tenant.slug,
     currency: profile.tenant.branding?.currency ?? "EUR",
   };
@@ -243,7 +300,7 @@ export async function notifyPriceChange(
   const to = await recipientForClient(customerProfileId);
   if (!to) return;
 
-  const when = change.effectiveAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  const when = formatDay(change.effectiveAt, null);
   const price = amount(change.newPriceCents, change.currency);
   const manage = clinicPath(to.slug, "/profile?tab=membership");
   const line = `${change.planName} becomes ${price} from ${when}. You can cancel any time before then.`;
@@ -256,15 +313,20 @@ export async function notifyPriceChange(
     tag: `price-change-${customerProfileId}-${change.effectiveAt.getTime()}`,
   });
 
-  await emailClientQuietly(customerProfileId, {
-    subject: `Your ${change.planName} price is changing`,
-    body: [
-      line,
-      "",
-      `Nothing changes before ${when}, and the payments until then stay at the price you signed up on.`,
-      `To cancel, open your membership: ${absoluteClientUrl(manage)}`,
-    ].join("\n"),
-  });
+  const { membershipPriceChangeEmail } = await import("@/lib/emails/templates");
+  await sendBrandedEmail(
+    to.email,
+    to.clinicName,
+    membershipPriceChangeEmail({
+      branding: to.branding,
+      firstName: to.firstName,
+      planName: change.planName,
+      newPriceCents: change.newPriceCents,
+      currency: change.currency,
+      effectiveDate: when,
+      manageUrl: absoluteClientUrl(manage),
+    }),
+  );
 }
 
 /** Who to tell about a membership, and how to address them. */
@@ -272,15 +334,21 @@ async function recipientForMembership(membershipId: string) {
   const membership = await rawDb.customerMembership.findUnique({
     where: { id: membershipId },
     select: {
-      customerProfile: { select: { userId: true } },
+      customerProfile: { select: { userId: true, firstName: true, user: { select: { email: true } } } },
       membershipPlan: { select: { name: true } },
-      tenant: { select: { name: true, slug: true, branding: { select: { businessName: true } } } },
+      tenant: {
+        select: { name: true, slug: true, branding: { select: { businessName: true, logoUrl: true, primaryColor: true } } },
+      },
     },
   });
   if (!membership?.customerProfile?.userId) return null;
+  const clinicName = membership.tenant.branding?.businessName ?? membership.tenant.name;
   return {
     userId: membership.customerProfile.userId,
-    clinicName: membership.tenant.branding?.businessName ?? membership.tenant.name,
+    email: membership.customerProfile.user?.email ?? null,
+    firstName: membership.customerProfile.firstName,
+    clinicName,
+    branding: { name: clinicName, logoUrl: membership.tenant.branding?.logoUrl ?? null, color: membership.tenant.branding?.primaryColor ?? null } as EmailBranding,
     slug: membership.tenant.slug,
     planName: membership.membershipPlan?.name ?? "Membership",
   };
@@ -294,16 +362,29 @@ async function recipientForMembership(membershipId: string) {
 export async function notifyMembershipPaymentFailed(membershipId: string, benefitsEndAt?: Date | null): Promise<void> {
   const to = await recipientForMembership(membershipId);
   if (!to) return;
-  const deadline = benefitsEndAt
-    ? ` Your benefits continue until ${benefitsEndAt.toLocaleDateString("en-GB", { day: "numeric", month: "long" })}.`
-    : "";
+  const endDay = benefitsEndAt ? formatDay(benefitsEndAt, null) : null;
+  const deadline = endDay ? ` Your benefits continue until ${endDay}.` : "";
+  const updateUrl = clinicPath(to.slug, "/profile?tab=membership");
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
     body: `We couldn't take the payment for your ${to.planName}. Update your card to keep it.${deadline}`,
-    url: clinicPath(to.slug, "/profile?tab=settings"),
+    url: updateUrl,
     icon: clinicPath(to.slug, "/app-icon/192.png"),
     tag: `membership-failed-${membershipId}`,
   });
+
+  const { membershipPaymentFailedEmail } = await import("@/lib/emails/templates");
+  await sendBrandedEmail(
+    to.email,
+    to.clinicName,
+    membershipPaymentFailedEmail({
+      branding: to.branding,
+      firstName: to.firstName,
+      planName: to.planName,
+      updatePaymentUrl: absoluteClientUrl(updateUrl),
+      benefitsEndAt: endDay,
+    }),
+  );
 }
 
 /**
@@ -339,7 +420,7 @@ export async function notifyMembershipSuspended(membershipId: string): Promise<v
 }
 
 /** A membership period has been paid for and the plan is live. */
-export async function notifyMembershipActive(membershipId: string): Promise<void> {
+export async function notifyMembershipActive(membershipId: string, paidCents?: number, currency?: string): Promise<void> {
   const to = await recipientForMembership(membershipId);
   if (!to) return;
   await notifyClientQuietly(to.userId, {
@@ -349,6 +430,18 @@ export async function notifyMembershipActive(membershipId: string): Promise<void
     icon: clinicPath(to.slug, "/app-icon/192.png"),
     tag: `membership-active-${membershipId}`,
   });
+
+  // The amount is only known when this came from a real invoice payment
+  // (the webhook); other callers — reactivation with nothing charged, say —
+  // have nothing to confirm, so no "payment received" email goes out.
+  if (paidCents !== undefined && paidCents > 0 && currency) {
+    const { membershipPaymentReceivedEmail } = await import("@/lib/emails/templates");
+    await sendBrandedEmail(
+      to.email,
+      to.clinicName,
+      membershipPaymentReceivedEmail({ branding: to.branding, firstName: to.firstName, planName: to.planName, amountCents: paidCents, currency }),
+    );
+  }
 }
 
 /**
@@ -378,13 +471,21 @@ export async function notifySessionsReceived(customerProfileId: string, packageN
 export async function notifySessionsExpiring(customerProfileId: string, packageName: string, sessions: number, endsOn: string): Promise<void> {
   const to = await recipientForClient(customerProfileId);
   if (!to) return;
+  const myItems = clinicPath(to.slug, "/profile");
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
     body: `${sessions} ${packageName} session${sessions === 1 ? "" : "s"} left — they run out on ${endsOn}.`,
-    url: clinicPath(to.slug, "/profile"),
+    url: myItems,
     icon: clinicPath(to.slug, "/app-icon/192.png"),
     tag: `sessions-expiring-${customerProfileId}`,
   });
+
+  const { sessionsExpiringEmail } = await import("@/lib/emails/templates");
+  await sendBrandedEmail(
+    to.email,
+    to.clinicName,
+    sessionsExpiringEmail({ branding: to.branding, firstName: to.firstName, packageName, sessions, endsOn, myItemsUrl: absoluteClientUrl(myItems) }),
+  );
 }
 
 /**

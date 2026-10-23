@@ -11,6 +11,10 @@ import { resolveDestination, canReach, safeNext } from "@/lib/login-destination"
 import { recordActivity } from "@/lib/activity";
 import { currentClientBasePath } from "@/lib/public-clinic";
 import { getTenantDb } from "@/lib/tenant-db";
+import { absoluteClientAppUrl } from "@/lib/client-app-url";
+import { getEmailProvider } from "@/lib/providers/notifications";
+import { senderFor } from "@/lib/emails/sender";
+import { welcomeClientEmail } from "@/lib/emails/templates";
 
 export type ActionResult = { error: string } | never;
 
@@ -98,7 +102,10 @@ export async function customerRegisterAction(tenantSlug: string, _prevState: unk
   const { ok } = await rateLimit(`register:${tenantSlug}:${email.toLowerCase()}`, 5, 15 * 60 * 1000);
   if (!ok) return { error: "Too many attempts. Try again later." };
 
-  const tenant = await rawDb.tenant.findUnique({ where: { slug: tenantSlug } });
+  const tenant = await rawDb.tenant.findUnique({
+    where: { slug: tenantSlug },
+    include: { branding: { select: { businessName: true, logoUrl: true, primaryColor: true } } },
+  });
   if (!tenant || tenant.status !== "ACTIVE") return { error: "This clinic is not available." };
 
   const existing = await rawDb.user.findFirst({
@@ -133,6 +140,16 @@ export async function customerRegisterAction(tenantSlug: string, _prevState: unk
     customerProfileId: created.customerProfile?.id,
     summary: "Joined the app",
   });
+
+  const clinicName = tenant.branding?.businessName ?? tenant.name;
+  const template = welcomeClientEmail({
+    branding: { name: clinicName, logoUrl: tenant.branding?.logoUrl ?? null, color: tenant.branding?.primaryColor ?? null },
+    firstName,
+    openAppUrl: absoluteClientAppUrl(tenantSlug),
+  });
+  await getEmailProvider()
+    .send({ to: email, subject: template.subject, body: template.text, html: template.html, from: senderFor(clinicName) })
+    .catch((err) => console.error("[register] welcome email not sent:", err instanceof Error ? err.message : err));
 
   return signInOrError({ portal: "customer", tenantSlug, email, password }, await currentClientBasePath(tenantSlug), "client");
 }

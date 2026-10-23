@@ -5,7 +5,7 @@ import type { ChannelProvider, NotificationSendResult } from "./types";
 export class MockChannelProvider implements ChannelProvider {
   constructor(private readonly channelName: string) {}
 
-  async send(params: { to: string; subject?: string; body: string }): Promise<NotificationSendResult> {
+  async send(params: { to: string; subject?: string; body: string; html?: string; from?: string }): Promise<NotificationSendResult> {
     // Bodies can hold one-time links. Only print them where logs stay on this machine.
     const body = process.env.NODE_ENV === "production" ? "(body withheld)" : params.body;
     console.log(`[mock:${this.channelName}] -> ${params.to}: ${params.subject ?? ""} ${body}`);
