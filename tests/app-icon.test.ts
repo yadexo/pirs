@@ -33,7 +33,7 @@ describe("clinic app icons", () => {
     // A square source still fills the tile edge to edge — its own colour
     // should be the corner pixel, not the brand colour.
     const squareSource = await sharp({ create: { width: 1024, height: 1024, channels: 3, background: "#ff0000" } }).png().toBuffer();
-    const squareOut = await sharp(await renderAppIcon(squareSource, { size: 200, maskable: false }, { name: "Glow", color: "#00ff00" }))
+    const squareOut = await sharp(await renderAppIcon(squareSource, { size: 192, maskable: false }, { name: "Glow", color: "#00ff00" }))
       .raw()
       .toBuffer({ resolveWithObject: true });
     expect([...squareOut.data.subarray(0, 3)]).toEqual([255, 0, 0]);
@@ -41,7 +41,7 @@ describe("clinic app icons", () => {
     // A wide, non-square source is padded instead of cropped: the corner is
     // the brand colour, not the source's own colour.
     const wideSource = await sharp({ create: { width: 1024, height: 400, channels: 3, background: "#ff0000" } }).png().toBuffer();
-    const wideOut = await sharp(await renderAppIcon(wideSource, { size: 200, maskable: false }, { name: "Glow", color: "#00ff00" }))
+    const wideOut = await sharp(await renderAppIcon(wideSource, { size: 192, maskable: false }, { name: "Glow", color: "#00ff00" }))
       .raw()
       .toBuffer({ resolveWithObject: true });
     expect([...wideOut.data.subarray(0, 3)]).toEqual([0, 255, 0]);

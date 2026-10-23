@@ -31,7 +31,7 @@ import {
 } from "@/lib/memberships-billing";
 
 /**
- * Every mutating action the patient app can perform.
+ * Every mutating action the client app can perform.
  *
  * These write to the same tenant-scoped tables the clinic portal reads, so a
  * booking here shows up in /m/:id/appointments, a purchase in /m/:id/shop,
@@ -1413,7 +1413,7 @@ export async function clientDeleteAccountAction(slug: string): Promise<{ ok: tru
     action: "client.account_deletion_requested",
     entityType: "CustomerProfile",
     entityId: user.customerProfileId ?? undefined,
-    reason: "Requested by client from the patient app",
+    reason: "Requested by client from the client app",
   });
 
   revalidateClient(slug);

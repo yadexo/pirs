@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { rawDb } from "@/lib/db";
 import { signOutAction } from "@/lib/actions/session";
+import { isRealProduction } from "@/lib/deploy-env";
 
 const ROLE_LABEL: Record<string, string> = {
   PLATFORM_ADMIN: "Platform admin",
@@ -20,9 +22,15 @@ function surfaceForRole(role: string): "Admin" | "Clinic" | "Client" | null {
 
 /**
  * Entry point to the three surfaces this platform ships: the agency console,
- * a merchant's clinic portal, and the patient app. It exists so the whole
+ * a merchant's clinic portal, and the client app. It exists so the whole
  * system can be walked through without knowing the routes by heart, and it
  * reads its merchants from the database rather than a hardcoded list.
+ *
+ * Demo only — it names every seeded account by email and shares one password
+ * across all of them (see the footer). `isRealProduction()` keeps it off the
+ * real domains without relying on anyone remembering to configure anything:
+ * Vercel sets VERCEL_ENV=production itself, only on the actual Production
+ * deployment, so this fails safe even on a brand-new host nobody has touched.
  */
 export const dynamic = "force-dynamic";
 
@@ -40,6 +48,10 @@ interface Surface {
 }
 
 export default async function PortalIndexPage() {
+  // Real production never sees this page at all — not even the queries below
+  // run, so a seeded account's email is never read out on the real domains.
+  if (isRealProduction()) redirect("/login");
+
   const session = await auth();
   const mySurface = session?.user ? surfaceForRole(session.user.role) : null;
 
@@ -92,9 +104,15 @@ export default async function PortalIndexPage() {
     {
       key: "client",
       name: "Client",
-      tagline: "The patient app",
+      tagline: "The client app",
       audience: "The clinic's own clients",
-      accent: "var(--accent-pink)",
+      // --accent-pink is a pale tint (brandSoft) — fine as a fill behind dark
+      // text, illegible as the tagline text and the white-on-it button this
+      // card uses it for. A real, AA-contrast pink instead (6:1 on white, in
+      // either direction) — not one of the clinic-brand-ramp aliases the
+      // other two cards use, so it stays a genuine pink rather than whatever
+      // hue a clinic happens to have picked.
+      accent: "#BE185D",
       href: first ? `/login?next=${encodeURIComponent(`/app/${first.slug}`)}` : "/login",
       account: customer ? { email: customer.email, label: "Client" } : null,
       routes: ["Home", "Shop", "Scan", "Rewards", "Profile"],
@@ -114,7 +132,7 @@ export default async function PortalIndexPage() {
           </div>
           <h1 className="text-[26px] font-semibold tracking-tight">Three portals, one system</h1>
           <p className="mt-2 max-w-2xl text-[14px] leading-relaxed text-ink-muted">
-            Every surface below reads and writes the same database. A booking made in the patient app appears on the clinic&apos;s
+            Every surface below reads and writes the same database. A booking made in the client app appears on the clinic&apos;s
             Appointments screen; a purchase lands in its Shop Summary. Pick a portal to open it.
           </p>
 

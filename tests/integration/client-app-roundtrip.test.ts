@@ -1,5 +1,5 @@
 /**
- * The patient app and the clinic portal are two front-ends over one database.
+ * The client app and the clinic portal are two front-ends over one database.
  * These tests call the real client-app server actions, then re-read using the
  * same queries the clinic portal pages issue — so a regression that decouples
  * the two surfaces fails here rather than in production.
@@ -35,7 +35,7 @@ const {
 const { getRewardsData } = await import("@/lib/client-app-data");
 const { recordVisit } = await import("@/lib/check-in");
 
-describe("patient app -> clinic portal round trip", () => {
+describe("client app -> clinic portal round trip", () => {
   let tenantId: string;
   let db: TenantDb;
   let customerProfileId: string;
@@ -170,7 +170,7 @@ describe("patient app -> clinic portal round trip", () => {
     expect(options!.locations.map((l) => l.id)).toContain(locationId);
   });
 
-  it("a booking made in the patient app appears on the clinic's Appointments page", async () => {
+  it("a booking made in the client app appears on the clinic's Appointments page", async () => {
     const startAtIso = await nextSlot();
     const result = await clientBookAction(SLUG, { serviceId, staffProfileId, locationId, startAtIso });
     expect(result).toEqual({ ok: true, when: startAtIso });
@@ -228,7 +228,7 @@ describe("patient app -> clinic portal round trip", () => {
     expect(after!.status).toBe("CANCELLED");
   });
 
-  it("a purchase in the patient app lands in the clinic's Shop Summary and awards points", async () => {
+  it("a purchase in the client app lands in the clinic's Shop Summary and awards points", async () => {
     expect(await clientAddToCartAction(SLUG, "product", productId, 1)).toEqual({ ok: true });
     let cart = await clientCartAction();
     expect(cart.count).toBe(1);

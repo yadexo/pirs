@@ -72,7 +72,7 @@ describe("resolveDestination", () => {
     expect(resolveDestination(client, "/app/other-clinic")).toBe("/app/riverside");
   });
 
-  it("does not let staff ride a client destination into the patient app", () => {
+  it("does not let staff ride a client destination into the client app", () => {
     expect(resolveDestination(clinicAdmin, "/app/riverside")).toBe("/m/t1");
   });
 
