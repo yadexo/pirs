@@ -5,6 +5,7 @@ import { clientBasePath, currentClientBasePath, getPublicClinic, shortAppName } 
 import { clientAppScope } from "@/lib/portal-hosts";
 import { InstallPrompt, ServiceWorker } from "@/components/client-app/pwa";
 import { LaunchImageLinks, Splash } from "@/components/client-app/splash";
+import { SplashDismiss } from "@/components/client-app/splash-dismiss";
 import { ZoomLock } from "@/components/client-app/zoom-lock";
 import { clientAppViewport } from "@/lib/client-app-viewport";
 import { getClientSummary, getRewardsData } from "@/lib/client-app-data";
@@ -73,6 +74,7 @@ export default async function ClientAppLayout({
   const splash = (
     <>
       <Splash name={ctx.merchant.name} logoUrl={ctx.merchant.appIconUrl} color={ctx.merchant.accentColor} background={ctx.merchant.launchBackground} nonce={nonce} />
+      <SplashDismiss />
       {publicClinic && <LaunchImageLinks base={base} version={publicClinic.version} />}
     </>
   );
