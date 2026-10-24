@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { rawDb } from "@/lib/db";
 import { getTenantDb, type TenantDb } from "@/lib/tenant-db";
 import { loadLiveAccount, type LiveAccount } from "@/lib/live-account";
+import { twoFactorRequiredForRole } from "@/lib/two-factor";
 import { getImpersonatedMerchantId } from "@/lib/actions/impersonation";
 import type { SidebarEntry } from "@/components/shell/sidebar";
 import type { SupportLink } from "@/components/shell/sidebar";
@@ -42,6 +43,13 @@ export async function requireMerchantContext(merchantId: string): Promise<Mercha
   // it as signed out, so this cannot bounce back and forth.
   if (!live) redirect("/login?reason=access-changed");
   const user = { ...sessionUser, ...live };
+
+  // Required for an owner or an agency admin, checked fresh (not from the
+  // 30-day token) on every page in here — same reasoning as loadLiveAccount
+  // itself. Not optional in the sense of "ask once and remember": an account
+  // that had it and lost it (lib/two-factor.ts's disable path) is caught
+  // the same way a deactivated account already is.
+  if (twoFactorRequiredForRole(user.role) && !user.twoFactorConfirmed) redirect("/account/two-factor?required=1");
 
   const isAgencyAdmin = user.role === "PLATFORM_ADMIN";
 
@@ -97,6 +105,7 @@ export async function requireAgencyContext() {
   if (!live) redirect("/login?reason=access-changed");
   const user = { ...sessionUser, ...live };
   if (user.role !== "PLATFORM_ADMIN") notFound();
+  if (!user.twoFactorConfirmed) redirect("/account/two-factor?required=1");
 
   return { user, support: await getSupportLink() };
 }

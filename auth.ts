@@ -11,7 +11,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   providers: [
     Credentials({
-      credentials: { portal: {}, tenantSlug: {}, email: {}, password: {} },
+      credentials: { portal: {}, tenantSlug: {}, email: {}, password: {}, totpCode: {} },
       authorize: async (credentials, req) => (await authorizeCredentials(credentials, "staff", ipFromRequest(req))) as never,
     }),
   ],

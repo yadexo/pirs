@@ -5,6 +5,7 @@ import { AuthError } from "next-auth";
 import { signIn } from "@/auth";
 import { clientSignIn } from "@/client-auth";
 import { rawDb } from "@/lib/db";
+import { TWO_FACTOR_REQUIRED_MESSAGE } from "@/lib/auth-credentials";
 import { hashPassword } from "@/lib/password";
 import { rateLimit, retryAfterLabel } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request-ip";
@@ -19,20 +20,38 @@ import { welcomeClientEmail } from "@/lib/emails/templates";
 
 export type ActionResult = { error: string } | never;
 
-async function signInOrError(
-  params: Record<string, string>,
-  redirectTo: string,
-  audience: "staff" | "client",
-): Promise<{ error: string } | void> {
+type SignInOutcome = { error: string } | { needsTwoFactor: true } | void;
+
+// @auth/core's AuthError constructor unconditionally appends this to
+// `.message` (see node_modules/@auth/core/errors.js), including when no
+// message was given at all — so a bare CredentialsSignin's `.message` is
+// just this suffix with no leading text, and ours never otherwise equals
+// what we threw. Strip it before comparing or displaying, or the doc link
+// leaks into the UI as the shown error text.
+const AUTHJS_SUFFIX = /\.?\s*Read more at https:\/\/errors\.authjs\.dev\S*$/;
+function cleanAuthErrorMessage(raw: string): string {
+  return raw.replace(AUTHJS_SUFFIX, "").trim();
+}
+
+async function signInOrError(params: Record<string, string>, redirectTo: string, audience: "staff" | "client"): Promise<SignInOutcome> {
   try {
     await (audience === "client" ? clientSignIn : signIn)("credentials", { ...params, redirectTo });
   } catch (err) {
     if (err instanceof AuthError) {
-      // Rate-limit failures carry their own message (see RateLimitedSignIn,
-      // lib/auth-credentials.ts); a wrong password never does, and stays
-      // generic on purpose — a different message would say which part was
-      // wrong.
-      return { error: err.message || "Invalid email or password." };
+      // Checked by message, not `instanceof TwoFactorRequiredSignIn` —
+      // Next bundles the route handler (where authorize() throws) and this
+      // server action separately, so a locally-defined subclass thrown over
+      // there fails `instanceof` against the class imported here even
+      // though it's structurally the same error. `.message` is a plain
+      // string and survives the bundle split; `AuthError` itself is safe to
+      // check because it's imported from the shared "next-auth" package.
+      const message = cleanAuthErrorMessage(err.message);
+      if (message === TWO_FACTOR_REQUIRED_MESSAGE) return { needsTwoFactor: true };
+      // Rate-limit and wrong-code failures carry their own message (see
+      // RateLimitedSignIn and the 2FA errors, lib/auth-credentials.ts); a
+      // wrong password never does, and stays generic on purpose — a
+      // different message would say which part was wrong.
+      return { error: message || "Invalid email or password." };
     }
     throw err; // NEXT_REDIRECT on success — must propagate uncaught
   }
@@ -45,7 +64,12 @@ export async function customerSignInAction(tenantSlug: string, _prevState: unkno
   // is the client app itself (the old /:tenant customer app no longer exists).
   const next = safeNext(String(formData.get("next") ?? "") || undefined) ?? (await currentClientBasePath(tenantSlug));
   if (!email || !password) return { error: "Email and password are required." };
-  return signInOrError({ portal: "customer", tenantSlug, email, password }, next, "client");
+  const result = await signInOrError({ portal: "customer", tenantSlug, email, password }, next, "client");
+  // Clients are never asked to set up 2FA — CUSTOMER accounts never have a
+  // confirmed one for authorizeCredentials to find — so this never actually
+  // happens. Narrows the return type back to what this door has always had,
+  // rather than leaking the staff-login-only "needsTwoFactor" shape here.
+  return result && "needsTwoFactor" in result ? { error: "Invalid email or password." } : result;
 }
 
 /**
@@ -55,6 +79,10 @@ export async function customerSignInAction(tenantSlug: string, _prevState: unkno
 export async function unifiedSignInAction(_prevState: unknown, formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
+  // Present only on the form's second step — see LoginForm. Absent, the
+  // first attempt either succeeds outright (no 2FA on this account) or comes
+  // back asking for one (TwoFactorRequiredSignIn, lib/auth-credentials.ts).
+  const totpCode = String(formData.get("totpCode") ?? "").trim();
   if (!email || !password) return { error: "Email and password are required." };
 
   const user = await rawDb.user.findFirst({
@@ -78,7 +106,11 @@ export async function unifiedSignInAction(_prevState: unknown, formData: FormDat
   }
 
   // Clients get the client app's session; everyone else the staff session.
-  return signInOrError({ portal: "unified", email, password }, destination, user?.role === "CUSTOMER" ? "client" : "staff");
+  return signInOrError(
+    totpCode ? { portal: "unified", email, password, totpCode } : { portal: "unified", email, password },
+    destination,
+    user?.role === "CUSTOMER" ? "client" : "staff",
+  );
 }
 
 const registerSchema = z.object({
@@ -161,5 +193,9 @@ export async function customerRegisterAction(tenantSlug: string, _prevState: unk
     .send({ to: email, subject: template.subject, body: template.text, html: template.html, from: senderFor(clinicName) })
     .catch((err) => console.error("[register] welcome email not sent:", err instanceof Error ? err.message : err));
 
-  return signInOrError({ portal: "customer", tenantSlug, email, password }, await currentClientBasePath(tenantSlug), "client");
+  const result = await signInOrError({ portal: "customer", tenantSlug, email, password }, await currentClientBasePath(tenantSlug), "client");
+  // See the identical narrowing in customerSignInAction above — clients
+  // never have a confirmed 2FA secret, so this branch is unreachable, but
+  // the return type doesn't know that on its own.
+  return result && "needsTwoFactor" in result ? { error: "Something went wrong. Try signing in instead." } : result;
 }

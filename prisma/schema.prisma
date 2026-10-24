@@ -307,9 +307,47 @@ model User {
   redemptionsPerformed  RedeemableItem[]       @relation("RedeemedBy")
   packageSessionsUsed   PackageSessionUse[]    @relation("PackageSessionUsedBy")
   impersonationSessions ImpersonationSession[]
+  twoFactor             TwoFactorSecret?
+  twoFactorBackupCodes  TwoFactorBackupCode[]
 
   @@unique([tenantId, email])
   @@index([role])
+}
+
+/// One TOTP enrollment per account. Required for PLATFORM_ADMIN and
+/// TENANT_ADMIN (enforced at login and by middleware until set up),
+/// optional for STAFF, never offered to CUSTOMER. `confirmedAt` is null
+/// during setup — a secret that was generated but never confirmed with a
+/// real code does not count as "has 2FA", so a client closing the tab
+/// mid-setup is not silently half-protected.
+model TwoFactorSecret {
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Base32 TOTP secret. Not a one-way hash like passwordHash — verifying a
+  /// code needs the original value back, the same trust boundary the rest
+  /// of this table's row already sits behind.
+  secret      String
+  confirmedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+/// Single-use recovery codes, issued once when 2FA is confirmed and once
+/// again whenever they're regenerated. Hashed (not reversibly encrypted,
+/// unlike the TOTP secret) because a backup code is used like a password,
+/// not read back — each is high-entropy and random, so a fast one-way hash
+/// is enough; it never needs the slow, salted cost bcrypt pays for
+/// resisting guesses at a *chosen* password.
+model TwoFactorBackupCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model PasswordResetToken {

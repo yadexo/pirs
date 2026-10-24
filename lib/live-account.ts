@@ -6,6 +6,8 @@ export interface LiveAccount {
   role: "PLATFORM_ADMIN" | "TENANT_ADMIN" | "STAFF" | "CUSTOMER";
   tenantId: string | null;
   permissions: SessionPermissions;
+  /** Confirmed 2FA, re-checked fresh every page load — same reasoning as everything else here. */
+  twoFactorConfirmed: boolean;
 }
 
 /**
@@ -31,13 +33,14 @@ export async function loadLiveAccount(userId: string, authTime?: number): Promis
       staffProfile: {
         select: { active: true, role: { select: { permissions: { select: { permission: { select: { key: true } } } } } } },
       },
+      twoFactor: { select: { confirmedAt: true } },
     },
   });
   if (!user || user.status !== "ACTIVE") return null;
   if (isBlockedStaff(user)) return null;
   // Sessions from before a password reset or account closure are over.
   if (user.sessionsValidAfter && (!authTime || authTime < user.sessionsValidAfter.getTime())) return null;
-  return { role: user.role, tenantId: user.tenantId, permissions: permissionsFor(user) };
+  return { role: user.role, tenantId: user.tenantId, permissions: permissionsFor(user), twoFactorConfirmed: !!user.twoFactor?.confirmedAt };
 }
 
 type PermissionSource = {

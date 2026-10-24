@@ -1,6 +1,7 @@
 import { rawDb } from "@/lib/db";
 import { requireAgencyContext } from "@/lib/merchant-context";
 import { Panel } from "@/components/ui/primitives";
+import { TwoFactorReset } from "./two-factor-reset";
 
 /**
  * Every platform-wide setting that used to be scattered across the old admin
@@ -42,6 +43,15 @@ export default async function AgencySettingsPage() {
             </li>
           ))}
         </ul>
+      </Panel>
+
+      <Panel className="p-5">
+        <h2 className="text-[14px] font-medium">Two-factor reset</h2>
+        <p className="mt-1 text-[12px] text-ink-muted">
+          Required for clinic owners and platform admins — if someone loses their authenticator, this clears it so they can set it up
+          again. Every reset is written to the audit log against their account.
+        </p>
+        <TwoFactorReset />
       </Panel>
 
       <Panel className="p-5">

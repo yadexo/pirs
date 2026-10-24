@@ -7,6 +7,7 @@ import { rawDb } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
 import { rateLimit, retryAfterLabel } from "@/lib/rate-limit";
 import { permissionsFor } from "@/lib/live-account";
+import { getTwoFactorStatus, verifyTwoFactorCode } from "@/lib/two-factor";
 import type { SessionPermissions, SessionUserShape } from "@/types/next-auth";
 
 /**
@@ -21,6 +22,31 @@ import type { SessionPermissions, SessionUserShape } from "@/types/next-auth";
 class RateLimitedSignIn extends CredentialsSignin {
   constructor(message: string) {
     super(message);
+  }
+}
+
+/**
+ * Exported so the calling Server Action can detect this case by message
+ * rather than `instanceof TwoFactorRequiredSignIn` — Next bundles the
+ * NextAuth route handler (where authorize() runs) separately from the
+ * server action that catches the error, so the same class, thrown there and
+ * imported here, can be two distinct constructors by the time it crosses
+ * that boundary. The string itself is the one thing guaranteed to compare
+ * equal on both sides.
+ */
+export const TWO_FACTOR_REQUIRED_MESSAGE = "__2fa_required__";
+
+/** Password was right; this account has 2FA confirmed and no code was given yet. The login form's cue to show the code field. */
+export class TwoFactorRequiredSignIn extends CredentialsSignin {
+  constructor() {
+    super(TWO_FACTOR_REQUIRED_MESSAGE);
+  }
+}
+
+/** Password was right, a code was given, and it matched neither the TOTP nor any unused backup code. */
+class InvalidTwoFactorCodeSignIn extends CredentialsSignin {
+  constructor() {
+    super("That code didn't work. Check the time on your phone, or use a backup code.");
   }
 }
 
@@ -96,6 +122,16 @@ export async function authorizeCredentials(
   // Deactivated staff, or a staff login with no profile, cannot sign in.
   if (user.role === "STAFF" && (!user.staffProfile || !user.staffProfile.active)) return null;
   if (!(await verifyPassword(password, user.passwordHash))) return null;
+
+  // Second factor, only for an account that has confirmed one. A secret
+  // generated mid-setup and never confirmed doesn't count — see
+  // lib/two-factor.ts — so abandoning setup can't accidentally lock anyone out.
+  const twoFactor = await getTwoFactorStatus(user.id);
+  if (twoFactor?.confirmedAt) {
+    const code = (credentials?.totpCode as string | undefined)?.trim();
+    if (!code) throw new TwoFactorRequiredSignIn();
+    if (!(await verifyTwoFactorCode(user.id, twoFactor.secret, code))) throw new InvalidTwoFactorCodeSignIn();
+  }
 
   await rawDb.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
