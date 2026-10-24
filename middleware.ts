@@ -1,8 +1,9 @@
-import NextAuth from "next-auth";
+import NextAuth, { type NextAuthRequest } from "next-auth";
 import { NextResponse, type NextRequest } from "next/server";
 import { authConfig } from "@/auth.config";
 import { LAST_CLINIC_COOKIE, slugFromAppPath } from "@/lib/clinic-link";
 import { clientAppPath, isClientHost, loginRedirectForHost, shortClientAppPath } from "@/lib/portal-hosts";
+import { applySecurityHeaders } from "@/lib/security-headers";
 
 const { auth } = NextAuth(authConfig);
 
@@ -43,15 +44,18 @@ const AGENCY_REDIRECTS: Record<string, string> = {
   "/platform/tenants/new": "/agency",
 };
 
-function withPathnameHeaders(req: NextRequest) {
-  // Server layouts have no direct access to the pathname; pass it down.
+function withPathnameHeaders(req: NextRequest, nonce: string) {
+  // Server layouts have no direct access to the pathname; pass it down. The
+  // nonce travels the same way, so a server component (the launch-screen
+  // splash is the one that needs it) can put it on its own inline <script>.
   const headers = new Headers(req.headers);
   headers.set("x-pathname", req.nextUrl.pathname);
+  headers.set("x-nonce", nonce);
   return headers;
 }
 
-function withPathname(req: NextRequest) {
-  return NextResponse.next({ request: { headers: withPathnameHeaders(req) } });
+function withPathname(req: NextRequest, nonce: string) {
+  return NextResponse.next({ request: { headers: withPathnameHeaders(req, nonce) } });
 }
 
 /** Remembers the clinic being viewed, so /app (and pirs.io) reopens it next time. */
@@ -62,7 +66,8 @@ function rememberClinic(req: NextRequest, res: NextResponse, appPath: string) {
   }
 }
 
-export default auth((req) => {
+/** Everything that decides where a request goes. Headers are applied once, after, to whatever this returns. */
+function route(req: NextAuthRequest, nonce: string): NextResponse {
   const { pathname } = req.nextUrl;
   const user = req.auth?.user;
   const isAgencyAdmin = user?.role === "PLATFORM_ADMIN";
@@ -89,7 +94,7 @@ export default auth((req) => {
     if (target) {
       const url = req.nextUrl.clone();
       url.pathname = target;
-      const res = NextResponse.rewrite(url, { request: { headers: withPathnameHeaders(req) } });
+      const res = NextResponse.rewrite(url, { request: { headers: withPathnameHeaders(req, nonce) } });
       rememberClinic(req, res, target);
       return res;
     }
@@ -134,7 +139,7 @@ export default auth((req) => {
     if (!user) return NextResponse.redirect(new URL("/login", req.url));
     // Merchant users must not learn that /agency exists.
     if (!isAgencyAdmin) return NextResponse.rewrite(new URL("/not-found", req.url));
-    return withPathname(req);
+    return withPathname(req, nonce);
   }
 
   if (pathname.startsWith("/m/")) {
@@ -142,17 +147,33 @@ export default auth((req) => {
     if (!isAgencyAdmin && !isMerchantUser) return NextResponse.rewrite(new URL("/not-found", req.url));
     // Per-merchant ownership is checked in requireMerchantContext, which has
     // database access and returns a real 404.
-    return withPathname(req);
+    return withPathname(req, nonce);
   }
 
   // --- client app: remember the clinic, so /app reopens it next time ------
   if (pathname.startsWith("/app/")) {
-    const res = withPathname(req);
+    const res = withPathname(req, nonce);
     rememberClinic(req, res, pathname);
     return res;
   }
 
-  return withPathname(req);
+  return withPathname(req, nonce);
+}
+
+export default auth((req) => {
+  // One nonce per request, carried two ways: on the response's CSP (so the
+  // browser will run a script that names it) and on the request headers via
+  // withPathnameHeaders (so the one page that needs it, the launch-screen
+  // splash, can read it back with next/headers and put it on its script tag).
+  const nonce = crypto.randomUUID();
+  const res = route(req, nonce);
+  // The service worker's own script response is not a page and registers no
+  // nonce of its own to satisfy a nonce-based script-src — Chrome refuses the
+  // registration outright ("An unknown error occurred when fetching the
+  // script") if this response carries one. It needs no CSP of its own.
+  const isServiceWorker = req.nextUrl.pathname === "/client-sw.js";
+  applySecurityHeaders(res.headers, nonce, req.nextUrl.protocol === "https:", { skipCsp: isServiceWorker });
+  return res;
 });
 
 export const config = {

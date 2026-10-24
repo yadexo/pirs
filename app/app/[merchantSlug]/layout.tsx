@@ -56,6 +56,7 @@ export default async function ClientAppLayout({
   // installed app has, so the two can't disagree about what is inside it.
   const requestHeaders = await headers();
   const scope = clientAppScope(requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"));
+  const nonce = requestHeaders.get("x-nonce") ?? "";
 
   // The merchant's own brand colour is the only colour the client app takes
   // from configuration; everything else is the fixed monochrome palette. The
@@ -71,7 +72,7 @@ export default async function ClientAppLayout({
   const publicClinic = await getPublicClinic(merchantSlug);
   const splash = (
     <>
-      <Splash name={ctx.merchant.name} logoUrl={ctx.merchant.appIconUrl} color={ctx.merchant.accentColor} background={ctx.merchant.launchBackground} />
+      <Splash name={ctx.merchant.name} logoUrl={ctx.merchant.appIconUrl} color={ctx.merchant.accentColor} background={ctx.merchant.launchBackground} nonce={nonce} />
       {publicClinic && <LaunchImageLinks base={base} version={publicClinic.version} />}
     </>
   );

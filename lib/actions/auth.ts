@@ -6,7 +6,8 @@ import { signIn } from "@/auth";
 import { clientSignIn } from "@/client-auth";
 import { rawDb } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimit, retryAfterLabel } from "@/lib/rate-limit";
+import { clientIp } from "@/lib/request-ip";
 import { resolveDestination, canReach, safeNext } from "@/lib/login-destination";
 import { recordActivity } from "@/lib/activity";
 import { currentClientBasePath } from "@/lib/public-clinic";
@@ -27,7 +28,11 @@ async function signInOrError(
     await (audience === "client" ? clientSignIn : signIn)("credentials", { ...params, redirectTo });
   } catch (err) {
     if (err instanceof AuthError) {
-      return { error: "Invalid email or password." };
+      // Rate-limit failures carry their own message (see RateLimitedSignIn,
+      // lib/auth-credentials.ts); a wrong password never does, and stays
+      // generic on purpose — a different message would say which part was
+      // wrong.
+      return { error: err.message || "Invalid email or password." };
     }
     throw err; // NEXT_REDIRECT on success — must propagate uncaught
   }
@@ -99,8 +104,13 @@ export async function customerRegisterAction(tenantSlug: string, _prevState: unk
   }
   const { firstName, lastName, email, phone, password, marketingConsent } = parsed.data;
 
-  const { ok } = await rateLimit(`register:${tenantSlug}:${email.toLowerCase()}`, 5, 15 * 60 * 1000);
-  if (!ok) return { error: "Too many attempts. Try again later." };
+  const ip = await clientIp();
+  const [byAccount, byIp] = await Promise.all([
+    rateLimit(`register:${tenantSlug}:${email.toLowerCase()}`, 5, 15 * 60 * 1000),
+    rateLimit(`register:ip:${ip}`, 20, 15 * 60 * 1000),
+  ]);
+  const limited = !byAccount.ok ? byAccount : !byIp.ok ? byIp : null;
+  if (limited) return { error: `Too many attempts. Try again in ${retryAfterLabel(limited.retryAfterMs)}.` };
 
   const tenant = await rawDb.tenant.findUnique({
     where: { slug: tenantSlug },

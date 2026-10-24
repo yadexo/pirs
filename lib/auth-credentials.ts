@@ -1,9 +1,34 @@
 import "server-only";
+// From @auth/core directly, not the "next-auth" package root — that one
+// pulls in Next.js-specific entry points this file has no other reason to
+// load (and that break outside a Next.js runtime, e.g. under plain Node).
+import { CredentialsSignin } from "@auth/core/errors";
 import { rawDb } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimit, retryAfterLabel } from "@/lib/rate-limit";
 import { permissionsFor } from "@/lib/live-account";
 import type { SessionPermissions, SessionUserShape } from "@/types/next-auth";
+
+/**
+ * A plain `throw new Error(...)` from `authorize()` does not survive the trip
+ * back through Auth.js — only a thrown `AuthError` (`CredentialsSignin` is
+ * one) does, and even then with no message by default. Passing a string to
+ * it sets `.message`, which `signInOrError` (auth.ts) reads to show this
+ * specific text instead of the generic "wrong password" one — the only
+ * message worth being specific about, since it is not "wrong password",
+ * it is "slow down".
+ */
+class RateLimitedSignIn extends CredentialsSignin {
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+/** The caller's address from the request NextAuth hands the authorize callback. */
+export function ipFromRequest(req: Request | undefined): string {
+  if (!req) return "unknown";
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+}
 
 /**
  * Who a session is for. Staff (agency, clinic admins, clinic staff) and
@@ -26,7 +51,11 @@ const include = {
   tenant: { select: { slug: true, status: true } },
 } as const;
 
-export async function authorizeCredentials(credentials: Partial<Record<string, unknown>> | undefined, audience: Audience): Promise<SessionUserShape | null> {
+export async function authorizeCredentials(
+  credentials: Partial<Record<string, unknown>> | undefined,
+  audience: Audience,
+  ip = "unknown",
+): Promise<SessionUserShape | null> {
   const portal = credentials?.portal as Portal | undefined;
   const email = (credentials?.email as string | undefined)?.trim().toLowerCase();
   const password = credentials?.password as string | undefined;
@@ -34,8 +63,15 @@ export async function authorizeCredentials(credentials: Partial<Record<string, u
 
   if (!portal || !email || !password) return null;
 
-  const { ok } = await rateLimit(`login:${portal}:${email}`, 10, 10 * 60 * 1000);
-  if (!ok) throw new Error("Too many sign-in attempts. Try again in a few minutes.");
+  // Both limits run regardless of which trips first, so a attacker spraying
+  // one password across many accounts from one address is still caught, and
+  // a botnet trying one account from many addresses still is too.
+  const [byAccount, byIp] = await Promise.all([
+    rateLimit(`login:${portal}:${email}`, 10, 10 * 60 * 1000),
+    rateLimit(`login:ip:${ip}`, 30, 10 * 60 * 1000),
+  ]);
+  const limited = !byAccount.ok ? byAccount : !byIp.ok ? byIp : null;
+  if (limited) throw new RateLimitedSignIn(`Too many sign-in attempts. Try again in ${retryAfterLabel(limited.retryAfterMs)}.`);
 
   const roles = audience === "client" ? (["CUSTOMER"] as const) : (["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF"] as const);
   let user;

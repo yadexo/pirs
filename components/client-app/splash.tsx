@@ -30,7 +30,20 @@ export function LaunchImageLinks({ base, version }: { base: string; version: str
  * not depend on hydration having finished, because hydration finishing late
  * on a slow phone is exactly the moment this is covering for.
  */
-export function Splash({ name, logoUrl, color, background }: { name: string; logoUrl: string | null; color: string | null; background: string }) {
+export function Splash({
+  name,
+  logoUrl,
+  color,
+  background,
+  nonce,
+}: {
+  name: string;
+  logoUrl: string | null;
+  color: string | null;
+  background: string;
+  /** From middleware.ts via the x-nonce request header — required by the CSP on this script. */
+  nonce: string;
+}) {
   const bg = background === "white" ? "#ffffff" : color && /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#0b0d12";
   const onBg = background === "white" ? "#111318" : "#ffffff";
   const initial = (name.trim().charAt(0) || "•").toUpperCase();
@@ -50,6 +63,7 @@ export function Splash({ name, logoUrl, color, background }: { name: string; log
         </div>
       </div>
       <script
+        nonce={nonce}
         // Never longer than needed: hides on load, or on a timeout if load is
         // slow to fire, whichever comes first. Reduce Motion is handled by
         // this file's CSS, not here — this only decides *when*, never *how*.
