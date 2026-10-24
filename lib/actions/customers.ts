@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireStaffContext, requirePermission } from "@/lib/rbac";
+import { requireStaffContext, requirePermission, ForbiddenError } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 
 export async function addCustomerNoteAction(customerProfileId: string, _prevState: unknown, formData: FormData) {
@@ -75,7 +75,20 @@ export async function toggleCustomerTagAction(customerProfileId: string, tagId: 
   await requirePermission("customers.edit");
   const { db } = await requireStaffContext();
 
+  // CustomerProfileTag carries no tenantId of its own (it's a join table), so
+  // the tenant-scoping Prisma extension can't protect it the way it protects
+  // every model that has that column — a lookup on the two tenant-scoped
+  // models either side of the join is what has to catch a foreign id here
+  // instead. db.customerProfile returns null for another tenant's profile.
+  const profile = await db.customerProfile.findFirst({ where: { id: customerProfileId }, select: { id: true } });
+  if (!profile) throw new ForbiddenError("That client isn't at this clinic.");
+
   if (apply) {
+    // The tag itself is tenant-scoped too, so a tagId from another clinic
+    // fails the same way — this create only ever links two rows already
+    // confirmed to be this tenant's own.
+    const tag = await db.customerTag.findFirst({ where: { id: tagId }, select: { id: true } });
+    if (!tag) throw new ForbiddenError("That tag isn't at this clinic.");
     await db.customerProfileTag.create({ data: { customerProfileId, tagId } }).catch(() => {});
   } else {
     await db.customerProfileTag.deleteMany({ where: { customerProfileId, tagId } });
