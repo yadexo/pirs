@@ -23,7 +23,7 @@ with the raw client except in platform-admin code paths.
 - Commit with `git -c user.name=dev -c user.email=dev@example.com` and end
   commit messages with the `Co-Authored-By` line the session gives you.
 
-## Deployment: staging first, always
+## Deployment
 
 There are three environments:
 
@@ -33,10 +33,34 @@ There are three environments:
 | **Staging** | Neon branch `staging` | Vercel Preview, fixed URL (see `docs/deployment/staging-setup.md`) | `staging` |
 | **Production** | Neon `production` branch (`ep-frosty-cloud-zal3mzce`) | Vercel Production, `pirs.io` / `clinic.pirs.io` | `main` |
 
-**New work goes to `staging` first.** Branch off `staging` (or push directly
-to it for small changes), let it deploy, test it at the staging URL —
-including on a real phone — and only then merge `staging` into `main` to ship
-to production:
+**Until the first real clinics are onboarded: work directly on `main`, test
+on production with `testclinic2`.** This is a temporary, explicitly-chosen
+exception to the normal rule below — there are no real clinics on production
+yet, so there's nothing at risk in testing there with the dedicated test
+clinic. Push straight to `main`:
+
+```bash
+git checkout main
+git pull
+# ...work, commit...
+git push                      # deploys to pirs.io / clinic.pirs.io
+```
+
+Keep `staging` in sync so it's ready the moment this exception ends — merge
+`main` into `staging` (and push) after each change lands on `main`:
+
+```bash
+git checkout staging
+git pull
+git merge main
+git push
+git checkout main
+```
+
+**Once real clinics are onboarded, switch back to staging-first, for good.**
+Branch off `staging` (or push directly to it for small changes), let it
+deploy, test it at the staging URL — including on a real phone — and only
+then merge `staging` into `main` to ship to production:
 
 ```bash
 git checkout staging
@@ -56,6 +80,8 @@ asking first.** Production database tasks go through `npm run prod:*`
 writes it to disk. The equivalent staging tasks are `npm run stg:*`
 (`scripts/staging.ps1`), which additionally refuses outright if it's ever
 handed the production connection string — `stg:wipe` deletes every row in
-every table, so that guard isn't optional.
+every table, so that guard isn't optional. This rule doesn't change under the
+direct-to-main exception above — testing with `testclinic2` on production
+never means running destructive or untested database commands against it.
 
 First-time staging/Vercel/Neon/Stripe setup: `docs/deployment/staging-setup.md`.
