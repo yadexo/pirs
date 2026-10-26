@@ -1,0 +1,93 @@
+{
+  "common": {
+    "save": "Opslaan",
+    "cancel": "Annuleren",
+    "close": "Sluiten",
+    "back": "Terug",
+    "loading": "Bezig met laden…",
+    "continue": "Doorgaan",
+    "done": "Klaar",
+    "edit": "Bewerken",
+    "delete": "Verwijderen",
+    "confirm": "Bevestigen",
+    "retry": "Opnieuw proberen",
+    "optional": "optioneel"
+  },
+  "auth": {
+    "signIn": "Inloggen",
+    "signOut": "Uitloggen",
+    "email": "E-mailadres",
+    "password": "Wachtwoord",
+    "forgotPassword": "Wachtwoord vergeten?",
+    "enterCredentials": "Vul je gegevens in om door te gaan.",
+    "invalidCredentials": "Ongeldig e-mailadres of wachtwoord.",
+    "passwordSaved": "Wachtwoord opgeslagen. Log in met je nieuwe wachtwoord.",
+    "accessChanged": "Je toegang is gewijzigd. Log opnieuw in.",
+    "wrongAccount": "Verkeerd account voor dit portaal",
+    "signedInAs": "Je bent ingelogd als",
+    "signOutAndSwitch": "Uitloggen en van account wisselen",
+    "stayInMyPortal": "In mijn eigen portaal blijven",
+    "allPortals": "Alle portalen",
+    "twoFactor": {
+      "prompt": "Vul de 6-cijferige code van je authenticator-app in, of een van je back-upcodes.",
+      "codeLabel": "Code",
+      "verify": "Verifiëren",
+      "useDifferentAccount": "Ander account gebruiken",
+      "wrongCode": "Deze code klopt niet. Controleer de tijd op je telefoon, of gebruik een back-upcode."
+    }
+  },
+  "clientApp": {
+    "nav": {
+      "home": "Start",
+      "shop": "Shop",
+      "rewards": "Beloningen",
+      "profile": "Profiel",
+      "scan": "Scannen"
+    },
+    "profile": {
+      "account": "Account",
+      "language": "Taal",
+      "languageMoreComingSoon": "Meer talen komen hier zodra de kliniek ze inschakelt.",
+      "dutch": "Nederlands",
+      "english": "Engels"
+    },
+    "checkout": {
+      "pay": "Betaal € {amount}",
+      "payAndBecomeMember": "Betaal € {amount} en word lid"
+    },
+    "membership": {
+      "pricePerPeriod": "€ {amount} per {period, select, MONTHLY {maand} ANNUAL {jaar} other {periode}}",
+      "automaticRenewal": "Wordt automatisch verlengd totdat je opzegt.",
+      "howToCancel": "Opzeggen kan op elk moment in Profiel > Lidmaatschap. Je houdt toegang tot het einde van de betaalde periode."
+    },
+    "install": {
+      "iosStep1": "Tik op Deel",
+      "iosStep2": "Tik op Zet op beginscherm"
+    }
+  },
+  "twoFactor": {
+    "title": "Tweestapsverificatie",
+    "requiredForRole": "Verplicht voor jouw rol — elke keer dat je inlogt een code uit je authenticator-app.",
+    "optional": "Optioneel — voegt een extra stap toe bij het inloggen, met een authenticator-app.",
+    "setupToContinue": "Stel dit in om verder te gaan naar je dashboard.",
+    "setUp": "Tweestapsverificatie instellen",
+    "turnOff": "Tweestapsverificatie uitschakelen",
+    "on": "Tweestapsverificatie is ingeschakeld. {count, plural, one {Nog # back-upcode over.} other {Nog # back-upcodes over.}}",
+    "scanInstructions": "Scan dit met je authenticator-app (Google Authenticator, 1Password, Authy of vergelijkbaar), vul daarna de 6-cijferige code in die wordt getoond.",
+    "cantScan": "Niet kunnen scannen? Vul deze sleutel handmatig in",
+    "codeFromApp": "Code uit je app",
+    "confirmAndTurnOn": "Bevestigen en inschakelen",
+    "saveBackupCodes": "Bewaar deze back-upcodes op een veilige plek.",
+    "backupCodesHint": "Elke code werkt één keer, mocht je ooit geen toegang meer hebben tot je authenticator-app. Dit is de enige keer dat ze getoond worden — schrijf ze nu op.",
+    "savedThese": "Ik heb ze bewaard — klaar",
+    "enterPasswordToTurnOff": "Vul je wachtwoord in om tweestapsverificatie uit te schakelen.",
+    "generateNewBackupCodes": "Nieuwe back-upcodes genereren",
+    "resetByEmail": {
+      "title": "Tweestapsverificatie resetten",
+      "description": "Verplicht voor kliniekeigenaren en platformbeheerders — als iemand zijn authenticator kwijtraakt, reset dit zodat diegene het opnieuw kan instellen. Elke reset wordt vastgelegd in het auditlog.",
+      "accountEmail": "E-mailadres account",
+      "reset": "2FA resetten",
+      "confirmed": "Tweestapsverificatie is gereset voor {email}. Diegene wordt gevraagd dit opnieuw in te stellen bij de volgende keer inloggen."
+    }
+  }
+}

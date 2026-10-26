@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useActionState, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { unifiedSignInAction } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
 
 export function LoginForm({ next }: { next?: string | null }) {
+  const t = useTranslations("auth");
   const [state, formAction, pending] = useActionState(unifiedSignInAction, undefined);
   // Controlled, not read back from the DOM on the second step — React resets
   // a form's uncontrolled fields once its action settles (the same thing a
@@ -30,10 +32,10 @@ export function LoginForm({ next }: { next?: string | null }) {
         <input type="hidden" name="email" value={credentials.email} />
         <input type="hidden" name="password" value={credentials.password} />
         {next && <input type="hidden" name="next" value={next} />}
-        <p className="text-[13px] text-ink-muted">Enter the 6-digit code from your authenticator app, or one of your backup codes.</p>
+        <p className="text-[13px] text-ink-muted">{t("twoFactor.prompt")}</p>
         <div>
           <label htmlFor="totpCode" className="mb-1.5 block text-[12px] font-medium">
-            Code
+            {t("twoFactor.codeLabel")}
           </label>
           <input
             id="totpCode"
@@ -49,14 +51,14 @@ export function LoginForm({ next }: { next?: string | null }) {
         </div>
         {errorMessage && <p className="text-[12px] text-[var(--accent-red)]">{errorMessage}</p>}
         <Button type="submit" loading={pending} className="w-full">
-          Verify
+          {t("twoFactor.verify")}
         </Button>
         <button
           type="button"
           onClick={() => setCredentials(null)}
           className="block w-full text-center text-[12px] text-ink-muted underline underline-offset-2 hover:text-ink"
         >
-          Use a different account
+          {t("twoFactor.useDifferentAccount")}
         </button>
       </form>
     );
@@ -67,7 +69,7 @@ export function LoginForm({ next }: { next?: string | null }) {
       {next && <input type="hidden" name="next" value={next} />}
       <div>
         <label htmlFor="email" className="mb-1.5 block text-[12px] font-medium">
-          Email
+          {t("email")}
         </label>
         <input
           id="email"
@@ -82,7 +84,7 @@ export function LoginForm({ next }: { next?: string | null }) {
       </div>
       <div>
         <label htmlFor="password" className="mb-1.5 block text-[12px] font-medium">
-          Password
+          {t("password")}
         </label>
         <input
           id="password"
@@ -97,10 +99,10 @@ export function LoginForm({ next }: { next?: string | null }) {
       </div>
       {errorMessage && <p className="text-[12px] text-[var(--accent-red)]">{errorMessage}</p>}
       <Button type="submit" loading={pending} className="w-full">
-        Sign in
+        {t("signIn")}
       </Button>
       <Link href="/forgot-password" className="block text-center text-[12px] text-ink-muted underline underline-offset-2 hover:text-ink">
-        Forgot password?
+        {t("forgotPassword")}
       </Link>
     </form>
   );

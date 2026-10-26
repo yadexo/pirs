@@ -1,0 +1,93 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "back": "Back",
+    "loading": "Loading…",
+    "continue": "Continue",
+    "done": "Done",
+    "edit": "Edit",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "retry": "Try again",
+    "optional": "optional"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "email": "Email",
+    "password": "Password",
+    "forgotPassword": "Forgot password?",
+    "enterCredentials": "Enter your credentials to continue.",
+    "invalidCredentials": "Invalid email or password.",
+    "passwordSaved": "Password saved. Sign in with your new password.",
+    "accessChanged": "Your access has changed. Please sign in again.",
+    "wrongAccount": "Wrong account for this portal",
+    "signedInAs": "You are signed in as",
+    "signOutAndSwitch": "Sign out and switch account",
+    "stayInMyPortal": "Stay in my own portal",
+    "allPortals": "All portals",
+    "twoFactor": {
+      "prompt": "Enter the 6-digit code from your authenticator app, or one of your backup codes.",
+      "codeLabel": "Code",
+      "verify": "Verify",
+      "useDifferentAccount": "Use a different account",
+      "wrongCode": "That code didn't work. Check the time on your phone, or use a backup code."
+    }
+  },
+  "clientApp": {
+    "nav": {
+      "home": "Home",
+      "shop": "Shop",
+      "rewards": "Rewards",
+      "profile": "Profile",
+      "scan": "Scan"
+    },
+    "profile": {
+      "account": "Account",
+      "language": "Language",
+      "languageMoreComingSoon": "More languages will appear here once the clinic enables them.",
+      "dutch": "Dutch",
+      "english": "English"
+    },
+    "checkout": {
+      "pay": "Pay € {amount}",
+      "payAndBecomeMember": "Pay € {amount} and become a member"
+    },
+    "membership": {
+      "pricePerPeriod": "€ {amount} per {period, select, MONTHLY {month} ANNUAL {year} other {period}}",
+      "automaticRenewal": "Renews automatically until you cancel.",
+      "howToCancel": "Cancel any time from Profile > Membership. You keep access until the end of the period you've paid for."
+    },
+    "install": {
+      "iosStep1": "Tap Share",
+      "iosStep2": "Tap Add to Home Screen"
+    }
+  },
+  "twoFactor": {
+    "title": "Two-factor authentication",
+    "requiredForRole": "Required for your role — a code from your authenticator app, every time you sign in.",
+    "optional": "Optional — adds a second step to sign in, using an authenticator app.",
+    "setupToContinue": "Set this up to continue to your dashboard.",
+    "setUp": "Set up two-factor authentication",
+    "turnOff": "Turn off two-factor authentication",
+    "on": "Two-factor authentication is on. {count, plural, one {# backup code left.} other {# backup codes left.}}",
+    "scanInstructions": "Scan this with your authenticator app (Google Authenticator, 1Password, Authy, or similar), then enter the 6-digit code it shows.",
+    "cantScan": "Can't scan? Enter this key manually",
+    "codeFromApp": "Code from your app",
+    "confirmAndTurnOn": "Confirm and turn on",
+    "saveBackupCodes": "Save these backup codes somewhere safe.",
+    "backupCodesHint": "Each works once, if you ever lose access to your authenticator app. This is the only time they're shown — write them down now.",
+    "savedThese": "I've saved these — done",
+    "enterPasswordToTurnOff": "Enter your password to turn off two-factor authentication.",
+    "generateNewBackupCodes": "Generate new backup codes",
+    "resetByEmail": {
+      "title": "Two-factor reset",
+      "description": "Required for clinic owners and platform admins — if someone loses their authenticator, this clears it so they can set it up again. Every reset is written to the audit log against their account.",
+      "accountEmail": "Account email",
+      "reset": "Reset their 2FA",
+      "confirmed": "Two-factor authentication was reset for {email}. They'll be asked to set it up again next time they sign in."
+    }
+  }
+}

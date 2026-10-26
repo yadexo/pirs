@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslations } from "next-intl";
 import { resetTwoFactorByEmailAction } from "@/lib/actions/two-factor";
 import { Button } from "@/components/ui/button";
 
@@ -11,6 +12,7 @@ import { Button } from "@/components/ui/button";
  * still reach without it: here, not in their own clinic's Team settings.
  */
 export function TwoFactorReset() {
+  const t = useTranslations("twoFactor.resetByEmail");
   const [email, setEmail] = React.useState("");
   const [pending, setPending] = React.useState(false);
   const [message, setMessage] = React.useState<{ kind: "ok" | "error"; text: string } | null>(null);
@@ -22,7 +24,7 @@ export function TwoFactorReset() {
     const res = await resetTwoFactorByEmailAction(email);
     setPending(false);
     if ("error" in res) return setMessage({ kind: "error", text: res.error });
-    setMessage({ kind: "ok", text: `Two-factor authentication was reset for ${res.email}. They'll be asked to set it up again next time they sign in.` });
+    setMessage({ kind: "ok", text: t("confirmed", { email: res.email }) });
     setEmail("");
   }
 
@@ -30,7 +32,7 @@ export function TwoFactorReset() {
     <form onSubmit={submit} className="mt-3 flex flex-wrap items-end gap-2">
       <div className="flex-1 min-w-[220px]">
         <label htmlFor="reset-2fa-email" className="mb-1.5 block text-[12px] font-medium">
-          Account email
+          {t("accountEmail")}
         </label>
         <input
           id="reset-2fa-email"
@@ -43,7 +45,7 @@ export function TwoFactorReset() {
         />
       </div>
       <Button type="submit" loading={pending} disabled={!email}>
-        Reset their 2FA
+        {t("reset")}
       </Button>
       {message && (
         <p className={`w-full text-[12px] ${message.kind === "error" ? "text-[var(--accent-red)]" : "text-ink-muted"}`}>{message.text}</p>

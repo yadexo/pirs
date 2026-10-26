@@ -161,10 +161,24 @@ model TenantBranding {
   updatedAt DateTime @updatedAt
 }
 
+/// The client app's register, not the clinic portal's — "je" (informal) or
+/// "u" (formal) in Dutch. English copy doesn't distinguish, so this only
+/// changes anything when the client's own locale is Dutch.
+enum Formality {
+  INFORMAL
+  FORMAL
+}
+
 model TenantSettings {
   id       String @id @default(cuid())
   tenantId String @unique
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Language a new client defaults to, until they change it themselves in
+  /// Profile > Account > Language. Set in App Builder > Settings > General.
+  defaultClientLocale String    @default("nl")
+  /// "je" vs "u" in the client app's Dutch copy — see Formality above.
+  clientFormality      Formality @default(INFORMAL)
 
   /// Deprecated. This was a sales-tax rate added on top of the price. Prices
   /// are now VAT-inclusive and nothing is added at checkout, so nothing reads
@@ -295,6 +309,13 @@ model User {
   /// Sessions created before this moment are refused. Set on password reset
   /// and account closure, so an old or stolen session cannot outlive them.
   sessionsValidAfter DateTime?
+  /// Clinic portal language for staff; client app language for clients
+  /// (Profile > Account > Language). A client is set to the clinic's
+  /// TenantSettings.defaultClientLocale at signup, then only ever changed by
+  /// the client themselves — never silently moved by a later clinic default
+  /// change. Not a UserRole-conditional field: every account, staff or
+  /// client, is just a locale tag read by whichever surface they sign into.
+  locale             String     @default("nl")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

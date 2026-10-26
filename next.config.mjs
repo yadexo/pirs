@@ -1,3 +1,13 @@
+import createNextIntlPlugin from "next-intl/plugin";
+
+/**
+ * No URL-based locale routing (no /nl or /en prefix) — the three surfaces
+ * already have their own path structure, and locale is a per-account or
+ * per-clinic setting, not something a URL segment should carry. i18n/request.ts
+ * is where locale is actually resolved.
+ */
+const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
+
 /**
  * One id per build. The service worker caches Next's fingerprinted files
  * forever, so its cache has to be thrown away when a new build replaces them
@@ -41,4 +51,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

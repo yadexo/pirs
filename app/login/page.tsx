@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { auth } from "@/auth";
 import { rawDb } from "@/lib/db";
 import { LoginForm } from "./login-form";
@@ -24,6 +25,7 @@ const ROLE_LABEL: Record<string, string> = {
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; reason?: string }> }) {
   const { next, reason } = await searchParams;
   const target = safeNext(next);
+  const t = await getTranslations("auth");
 
   const session = await auth();
   const agency = await rawDb.agencySettings.findFirst();
@@ -60,9 +62,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
                 {portal.section}
               </p>
             )}
-            <h1 className="mt-1 text-[18px] font-semibold">Wrong account for this portal</h1>
+            <h1 className="mt-1 text-[18px] font-semibold">{t("wrongAccount")}</h1>
             <p className="mt-2 text-[13px] leading-relaxed text-ink-muted">
-              You are signed in as <span className="font-medium text-ink">{session.user.email}</span>
+              {t("signedInAs")} <span className="font-medium text-ink">{session.user.email}</span>
               {ROLE_LABEL[role] ? <span className="text-ink-faint"> — {ROLE_LABEL[role]}</span> : null}.{" "}
               {portal ? `${portal.section} needs ${SECTION_REQUIREMENT[portal.section] ?? "a different account"}.` : null}
             </p>
@@ -70,7 +72,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             <form action={switchAccountAction} className="mt-5">
               <input type="hidden" name="next" value={target ?? ""} />
               <Button type="submit" className="w-full">
-                Sign out and switch account
+                {t("signOutAndSwitch")}
               </Button>
             </form>
 
@@ -78,13 +80,13 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               href={resolveDestination(actor, null)}
               className="mt-3 flex h-10 items-center justify-center rounded-[10px] border border-border text-[13px] font-medium transition-colors hover:bg-app"
             >
-              Stay in my own portal
+              {t("stayInMyPortal")}
             </Link>
           </div>
 
           <p className="mt-4 text-center text-[12.5px] text-ink-muted">
             <Link href="/" className="underline underline-offset-2">
-              All portals
+              {t("allPortals")}
             </Link>
           </p>
         </div>
@@ -113,18 +115,18 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             </>
           ) : (
             <>
-              <h1 className="text-[18px] font-semibold">Sign in</h1>
-              <p className="mt-1 text-[13px] text-ink-muted">Enter your credentials to continue.</p>
+              <h1 className="text-[18px] font-semibold">{t("signIn")}</h1>
+              <p className="mt-1 text-[13px] text-ink-muted">{t("enterCredentials")}</p>
             </>
           )}
           {reason === "password-updated" && (
             <p role="status" className="mt-3 rounded-[10px] bg-primary-soft px-3 py-2 text-[12px] text-ink">
-              Password saved. Sign in with your new password.
+              {t("passwordSaved")}
             </p>
           )}
           {(reason === "access-changed" || (session?.user && !live)) && (
             <p role="status" className="mt-3 rounded-[10px] bg-[var(--accent-amber)]/10 px-3 py-2 text-[12px] text-ink">
-              Your access has changed. Please sign in again.
+              {t("accessChanged")}
             </p>
           )}
           <div className="mt-5">
@@ -134,7 +136,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
         <p className="mt-4 text-center text-[12.5px] text-ink-muted">
           <Link href="/" className="underline underline-offset-2">
-            All portals
+            {t("allPortals")}
           </Link>
         </p>
       </div>

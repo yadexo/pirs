@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Hanken_Grotesk } from "next/font/google";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale } from "next-intl/server";
 import "./design-tokens.css";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
@@ -21,12 +23,17 @@ export const metadata: Metadata = {
   description: "White-label sales, loyalty, membership, and engagement platform for clinics and practices.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Resolved server-side (i18n/request.ts), same value the page itself was
+  // rendered with — see lib/locale.ts for why this is never auto-detected.
+  const locale = await getLocale();
   return (
-    <html lang="en" className={hanken.variable}>
+    <html lang={locale} className={hanken.variable}>
       <body className="min-h-screen antialiased">
-        {children}
-        <Toaster />
+        <NextIntlClientProvider>
+          {children}
+          <Toaster />
+        </NextIntlClientProvider>
       </body>
     </html>
   );

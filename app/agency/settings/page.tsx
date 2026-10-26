@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import { rawDb } from "@/lib/db";
 import { requireAgencyContext } from "@/lib/merchant-context";
 import { Panel } from "@/components/ui/primitives";
@@ -9,6 +10,7 @@ import { TwoFactorReset } from "./two-factor-reset";
  */
 export default async function AgencySettingsPage() {
   const { user } = await requireAgencyContext();
+  const t = await getTranslations("twoFactor.resetByEmail");
 
   const [admins, merchantCount] = await Promise.all([
     rawDb.user.findMany({ where: { role: "PLATFORM_ADMIN" }, select: { id: true, email: true, lastLoginAt: true } }),
@@ -46,11 +48,8 @@ export default async function AgencySettingsPage() {
       </Panel>
 
       <Panel className="p-5">
-        <h2 className="text-[14px] font-medium">Two-factor reset</h2>
-        <p className="mt-1 text-[12px] text-ink-muted">
-          Required for clinic owners and platform admins — if someone loses their authenticator, this clears it so they can set it up
-          again. Every reset is written to the audit log against their account.
-        </p>
+        <h2 className="text-[14px] font-medium">{t("title")}</h2>
+        <p className="mt-1 text-[12px] text-ink-muted">{t("description")}</p>
         <TwoFactorReset />
       </Panel>
 
