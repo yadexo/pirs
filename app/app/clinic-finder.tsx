@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Icon, Sheet } from "@/components/client-app/ui";
 import { findClinicsAction } from "@/lib/actions/clinic-directory";
 import type { ListedClinic } from "@/lib/clinic-directory";
@@ -15,6 +16,7 @@ import { useQrCamera, type CameraProblem } from "@/components/use-qr-camera";
  * wrong one of those would leave the installed app's scope.
  */
 export function ClinicFinder({ appName, prefix }: { appName: string; prefix: string }) {
+  const t = useTranslations("clientApp.clinicFinder");
   const router = useRouter();
   const [q, setQ] = React.useState("");
   const [results, setResults] = React.useState<ListedClinic[] | null>(null);
@@ -60,16 +62,16 @@ export function ClinicFinder({ appName, prefix }: { appName: string; prefix: str
   return (
     <div style={{ minHeight: "100dvh", maxWidth: 480, margin: "0 auto", padding: "calc(var(--sat) + 40px) var(--pad-x) 40px" }}>
       <p style={{ fontSize: 14, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--muted)", margin: 0 }}>{appName}</p>
-      <h1 style={{ fontSize: 32, fontWeight: 700, lineHeight: 1.15, color: "var(--ink-strong)", margin: "8px 0" }}>Find your clinic</h1>
-      <p style={{ fontSize: 16, color: "var(--muted)", margin: "0 0 28px" }}>Scan the QR code at your clinic, or search for it by name.</p>
+      <h1 style={{ fontSize: 32, fontWeight: 700, lineHeight: 1.15, color: "var(--ink-strong)", margin: "8px 0" }}>{t("title")}</h1>
+      <p style={{ fontSize: 16, color: "var(--muted)", margin: "0 0 28px" }}>{t("subtitle")}</p>
 
       <button type="button" className="btn-black" style={{ width: "100%" }} onClick={() => setScanning(true)}>
-        <Icon name="scan" size={22} /> Scan clinic QR code
+        <Icon name="scan" size={22} /> {t("scanQr")}
       </button>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "24px 0", color: "var(--muted)", fontSize: 14 }}>
         <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
-        or
+        {t("or")}
         <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
       </div>
 
@@ -78,8 +80,8 @@ export function ClinicFinder({ appName, prefix }: { appName: string; prefix: str
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Clinic name or city"
-          aria-label="Search clinics"
+          placeholder={t("searchPlaceholder")}
+          aria-label={t("searchClinics")}
           autoComplete="off"
           enterKeyHint="search"
           style={{ flex: 1, border: 0, background: "transparent", fontSize: 16, outline: "none", color: "var(--ink)" }}
@@ -90,9 +92,7 @@ export function ClinicFinder({ appName, prefix }: { appName: string; prefix: str
         {error ? (
           <p style={{ color: "var(--danger)", fontSize: 15 }}>{error}</p>
         ) : results === null ? null : results.length === 0 ? (
-          <p style={{ color: "var(--muted)", fontSize: 15, padding: "8px 4px" }}>
-            No clinic found. Not every clinic is listed — ask yours for their QR code or link.
-          </p>
+          <p style={{ color: "var(--muted)", fontSize: 15, padding: "8px 4px" }}>{t("noClinicFound")}</p>
         ) : (
           <div style={{ background: "var(--bg-surface)", borderRadius: "var(--r-card)", boxShadow: "var(--shadow-card)", padding: "6px 16px" }}>
             {results.map((c) => (
@@ -116,20 +116,15 @@ export function ClinicFinder({ appName, prefix }: { appName: string; prefix: str
         )}
       </div>
 
-      <Sheet open={scanning} onClose={() => setScanning(false)} title="Scan clinic QR code">
+      <Sheet open={scanning} onClose={() => setScanning(false)} title={t("scanQrTitle")}>
         {scanning && <ClinicScanner onSlug={openScanned} />}
       </Sheet>
     </div>
   );
 }
 
-const PROBLEMS: Record<CameraProblem, string> = {
-  unsupported: "This browser can't use the camera. Search for your clinic by name instead.",
-  denied: "Camera access is blocked. Allow it in your browser settings, or search by name.",
-  missing: "No camera found. Search for your clinic by name instead.",
-};
-
 function ClinicScanner({ onSlug }: { onSlug: (slug: string) => void }) {
+  const t = useTranslations("clientApp.clinicFinder");
   const [wrongCode, setWrongCode] = React.useState(false);
   const [attempt, setAttempt] = React.useState(0);
 
@@ -145,7 +140,7 @@ function ClinicScanner({ onSlug }: { onSlug: (slug: string) => void }) {
   if (wrongCode) {
     return (
       <div style={{ textAlign: "center", padding: "24px 0" }}>
-        <p style={{ color: "var(--ink)", fontSize: 16, margin: "0 0 16px" }}>That isn&apos;t a clinic code. Look for the QR code your clinic shows at the desk.</p>
+        <p style={{ color: "var(--ink)", fontSize: 16, margin: "0 0 16px" }}>{t("notAClinicCode")}</p>
         <button
           type="button"
           className="btn-black"
@@ -155,7 +150,7 @@ function ClinicScanner({ onSlug }: { onSlug: (slug: string) => void }) {
             setAttempt((n) => n + 1);
           }}
         >
-          Scan again
+          {t("scanAgain")}
         </button>
       </div>
     );
@@ -164,6 +159,12 @@ function ClinicScanner({ onSlug }: { onSlug: (slug: string) => void }) {
 }
 
 function Viewfinder({ onCode }: { onCode: (value: string) => void }) {
+  const t = useTranslations("clientApp.clinicFinder");
+  const PROBLEMS: Record<CameraProblem, string> = {
+    unsupported: t("cameraUnsupported"),
+    denied: t("cameraDenied"),
+    missing: t("cameraMissing"),
+  };
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const { problem, starting } = useQrCamera(videoRef, onCode);
   if (problem) return <p style={{ color: "var(--muted)", fontSize: 15, textAlign: "center", padding: "24px 0" }}>{PROBLEMS[problem]}</p>;
@@ -171,7 +172,7 @@ function Viewfinder({ onCode }: { onCode: (value: string) => void }) {
     <div style={{ position: "relative", aspectRatio: "1", width: "100%", borderRadius: "var(--r-card)", overflow: "hidden", background: "var(--black)", marginBottom: 12 }}>
       <video ref={videoRef} muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       <div aria-hidden="true" style={{ position: "absolute", inset: "18%", borderRadius: 18, border: "2px solid var(--on-black-muted)" }} />
-      {starting && <p style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "var(--on-black-muted)", margin: 0 }}>Starting camera…</p>}
+      {starting && <p style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "var(--on-black-muted)", margin: 0 }}>{t("startingCamera")}</p>}
     </div>
   );
 }

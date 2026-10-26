@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { useBasePath } from "./base-path";
 import { Sheet, Icon, money } from "@/components/client-app/ui";
 import { searchCatalogAction, type CatalogSearchResult } from "@/lib/actions/client-catalog";
@@ -24,6 +25,9 @@ export function SearchSheet({
   const [recents, setRecents] = React.useState<string[]>([]);
   const router = useRouter();
   const base = useBasePath();
+  const t = useTranslations("clientApp.searchSheet");
+  const tc = useTranslations("common");
+  const locale = useLocale();
 
   React.useEffect(() => {
     if (!open) return;
@@ -60,9 +64,9 @@ export function SearchSheet({
   }
 
   const groups: [string, CatalogSearchResult[]][] = [
-    ["Products", results.filter((r) => r.type === "Product")],
-    ["Treatments", results.filter((r) => r.type === "Treatment")],
-    ["Memberships", results.filter((r) => r.type === "Membership")],
+    [t("products"), results.filter((r) => r.type === "Product")],
+    [t("treatments"), results.filter((r) => r.type === "Treatment")],
+    [t("memberships"), results.filter((r) => r.type === "Membership")],
   ];
 
   return (
@@ -85,20 +89,20 @@ export function SearchSheet({
             autoFocus
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search products, treatments…"
-            aria-label="Search"
+            placeholder={t("placeholder")}
+            aria-label={tc("search")}
             style={{ flex: 1, border: 0, background: "transparent", fontSize: 16, outline: "none", color: "var(--ink)" }}
           />
         </span>
         <button onClick={onClose} style={{ color: "var(--muted)", fontSize: 15, fontWeight: 500 }}>
-          Cancel
+          {t("cancel")}
         </button>
       </div>
 
       {q.trim().length < 2 ? (
         recents.length > 0 ? (
           <>
-            <div className="grouplab">Recent</div>
+            <div className="grouplab">{t("recent")}</div>
             {recents.map((r) => (
               <button key={r} className="optrow" onClick={() => setQ(r)}>
                 <Icon name="clock" size={18} /> {r}
@@ -106,10 +110,10 @@ export function SearchSheet({
             ))}
           </>
         ) : (
-          <p style={{ color: "var(--muted)", fontSize: 15, padding: "10px 0" }}>Start typing to search the shop.</p>
+          <p style={{ color: "var(--muted)", fontSize: 15, padding: "10px 0" }}>{t("startTyping")}</p>
         )
       ) : results.length === 0 ? (
-        <p style={{ color: "var(--muted)", fontSize: 15, padding: "10px 0" }}>No matches. Try another word.</p>
+        <p style={{ color: "var(--muted)", fontSize: 15, padding: "10px 0" }}>{t("noMatches")}</p>
       ) : (
         groups.map(([label, rows]) =>
           rows.length === 0 ? null : (
@@ -121,7 +125,7 @@ export function SearchSheet({
                     <b style={{ fontSize: 15, display: "block" }}>{r.name}</b>
                     {r.priceCents != null && (
                       <span className="tabular" style={{ fontSize: 14, color: "var(--muted)" }}>
-                        {money(r.priceCents, currency)}
+                        {money(r.priceCents, currency, locale === "nl" ? "nl" : "en")}
                       </span>
                     )}
                   </span>

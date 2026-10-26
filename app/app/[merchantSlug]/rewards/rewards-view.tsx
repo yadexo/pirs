@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { useBasePath } from "../base-path";
 import { Sheet, Icon, EmptyState, QrCode, CountUp, money, useToast } from "@/components/client-app/ui";
 import { Button } from "@/components/client-app/v2";
@@ -39,6 +40,9 @@ export function RewardsView({
   const router = useRouter();
   const base = useBasePath();
   const { toast } = useToast();
+  const t = useTranslations("clientApp.rewards");
+  const locale = useLocale();
+  const fmtMoney = React.useCallback((cents: number) => money(cents, currency, locale === "nl" ? "nl" : "en"), [currency, locale]);
 
   const [selected, setSelected] = React.useState<RewardsData["rewards"][number] | null>(null);
   const [howOpen, setHowOpen] = React.useState(false);
@@ -70,7 +74,7 @@ export function RewardsView({
       const res = await clientReviewAction(merchantSlug);
       if ("error" in res) toast(res.error);
       else {
-        toast(`+${res.points} points`);
+        toast(t("pointsEarned", { count: res.points }));
         router.refresh();
       }
       return;
@@ -79,18 +83,18 @@ export function RewardsView({
       const link = typeof window !== "undefined" ? window.location.origin + base : "";
       if (typeof navigator !== "undefined" && navigator.share) {
         try {
-          await navigator.share({ title: "Join me", url: link });
+          await navigator.share({ title: t("joinMe"), url: link });
         } catch {
           return; // user dismissed the share sheet — no points
         }
       } else if (typeof navigator !== "undefined" && navigator.clipboard) {
         await navigator.clipboard.writeText(link).catch(() => {});
-        toast("Referral link copied");
+        toast(t("referralLinkCopied"));
       }
       const res = await clientReferralAction(merchantSlug);
       if ("error" in res) toast(res.error);
       else {
-        toast(`+${res.points} points`);
+        toast(t("pointsEarned", { count: res.points }));
         router.refresh();
       }
       return;
@@ -102,9 +106,9 @@ export function RewardsView({
   return (
     <div className="v2-rewards">
       <div className="head">
-        <h1>Rewards</h1>
+        <h1>{t("title")}</h1>
         <button type="button" onClick={() => setHowOpen(true)}>
-          How it works
+          {t("howItWorks")}
         </button>
       </div>
 
@@ -112,14 +116,14 @@ export function RewardsView({
       <div className="v2-balance">
         <div className="top">
           <span>
-            <span className="lab">Your points</span>
+            <span className="lab">{t("yourPoints")}</span>
             <b className="big">
               <CountUp to={points} />
             </b>
           </span>
           <span className="right">
-            <span className="lab">Credit</span>
-            <b className="tabular">{money(summary.cashBalanceCents, currency)}</b>
+            <span className="lab">{t("credit")}</span>
+            <b className="tabular">{fmtMoney(summary.cashBalanceCents)}</b>
           </span>
         </div>
         {next && (
@@ -127,22 +131,20 @@ export function RewardsView({
             <span className="bar" aria-hidden="true">
               <span style={{ width: `${Math.min(100, Math.round((points / next.pointsCost) * 100))}%` }} />
             </span>
-            <span className="note">
-              {next.pointsCost - points} more points for your next reward: {next.name}
-            </span>
+            <span className="note">{t("pointsForNextReward", { count: next.pointsCost - points, name: next.name })}</span>
           </>
         )}
       </div>
 
       {data.rewards.length === 0 ? (
         <div className="v2-empty">
-          <EmptyState text="No rewards yet" sub="Your clinic hasn't published any. The points you earn now are kept for when they do." />
+          <EmptyState text={t("noRewardsYet")} sub={t("noRewardsYetSub")} />
         </div>
       ) : (
         <>
           {affordable.length > 0 && (
             <section className="sec">
-              <h2>Ready to redeem</h2>
+              <h2>{t("readyToRedeem")}</h2>
               <div className="v2-rewardlist">
                 {affordable.map((r) => (
                   <div className="row" key={r.id}>
@@ -151,10 +153,10 @@ export function RewardsView({
                     </span>
                     <span className="txt">
                       <b>{r.name}</b>
-                      <span className="tabular">{r.pointsCost} points</span>
+                      <span className="tabular">{t("pointsCount", { count: r.pointsCost })}</span>
                     </span>
                     <Button variant="pill" className="take" onClick={() => setSelected(r)}>
-                      Redeem
+                      {t("redeem")}
                     </Button>
                   </div>
                 ))}
@@ -164,7 +166,7 @@ export function RewardsView({
 
           {working.length > 0 && (
             <section className="sec">
-              <h2>Keep earning</h2>
+              <h2>{t("keepEarning")}</h2>
               <div className="v2-rewardlist">
                 {working.map((r) => (
                   <div className="row goal" key={r.id}>
@@ -174,12 +176,12 @@ export function RewardsView({
                     <span className="txt">
                       <span className="line">
                         <b>{r.name}</b>
-                        <span className="cost tabular">{r.pointsCost} pts</span>
+                        <span className="cost tabular">{t("pointsAbbrev", { count: r.pointsCost })}</span>
                       </span>
                       <span className="bar" aria-hidden="true">
                         <span style={{ width: `${Math.min(100, Math.round((points / r.pointsCost) * 100))}%` }} />
                       </span>
-                      <span className="need">Need {r.pointsCost - points} more points</span>
+                      <span className="need">{t("needMorePoints", { count: r.pointsCost - points })}</span>
                     </span>
                   </div>
                 ))}
@@ -191,7 +193,7 @@ export function RewardsView({
 
       {data.earnRules.length > 0 && (
         <section className="sec">
-          <h2>Earn faster</h2>
+          <h2>{t("earnFaster")}</h2>
           <div className="v2-earn">
             {data.earnRules.map((r) => (
               <button key={r.key} type="button" className="row" onClick={() => onEarnRow(r.key, r.url)}>
@@ -210,11 +212,11 @@ export function RewardsView({
         </section>
       )}
 
-      <Sheet open={howOpen} onClose={() => setHowOpen(false)} title="How rewards work" cta={<Button onClick={() => setHowOpen(false)}>Got it</Button>}>
+      <Sheet open={howOpen} onClose={() => setHowOpen(false)} title={t("howRewardsWork")} cta={<Button onClick={() => setHowOpen(false)}>{t("gotIt")}</Button>}>
         <ol className="v2-steps">
-          <li>Earn points on what you spend, and every time you scan your code at the desk.</li>
-          <li>Watch the bar fill up towards the next reward.</li>
-          <li>Redeem it here and show the code at the desk.</li>
+          <li>{t("step1")}</li>
+          <li>{t("step2")}</li>
+          <li>{t("step3")}</li>
         </ol>
       </Sheet>
 
@@ -226,7 +228,7 @@ export function RewardsView({
         cta={
           selected && (
             <Button loading={pending} onClick={() => redeem(selected.id)}>
-              Redeem for {selected.pointsCost} points
+              {t("redeemForPoints", { count: selected.pointsCost })}
             </Button>
           )
         }
@@ -234,18 +236,16 @@ export function RewardsView({
         {selected && (
           <div className="v2-confirm">
             {selected.description && <p>{selected.description}</p>}
-            <p>
-              This costs <b>{selected.pointsCost} points</b>. You have {points}.
-            </p>
+            <p>{t.rich("costsPointsYouHave", { cost: selected.pointsCost, have: points, b: (chunks) => <b>{chunks}</b> })}</p>
           </div>
         )}
       </Sheet>
 
       {/* Redemption code */}
-      <Sheet open={!!redeemed} onClose={() => setRedeemed(null)} title="Your reward" cta={<Button onClick={() => setRedeemed(null)}>Done</Button>}>
+      <Sheet open={!!redeemed} onClose={() => setRedeemed(null)} title={t("yourReward")} cta={<Button onClick={() => setRedeemed(null)}>{t("done")}</Button>}>
         {redeemed && (
           <div className="v2-redeemed">
-            <p>Show this at the desk. Single use.</p>
+            <p>{t("showAtDesk")}</p>
             <div className="code">
               <QrCode value={redeemed.code} />
             </div>

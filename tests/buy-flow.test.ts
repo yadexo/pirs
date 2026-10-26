@@ -27,19 +27,22 @@ describe("the button that takes the money", () => {
     expect(CART).toMatch(/amount=\{settledByCreditAlone \? undefined : total\}/);
   });
 
-  it("says 'Pay €X and join' for a membership, which is a different promise", () => {
-    expect(SHOP).toMatch(/payLabel=\{`Pay \$\{money\(firstPayment\.amountCents, currency\)\} and join`\}/);
+  it("says 'Pay X and join' for a membership, which is a different promise", () => {
+    // The literal text moved to messages/*.json (clientApp.checkout.payAndBecomeMember) —
+    // the structural check is that the first membership payment is still flagged as such.
+    expect(SHOP).toMatch(/<CardPayment[\s\S]{0,300}becomeMember/);
   });
 });
 
 describe("what a client is told they owe", () => {
   it("labels the total as including VAT", () => {
-    expect(CART).toMatch(/Total incl\. VAT/);
-    expect(RESULT).toMatch(/Total paid, incl\. VAT/);
+    // Translated (messages/*.json clientApp.cart.totalInclVat / clientApp.paymentResult.totalPaidInclVat).
+    expect(CART).toMatch(/t\("totalInclVat"\)/);
+    expect(RESULT).toMatch(/t\("totalPaidInclVat"\)/);
   });
 
   it("says there is nothing else to come, before the button rather than after it", () => {
-    const noCosts = CART.indexOf("No extra costs");
+    const noCosts = CART.indexOf('t("noExtraCosts")');
     const button = CART.indexOf("const footer =");
     expect(noCosts, "the reassurance is missing").toBeGreaterThan(-1);
     // The footer is built above the body in the source; what matters is that
@@ -70,7 +73,7 @@ describe("when Credit covers the whole order", () => {
 
   it("hides the payment methods and says 'Paid with Credit'", () => {
     expect(CART).toMatch(/settledByCreditAlone && \(/);
-    expect(CART).toMatch(/Paid with Credit/);
+    expect(CART).toMatch(/t\("paidWithCredit"\)/);
     // The card step is only reached when checkout came back unpaid.
     expect(CART).toMatch(/if \(!res\.paid\) \{/);
   });
@@ -94,8 +97,9 @@ describe("the brand marks", () => {
 
 describe("the result screen", () => {
   it("tells the client their items are ready and where to find them", () => {
-    expect(RESULT).toMatch(/Your items are ready/);
-    expect(RESULT).toMatch(/View my items/);
+    // Translated (messages/*.json clientApp.paymentResult.itemsReady / viewMyItems).
+    expect(RESULT).toMatch(/t\("itemsReady"\)/);
+    expect(RESULT).toMatch(/t\("viewMyItems"\)/);
     expect(RESULT).toMatch(/profile\?tab=items/);
   });
 
@@ -111,7 +115,7 @@ describe("Credit is called Credit", () => {
       expect(source, `${name} still says "Patient App Cash"`).not.toMatch(/Patient App Cash/);
       expect(source, `${name} still says "account credit"`).not.toMatch(/account credit/i);
     }
-    expect(CART).toMatch(/Use Credit/);
+    expect(CART).toMatch(/t\("useCredit"\)/);
   });
 });
 

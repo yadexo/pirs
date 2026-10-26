@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { useBasePath } from "./base-path";
 import { Sheet, Stepper, EmptyState, Icon, money, useToast } from "@/components/client-app/ui";
 import { Button, Switch, Tag } from "@/components/client-app/v2";
@@ -37,8 +38,6 @@ interface Reward {
 
 type Stage = "cart" | "pay" | "card" | "done";
 
-const TITLES: Record<Stage, string> = { cart: "Your cart", pay: "Checkout", card: "Payment", done: "" };
-
 export function CartSheet({
   merchantSlug,
   merchantName,
@@ -68,6 +67,10 @@ export function CartSheet({
   const { toast } = useToast();
   const router = useRouter();
   const base = useBasePath();
+  const t = useTranslations("clientApp.cart");
+  const locale = useLocale();
+  const fmtMoney = React.useCallback((cents: number) => money(cents, currency, locale === "nl" ? "nl" : "en"), [currency, locale]);
+  const TITLES: Record<Stage, string> = { cart: t("yourCart"), pay: t("checkout"), card: t("payment"), done: "" };
 
   const [stage, setStage] = React.useState<Stage>("cart");
   const [rewards, setRewards] = React.useState<Reward[]>([]);
@@ -196,11 +199,11 @@ export function CartSheet({
   const footer =
     stage === "done" ? undefined : stage === "card" ? undefined : items.length === 0 ? undefined : stage === "pay" ? (
       <Button amount={settledByCreditAlone ? undefined : total} currency={currency} loading={pending} onClick={pay}>
-        {settledByCreditAlone ? "Confirm order" : "Pay"}
+        {settledByCreditAlone ? t("confirmOrder") : t("pay")}
       </Button>
     ) : (
       <Button amount={total} currency={currency} onClick={() => setStage("pay")}>
-        Checkout
+        {t("checkout")}
       </Button>
     );
 
@@ -238,8 +241,8 @@ export function CartSheet({
         />
       ) : items.length === 0 ? (
         <EmptyState
-          text="Your cart is empty"
-          sub="Add something from the shop to get started."
+          text={t("yourCartIsEmpty")}
+          sub={t("addSomethingToGetStarted")}
           cta={
             <Button
               onClick={() => {
@@ -247,7 +250,7 @@ export function CartSheet({
                 router.push(`${base}/shop`);
               }}
             >
-              Browse the shop
+              {t("browseShop")}
             </Button>
           }
         />
@@ -255,7 +258,7 @@ export function CartSheet({
         <div className="v2-buy">
           {stage === "pay" && (
             <>
-              <h3 className="grouphead">Your details</h3>
+              <h3 className="grouphead">{t("yourDetails")}</h3>
               <div className="v2-details">
                 <div>
                   <b>{clientName}</b>
@@ -268,7 +271,7 @@ export function CartSheet({
                     router.push(`${base}/profile?tab=settings`);
                   }}
                 >
-                  Edit
+                  {t("edit")}
                 </button>
               </div>
 
@@ -279,10 +282,10 @@ export function CartSheet({
                       <Icon name="tag" size={20} />
                     </span>
                     <span className="txt">
-                      <b>Use Credit</b>
-                      <span>{money(credit, currency)} available</span>
+                      <b>{t("useCredit")}</b>
+                      <span>{t("available", { amount: fmtMoney(credit) })}</span>
                     </span>
-                    <Switch checked={useCredit} onChange={setUseCredit} label="Use Credit on this order" />
+                    <Switch checked={useCredit} onChange={setUseCredit} label={t("useCreditOnOrder")} />
                   </div>
                 )}
                 {rewards.length > 0 && (
@@ -291,8 +294,8 @@ export function CartSheet({
                       <Icon name="gift" size={20} />
                     </span>
                     <span className="txt">
-                      <b>{reward ? reward.name : "Use a reward"}</b>
-                      {reward && <span>−{money(discount, currency)}</span>}
+                      <b>{reward ? reward.name : t("useAReward")}</b>
+                      {reward && <span>−{fmtMoney(discount)}</span>}
                     </span>
                     <Icon name="chevR" size={20} />
                   </button>
@@ -312,25 +315,25 @@ export function CartSheet({
                     {l.name}
                     {l.quantity > 1 ? ` × ${l.quantity}` : ""}
                   </span>
-                  <b className="tabular">{money(l.unitPriceCents * l.quantity, currency)}</b>
+                  <b className="tabular">{fmtMoney(l.unitPriceCents * l.quantity)}</b>
                 </div>
               ))}
               {autoDiscount && (
                 <div className="line off">
                   <span>{autoDiscount.title}</span>
-                  <b className="tabular">−{money(autoDiscount.discountCents, currency)}</b>
+                  <b className="tabular">−{fmtMoney(autoDiscount.discountCents)}</b>
                 </div>
               )}
               {reward && (
                 <div className="line off">
                   <span>{reward.name}</span>
-                  <b className="tabular">−{money(discount, currency)}</b>
+                  <b className="tabular">−{fmtMoney(discount)}</b>
                 </div>
               )}
               {creditUsed > 0 && (
                 <div className="line off">
-                  <span>Credit</span>
-                  <b className="tabular">−{money(creditUsed, currency)}</b>
+                  <span>{t("credit")}</span>
+                  <b className="tabular">−{fmtMoney(creditUsed)}</b>
                 </div>
               )}
             </div>
@@ -338,9 +341,9 @@ export function CartSheet({
 
           {stage === "cart" && autoDiscount && (
             <div className="v2-saving">
-              <Tag kind="soft">{autoDiscount.source === "MEMBERSHIP" ? "MEMBER" : "OFFER"}</Tag>
+              <Tag kind="soft">{autoDiscount.source === "MEMBERSHIP" ? t("member") : t("offer")}</Tag>
               <span>
-                {autoDiscount.title} · −{money(autoDiscount.discountCents, currency)}
+                {autoDiscount.title} · −{fmtMoney(autoDiscount.discountCents)}
               </span>
             </div>
           )}
@@ -349,32 +352,32 @@ export function CartSheet({
 
           <div className="v2-totals">
             <div className="row total">
-              <span>Total incl. VAT</span>
-              <b className="tabular">{money(total, currency)}</b>
+              <span>{t("totalInclVat")}</span>
+              <b className="tabular">{fmtMoney(total)}</b>
             </div>
             {vatCents > 0 && (
               <div className="row vat">
-                <span>of which VAT</span>
-                <span className="tabular">{money(vatCents, currency)}</span>
+                <span>{t("ofWhichVat")}</span>
+                <span className="tabular">{fmtMoney(vatCents)}</span>
               </div>
             )}
             {pointsToEarn > 0 && (
               <div className="row earn">
-                <span>You{stage === "pay" ? "’ll" : ""} earn</span>
-                <b className="tabular">+{pointsToEarn} points</b>
+                <span>{stage === "pay" ? t("youllEarn") : t("youEarn")}</span>
+                <b className="tabular">{t("pointsSuffix", { count: pointsToEarn })}</b>
               </div>
             )}
           </div>
 
           {/* Everything that is going to be charged is above the button. */}
-          <p className="v2-nocosts">No extra costs.</p>
+          <p className="v2-nocosts">{t("noExtraCosts")}</p>
 
           {stage === "pay" && settledByCreditAlone && (
             // There is nothing left to charge, so offering a payment method
             // would be asking for something that will not be used.
             <div className="v2-paidwith">
               <Icon name="check" size={20} />
-              <span>Paid with Credit</span>
+              <span>{t("paidWithCredit")}</span>
             </div>
           )}
 
@@ -384,7 +387,7 @@ export function CartSheet({
             </p>
           )}
 
-          <Sheet open={pickingReward} onClose={() => setPickingReward(false)} title="Use a reward">
+          <Sheet open={pickingReward} onClose={() => setPickingReward(false)} title={t("useAReward")}>
             {rewards.map((r) => (
               <button
                 key={r.id}
@@ -392,16 +395,16 @@ export function CartSheet({
                 onClick={() => {
                   setRewardId(rewardId === r.id ? null : r.id);
                   setPickingReward(false);
-                  if (rewardId !== r.id) toast(`${r.name} applied`);
+                  if (rewardId !== r.id) toast(t("rewardApplied", { name: r.name }));
                 }}
               >
                 <span className="rad" />
                 <span style={{ flex: 1 }}>
                   {r.name}
                   <br />
-                  <span style={{ color: "var(--text-2)", fontSize: "var(--caption-size)" }}>{r.pointsCost} points</span>
+                  <span style={{ color: "var(--text-2)", fontSize: "var(--caption-size)" }}>{t("pointsCost", { count: r.pointsCost })}</span>
                 </span>
-                <b>−{r.discountAmountCents != null ? money(r.discountAmountCents, currency) : `${r.discountPercent}%`}</b>
+                <b>−{r.discountAmountCents != null ? fmtMoney(r.discountAmountCents) : `${r.discountPercent}%`}</b>
               </button>
             ))}
           </Sheet>
@@ -413,12 +416,14 @@ export function CartSheet({
 
 /** Swipe left to reveal remove; releasing past the threshold deletes the line. */
 function CartRow({ line, currency, onQty }: { line: CartLine; currency: string; onQty: (id: string, qty: number) => Promise<void> }) {
+  const t = useTranslations("clientApp.cart");
+  const locale = useLocale();
   const [dx, setDx] = React.useState(0);
   const startX = React.useRef<number | null>(null);
 
   return (
     <div className="crow">
-      <div className="delbg">Remove</div>
+      <div className="delbg">{t("remove")}</div>
       <div
         className="cin v2-cartline"
         style={{ transform: dx ? `translateX(${dx}px)` : undefined, transition: startX.current !== null ? "none" : undefined }}
@@ -447,7 +452,7 @@ function CartRow({ line, currency, onQty }: { line: CartLine; currency: string; 
           <b>{line.name}</b>
         </div>
         <div className="right">
-          <b className="tabular">{money(line.unitPriceCents, currency)}</b>
+          <b className="tabular">{money(line.unitPriceCents, currency, locale === "nl" ? "nl" : "en")}</b>
           <Stepper value={line.quantity} min={0} onChange={(q) => void onQty(line.id, q)} />
         </div>
       </div>

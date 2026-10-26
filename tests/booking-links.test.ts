@@ -46,23 +46,25 @@ describe("the portal says which treatments are missing one", () => {
 });
 
 describe("the client app only offers what the clinic set up", () => {
+  // Literal text moved to messages/*.json this session; these checks now
+  // verify the translation-key calls are still wired, not the English wording.
   it("shows Book appointment in My items when there is a link", () => {
     expect(ITEMS).toMatch(/\{item\.bookingUrl && \(/);
-    expect(ITEMS).toMatch(/Book appointment/);
+    expect(ITEMS).toMatch(/t\("bookAppointment"\)/);
   });
 
   it("says to come to the desk when there is none", () => {
-    expect(ITEMS).toMatch(/item\.bookingUrl \? "Ready to book" : "Show your code at the desk"/);
+    expect(ITEMS).toMatch(/item\.bookingUrl \? t\("readyToBook"\) : t\("showCodeAtDesk"\)/);
   });
 
   it("leads the result screen with the items when nothing can be booked", () => {
-    expect(RESULT).toMatch(/toBook\.length === 0\s*\?\s*"Your items are ready"/);
-    expect(RESULT).toMatch(/View my items/);
+    expect(RESULT).toMatch(/toBook\.length === 0\s*\?\s*t\("itemsReady"\)/);
+    expect(RESULT).toMatch(/t\("viewMyItems"\)/);
   });
 
   it("gives one Book button per treatment when an order has several", () => {
-    expect(RESULT).toMatch(/toBook\.map\(\(t\) => \(/);
-    expect(RESULT).toMatch(/toBook\.length === 1\s*\?\s*"Book your treatment"\s*:\s*"Book your treatments"/);
+    expect(RESULT).toMatch(/toBook\.map\(\(b\) => \(/);
+    expect(RESULT).toMatch(/toBook\.length === 1\s*\?\s*t\("bookTreatment"\)\s*:\s*t\("bookTreatments"\)/);
   });
 
   it("mentions the rest of the order rather than hiding it behind the booking", () => {
@@ -71,12 +73,12 @@ describe("the client app only offers what the clinic set up", () => {
 
   it("puts Book beside Buy again, and only when there is a link", () => {
     expect(HOME).toMatch(/\{b\.bookingUrl && \(/);
-    expect(HOME).toMatch(/Buy again/);
+    expect(HOME).toMatch(/t\("buyAgain"\)/);
   });
 
   it("opens the clinic's page in a new tab, safely", () => {
     for (const [name, source] of [["my items", ITEMS], ["result", RESULT], ["home", HOME]] as const) {
-      const links = source.match(/href=\{[^}]*ookingUrl[^}]*\}|href=\{t\.url\}/g) ?? [];
+      const links = source.match(/href=\{[^}]*ookingUrl[^}]*\}|href=\{b\.url\}/g) ?? [];
       expect(links.length, `${name} has no booking link`).toBeGreaterThan(0);
       expect(source, `${name} should open it in a new tab`).toMatch(/target="_blank" rel="noreferrer"/);
     }

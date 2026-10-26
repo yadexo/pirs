@@ -20,10 +20,10 @@ describe("result promises", () => {
     }
   });
 
-  it("says what to write instead", () => {
+  it("names the exact phrase it matched", () => {
     const issue = checkText({ text: "Guaranteed results." })[0]!;
-    expect(issue.fix).toMatch(/Results vary per person/);
-    expect(issue.message).toMatch(/depends on the person/);
+    expect(issue.rule).toBe("result-promise");
+    expect(issue.match.toLowerCase()).toBe("guaranteed results");
   });
 
   it("does not fire inside an innocent word", () => {
@@ -43,8 +43,8 @@ describe("prescription medicines", () => {
     }
   });
 
-  it("tells the clinic to name the treatment instead", () => {
-    expect(checkText({ text: "Botox" })[0]!.fix).toMatch(/name of the treatment/);
+  it("names the exact medicine it matched", () => {
+    expect(checkText({ text: "Botox" })[0]!.match.toLowerCase()).toBe("botox");
   });
 
   it("leaves an ordinary treatment name alone", () => {
@@ -57,9 +57,9 @@ describe("“free”", () => {
     expect(rules("Free LED session")).toContain("free");
   });
 
-  it("refuses the conditional kind, and says why", () => {
+  it("flags the conditional kind as conditional", () => {
     const issue = checkText({ text: "Free peel with any facial" }).find((i) => i.rule === "free")!;
-    expect(issue.message).toMatch(/depends on buying something else/);
+    expect(issue.conditional).toBe(true);
   });
 
   it("allows it when the thing really is free", () => {
@@ -80,9 +80,9 @@ describe("urgency", () => {
     expect(rules("Last chance — ends 31 Oct", { hasEndDate: true })).not.toContain("urgency-without-date");
   });
 
-  it("tells the clinic to set the date", () => {
+  it("names the exact urgency phrase it matched", () => {
     const issue = checkText({ text: "Act now", hasEndDate: false })[0]!;
-    expect(issue.fix).toMatch(/end date/);
+    expect(issue.match.toLowerCase()).toBe("act now");
   });
 });
 
@@ -100,6 +100,31 @@ describe("results vary", () => {
   it("does not pile on when the real problem is a promise", () => {
     // One clear message beats two about the same sentence.
     expect(rules("Guaranteed results in three sessions")).not.toContain("results-vary");
+  });
+});
+
+describe("Dutch phrases", () => {
+  it("catches the Dutch versions of a result promise", () => {
+    for (const text of ["Gegarandeerd resultaat", "Pijnloos en snel", "100% veilig"]) {
+      expect(rules(text), text).toContain("result-promise");
+    }
+  });
+
+  it("catches the Dutch word for free", () => {
+    expect(rules("Gratis LED-sessie")).toContain("free");
+  });
+
+  it("catches the Dutch conditional 'gratis'", () => {
+    const issue = checkText({ text: "Gratis peeling bij elke facial" }).find((i) => i.rule === "free")!;
+    expect(issue.conditional).toBe(true);
+  });
+
+  it("catches Dutch urgency without an end date", () => {
+    expect(rules("Op=op, snel zijn!", { hasEndDate: false })).toContain("urgency-without-date");
+  });
+
+  it("recognises the Dutch results-vary disclaimer", () => {
+    expect(rules("Je ziet resultaat na drie behandelingen. Resultaten kunnen variëren.")).toEqual([]);
   });
 });
 
@@ -161,14 +186,14 @@ describe("where the check is enforced", () => {
 
   it("stops a publish and lets a draft through", async () => {
     const { assertTextIsPublishable } = await import("@/lib/text-check-guard");
-    expect(() => assertTextIsPublishable({ title: { text: "Guaranteed results" } })).toThrow(/Fix 1 issue to publish/);
-    expect(() => assertTextIsPublishable({ title: { text: "Autumn skin reset" } })).not.toThrow();
+    await expect(assertTextIsPublishable({ title: { text: "Guaranteed results" } })).rejects.toThrow(/Fix 1 issue to publish/);
+    await expect(assertTextIsPublishable({ title: { text: "Autumn skin reset" } })).resolves.toBeUndefined();
   });
 
   it("puts the message under the field it is about", async () => {
     const { assertTextIsPublishable } = await import("@/lib/text-check-guard");
     try {
-      assertTextIsPublishable({ title: { text: "Free Botox" }, description: { text: "Fine." } });
+      await assertTextIsPublishable({ title: { text: "Free Botox" }, description: { text: "Fine." } });
       throw new Error("should have thrown");
     } catch (err) {
       const fieldErrors = (err as { fieldErrors?: Record<string, string> }).fieldErrors ?? {};

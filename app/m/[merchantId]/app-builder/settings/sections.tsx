@@ -178,6 +178,28 @@ export function GeneralSection({ merchantId, data, canEdit }: { merchantId: stri
             <TextField label="Subtitle" name="shopBannerSubtitle" defaultValue={str(s?.shopBannerSubtitle)} placeholder="Free treatments & exclusive perks." maxLength={120} errors={errors} />
             <TextField label="Button label" name="shopBannerButtonLabel" defaultValue={str(s?.shopBannerButtonLabel)} placeholder="How does it work?" maxLength={30} errors={errors} hint="Leave any field empty to use the default shown." />
           </FormSection>
+          <FormSection title="Client app language">
+            <SelectField
+              label="Default language for new clients"
+              name="defaultClientLocale"
+              defaultValue={s?.defaultClientLocale ?? "nl"}
+              options={[
+                { value: "nl", label: "Dutch" },
+                { value: "en", label: "English" },
+              ]}
+              hint="A client can always change this themselves in Profile > Account > Language — changing it here only sets what a new client starts with."
+            />
+            <SelectField
+              label="Dutch tone of voice"
+              name="clientFormality"
+              defaultValue={s?.clientFormality ?? "INFORMAL"}
+              options={[
+                { value: "INFORMAL", label: "Informal — “je”" },
+                { value: "FORMAL", label: "Formal — “u”" },
+              ]}
+              hint="Only changes anything for clients using the Dutch app. Most beauty and wellness clinics use “je”."
+            />
+          </FormSection>
           <FormSection title="Money">
             <TextField
               label="VAT rate (%)"

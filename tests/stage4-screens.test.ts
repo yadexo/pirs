@@ -40,8 +40,10 @@ describe("the Scan screen", () => {
   it("shows the code, who it belongs to, and what they can spend", () => {
     expect(SCAN).toMatch(/<QrCode/);
     expect(SCAN).toMatch(/clientNumber/);
-    expect(SCAN).toMatch(/Points/);
-    expect(SCAN).toMatch(/>Credit</);
+    // "Points" and "Credit" are translated (messages/*.json) — the structural
+    // check is that both rows are still wired to the clientApp.scan keys.
+    expect(SCAN).toMatch(/t\("points"\)/);
+    expect(SCAN).toMatch(/t\("credit"\)/);
   });
 
   it("refreshes the token, so a screenshot stops working", () => {
@@ -50,16 +52,17 @@ describe("the Scan screen", () => {
   });
 
   it("asks the client to turn the brightness up rather than doing it for them", () => {
-    expect(SCAN).toMatch(/turn up your screen brightness/i);
+    expect(SCAN).toMatch(/t\("tip"\)/);
     expect(SCAN).not.toMatch(/screen\.brightness|setBrightness/);
   });
 });
 
 describe("the Rewards screen", () => {
   it("separates what can be taken now from what is still being earned", () => {
-    expect(REWARDS).toMatch(/Ready to redeem/);
-    expect(REWARDS).toMatch(/Keep earning/);
-    expect(REWARDS).toMatch(/Earn faster/);
+    // Translated (messages/*.json clientApp.rewards.*) — check the keys stayed wired, not the English wording.
+    expect(REWARDS).toMatch(/t\("readyToRedeem"\)/);
+    expect(REWARDS).toMatch(/t\("keepEarning"\)/);
+    expect(REWARDS).toMatch(/t\("earnFaster"\)/);
   });
 
   it("keeps every way of earning that the clinic configured", () => {
@@ -69,18 +72,19 @@ describe("the Rewards screen", () => {
   });
 
   it("says Credit, not the old names", () => {
-    expect(REWARDS).toMatch(/>Credit</);
+    expect(REWARDS).toMatch(/t\("credit"\)/);
     expect(REWARDS).not.toMatch(/Patient App Cash|account credit/i);
   });
 });
 
 describe("the Profile screen", () => {
   it("has the handoff's three tabs", () => {
-    expect(PROFILE).toMatch(/value: "items", label: "My items"/);
-    expect(PROFILE).toMatch(/value: "membership", label: "Membership"/);
-    expect(PROFILE).toMatch(/value: "settings", label: "Account"/);
+    // Labels are translated (messages/*.json clientApp.profile.sections.*) — the
+    // structural check is the three segment values and their tp() lookup.
+    expect(PROFILE).toMatch(/SEGMENT_VALUES = \["items", "membership", "settings"\]/);
+    expect(PROFILE).toMatch(/tp\(`sections\.\$\{s\}`\)/);
     // The fourth tab is gone, not its contents.
-    expect(PROFILE).not.toMatch(/label: "Treatments"/);
+    expect(PROFILE).not.toMatch(/"treatments"/);
   });
 
   it("keeps appointments and orders reachable from My items", () => {
@@ -104,7 +108,9 @@ describe("the Profile screen", () => {
   });
 
   it("is powered by whatever the agency calls itself, or by nobody", () => {
-    expect(PROFILE).toContain("Powered by ${platformName}");
+    // Translated (messages/*.json clientApp.profile.poweredByPrefix) — the
+    // structural check is that the name is still interpolated conditionally.
+    expect(PROFILE).toContain('tp("poweredByPrefix", { name: platformName })');
     // A platform with no name of its own leaves no gap behind.
     expect(PROFILE).toContain("platformName ?");
   });
@@ -112,8 +118,9 @@ describe("the Profile screen", () => {
 
 describe("My items", () => {
   it("splits what is usable from what is finished", () => {
-    expect(ITEMS).toMatch(/Ready to use/);
-    expect(ITEMS).toMatch(/Past items/);
+    // Translated (messages/*.json clientApp.myItems.readyToUse / pastItems).
+    expect(ITEMS).toMatch(/t\("readyToUse"\)/);
+    expect(ITEMS).toMatch(/t\("pastItems"\)/);
   });
 
   it("still watches an open item so a redemption shows up while it is on screen", () => {

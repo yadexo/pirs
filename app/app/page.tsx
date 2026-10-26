@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { rawDb } from "@/lib/db";
 import { currentClientBasePath, getPublicClinic } from "@/lib/public-clinic";
 import { LAST_CLINIC_COOKIE, isClinicSlug } from "@/lib/clinic-link";
@@ -11,7 +12,10 @@ import { ZoomLock } from "@/components/client-app/zoom-lock";
 import { clientAppViewport } from "@/lib/client-app-viewport";
 import "./[merchantSlug]/client-app.css";
 
-export const metadata: Metadata = { title: "Find your clinic" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("clientApp.clinicFinder");
+  return { title: t("title") };
+}
 
 // The front door is part of the client app, so it holds its scale too.
 export const viewport = clientAppViewport;
@@ -30,10 +34,13 @@ export default async function ClientAppEntry({ searchParams }: { searchParams: P
   const requestHeaders = await headers();
   const onRootDomain = isClientHost(requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"));
 
-  const agency = await rawDb.agencySettings.findFirst({ select: { name: true } });
+  const [agency, t] = await Promise.all([
+    rawDb.agencySettings.findFirst({ select: { name: true } }),
+    getTranslations("clientApp.clinicFinder"),
+  ]);
   return (
     <div className="client-app">
-      <ClinicFinder appName={agency?.name ?? "Your clinic app"} prefix={onRootDomain ? "" : "/app"} />
+      <ClinicFinder appName={agency?.name ?? t("appName")} prefix={onRootDomain ? "" : "/app"} />
       <ZoomLock />
     </div>
   );

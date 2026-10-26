@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { Icon, Sheet, money } from "@/components/client-app/ui";
 import { Button, Tag } from "@/components/client-app/v2";
 import { clientOrderStatusAction, clientOrderReceiptAction } from "@/lib/actions/client-app";
@@ -24,16 +25,8 @@ import { phaseFor, shouldAskAgain, POLL_MS, type Phase } from "./payment-phase";
 
 type Receipt = Extract<Awaited<ReturnType<typeof clientOrderReceiptAction>>, { ok: true }>;
 
-/** "ideal" from the provider becomes something a client would recognise. */
-const METHOD_NAMES: Record<string, string> = {
-  ideal: "iDEAL | Wero",
-  wero: "iDEAL | Wero",
-  card: "card",
-  klarna: "Klarna",
-  apple_pay: "Apple Pay",
-  google_pay: "Google Pay",
-  credit: "Credit",
-};
+/** "ideal" from the provider becomes something a client would recognise — messages/*.json's paymentResult.methodNames. */
+const KNOWN_METHODS = new Set(["ideal", "wero", "card", "klarna", "apple_pay", "google_pay", "credit"]);
 
 export function PaymentResult({
   merchantSlug,
@@ -62,6 +55,9 @@ export function PaymentResult({
 }) {
   const router = useRouter();
   const base = useBasePath();
+  const t = useTranslations("clientApp.paymentResult");
+  const locale = useLocale();
+  const fmtMoney = React.useCallback((cents: number) => money(cents, currency, locale === "nl" ? "nl" : "en"), [currency, locale]);
   const [phase, setPhase] = React.useState<Phase>("confirming");
   const [receipt, setReceipt] = React.useState<Receipt | null>(null);
   const [gaveUp, setGaveUp] = React.useState(false);
@@ -104,7 +100,11 @@ export function PaymentResult({
     };
   }, [merchantSlug, orderNumber, router]);
 
-  const method = receipt?.paymentMethod ? (METHOD_NAMES[receipt.paymentMethod] ?? receipt.paymentMethod) : null;
+  const method = receipt?.paymentMethod
+    ? KNOWN_METHODS.has(receipt.paymentMethod)
+      ? t(`methodNames.${receipt.paymentMethod}`)
+      : receipt.paymentMethod
+    : null;
   const nextReward = receipt?.nextReward ?? null;
   const toBook = receipt?.toBook ?? [];
   const progress = nextReward ? Math.min(100, Math.round((receipt!.pointsBalance / nextReward.pointsCost) * 100)) : 0;
@@ -114,8 +114,8 @@ export function PaymentResult({
       {phase === "confirming" && !gaveUp && (
         <div className="head">
           <span className="ca-spinner" aria-hidden="true" />
-          <h2>Confirming your payment…</h2>
-          <p>This usually takes a few seconds. You can leave this open.</p>
+          <h2>{t("confirmingTitle")}</h2>
+          <p>{t("confirmingBody")}</p>
         </div>
       )}
 
@@ -124,11 +124,8 @@ export function PaymentResult({
           <span className="mark waiting" aria-hidden="true">
             <Icon name="clock" size={32} />
           </span>
-          <h2>Still waiting on your bank</h2>
-          <p>
-            Your payment for {orderNumber} hasn&apos;t been confirmed yet. Nothing is lost — it will appear in your order history as soon as it
-            lands.
-          </p>
+          <h2>{t("stillWaitingTitle")}</h2>
+          <p>{t("stillWaitingBody", { orderNumber })}</p>
         </div>
       )}
 
@@ -138,10 +135,10 @@ export function PaymentResult({
             <span className="mark ok" aria-hidden="true">
               <Icon name="check" size={34} />
             </span>
-            <h2>Payment complete</h2>
+            <h2>{t("paymentComplete")}</h2>
             <p>
-              {receipt?.firstName ? `Thanks, ${receipt.firstName}. ` : ""}
-              {receipt?.email ? `Your receipt is on its way to ${receipt.email}.` : "Your receipt is on its way."}
+              {receipt?.firstName ? t("thanksName", { name: receipt.firstName }) : ""}
+              {receipt?.email ? t("receiptToEmail", { email: receipt.email }) : t("receiptOnItsWay")}
             </p>
           </div>
 
@@ -158,36 +155,30 @@ export function PaymentResult({
                 <Icon name={toBook.length > 0 ? "calendar" : "qr"} size={22} />
               </span>
               <span>
-                <span className="lead">Next step</span>
-                <b>
-                  {toBook.length === 0
-                    ? "Your items are ready"
-                    : toBook.length === 1
-                      ? "Book your treatment"
-                      : "Book your treatments"}
-                </b>
+                <span className="lead">{t("nextStep")}</span>
+                <b>{toBook.length === 0 ? t("itemsReady") : toBook.length === 1 ? t("bookTreatment") : t("bookTreatments")}</b>
               </span>
             </div>
             {toBook.length === 0 ? (
               <>
-                <p>Show your code at the desk when you visit.</p>
+                <p>{t("showCodeAtDeskVisit")}</p>
                 <Button variant="grey" className="go" onClick={() => router.push(`${base}/profile?tab=items`)}>
-                  View my items
+                  {t("viewMyItems")}
                 </Button>
               </>
             ) : (
               <>
                 {/* Anything else in the same order is still waiting at the desk. */}
-                {receipt && receipt.itemsToCollect > toBook.length && <p>The rest of your order is ready at the desk.</p>}
+                {receipt && receipt.itemsToCollect > toBook.length && <p>{t("restReadyAtDesk")}</p>}
                 <div className="books">
-                  {toBook.map((t) => (
-                    <a key={t.url + t.name} className="book" href={t.url} target="_blank" rel="noreferrer">
-                      <span>{t.name}</span>
-                      <b>Book</b>
+                  {toBook.map((b) => (
+                    <a key={b.url + b.name} className="book" href={b.url} target="_blank" rel="noreferrer">
+                      <span>{b.name}</span>
+                      <b>{t("book")}</b>
                     </a>
                   ))}
                 </div>
-                <p className="later">You can also book later in My items.</p>
+                <p className="later">{t("canBookLater")}</p>
               </>
             )}
           </div>
@@ -195,7 +186,7 @@ export function PaymentResult({
           {receipt && receipt.pointsEarned > 0 && (
             <button type="button" className="v2-earned" onClick={() => router.push(`${base}/rewards`)}>
               <span className="top">
-                <b>+{receipt.pointsEarned} points earned</b>
+                <b>{t("pointsEarned", { count: receipt.pointsEarned })}</b>
                 <Icon name="chevR" size={20} />
               </span>
               {nextReward && (
@@ -204,7 +195,11 @@ export function PaymentResult({
                     <span style={{ width: `${progress}%` }} />
                   </span>
                   <span className="note">
-                    You now have {receipt.pointsBalance} points. {nextReward.pointsCost - receipt.pointsBalance} more for your {nextReward.name}.
+                    {t("nowHavePoints", {
+                      balance: receipt.pointsBalance,
+                      toGo: nextReward.pointsCost - receipt.pointsBalance,
+                      name: nextReward.name,
+                    })}
                   </span>
                 </>
               )}
@@ -214,8 +209,8 @@ export function PaymentResult({
           {receipt && (
             <div className="v2-receipt">
               <div className="top">
-                <b>Order {orderNumber}</b>
-                <Tag kind="success">PAID</Tag>
+                <b>{t("order", { orderNumber })}</b>
+                <Tag kind="success">{t("paid")}</Tag>
               </div>
               {receipt.lines.map((l, i) => (
                 <div className="line" key={i}>
@@ -223,43 +218,43 @@ export function PaymentResult({
                     {l.name}
                     {l.quantity > 1 ? ` × ${l.quantity}` : ""}
                   </span>
-                  <span className="tabular">{money(l.totalCents, currency)}</span>
+                  <span className="tabular">{fmtMoney(l.totalCents)}</span>
                 </div>
               ))}
               {receipt.discountCents > 0 && (
                 <div className="line">
-                  <span>{receipt.discountTitle ?? "Discount"}</span>
-                  <span className="tabular">−{money(receipt.discountCents, currency)}</span>
+                  <span>{receipt.discountTitle ?? t("discount")}</span>
+                  <span className="tabular">−{fmtMoney(receipt.discountCents)}</span>
                 </div>
               )}
               {receipt.loyaltyDiscountCents > 0 && (
                 <div className="line">
-                  <span>Reward</span>
-                  <span className="tabular">−{money(receipt.loyaltyDiscountCents, currency)}</span>
+                  <span>{t("reward")}</span>
+                  <span className="tabular">−{fmtMoney(receipt.loyaltyDiscountCents)}</span>
                 </div>
               )}
               {receipt.creditAppliedCents > 0 && (
                 <div className="line">
-                  <span>Credit</span>
-                  <span className="tabular">−{money(receipt.creditAppliedCents, currency)}</span>
+                  <span>{t("credit")}</span>
+                  <span className="tabular">−{fmtMoney(receipt.creditAppliedCents)}</span>
                 </div>
               )}
               <div className="line total">
-                <b>Total paid, incl. VAT</b>
-                <b className="tabular">{money(receipt.totalCents, currency)}</b>
+                <b>{t("totalPaidInclVat")}</b>
+                <b className="tabular">{fmtMoney(receipt.totalCents)}</b>
               </div>
               {receipt.vatCents > 0 && (
                 <div className="line vat">
-                  <span>of which VAT</span>
-                  <span className="tabular">{money(receipt.vatCents, currency)}</span>
+                  <span>{t("ofWhichVat")}</span>
+                  <span className="tabular">{fmtMoney(receipt.vatCents)}</span>
                 </div>
               )}
-              {method && <p className="paidwith">Paid with {method}</p>}
+              {method && <p className="paidwith">{t("paidWith", { method })}</p>}
             </div>
           )}
 
           <Button variant="outline" className="home" onClick={() => (onClose ? onClose() : router.push(base))}>
-            Back to home
+            {t("backToHome")}
           </Button>
         </>
       )}
@@ -270,28 +265,25 @@ export function PaymentResult({
             <span className="mark bad" aria-hidden="true">
               <Icon name="close" size={32} />
             </span>
-            <h2>Payment didn&apos;t go through</h2>
-            <p>Nothing was charged, and your basket is still here.</p>
+            <h2>{t("paymentFailedTitle")}</h2>
+            <p>{t("paymentFailedBody")}</p>
           </div>
-          <Button onClick={() => (onRetry ? onRetry() : router.push(`${base}/shop`))}>Try again</Button>
+          <Button onClick={() => (onRetry ? onRetry() : router.push(`${base}/shop`))}>{t("tryAgain")}</Button>
         </>
       )}
 
       {phase === "unknown" && (
         <>
           <div className="head">
-            <h2>We couldn&apos;t check that payment</h2>
-            <p>Open your order history to see where it stands.</p>
+            <h2>{t("couldNotCheckTitle")}</h2>
+            <p>{t("couldNotCheckBody")}</p>
           </div>
-          <Button onClick={() => router.push(`${base}/profile?tab=settings`)}>Order history</Button>
+          <Button onClick={() => router.push(`${base}/profile?tab=settings`)}>{t("orderHistory")}</Button>
         </>
       )}
 
       {outsideApp && phase !== "confirming" && (
-        <p className="outside">
-          You&apos;re in a browser tab, not the app{merchantName ? ` for ${merchantName}` : ""}. Close this tab and open the app from your Home
-          Screen — everything here is saved.
-        </p>
+        <p className="outside">{t("outsideAppNotice", { clinicSuffix: merchantName ? t("forClinic", { name: merchantName }) : "" })}</p>
       )}
     </div>
   );
@@ -299,7 +291,7 @@ export function PaymentResult({
   // Inside another sheet it draws no sheet of its own.
   if (bare) return body;
   return (
-    <Sheet open onClose={onClose ?? (() => undefined)} title="Your payment">
+    <Sheet open onClose={onClose ?? (() => undefined)} title={t("yourPayment")}>
       {body}
     </Sheet>
   );

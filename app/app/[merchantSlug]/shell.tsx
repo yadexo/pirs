@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { Icon, ToastProvider, money } from "@/components/client-app/ui";
 import { BasePathProvider, ClinicTimeZoneProvider, useBasePath } from "./base-path";
@@ -12,11 +13,11 @@ import { SearchSheet } from "./search-sheet";
 import { CartSheet } from "./cart-sheet";
 
 const TABS = [
-  { key: "home", label: "Home", icon: "home" },
-  { key: "shop", label: "Shop", icon: "bag" },
-  { key: "scan", label: "Scan", icon: "scan" },
-  { key: "rewards", label: "Rewards", icon: "gift" },
-  { key: "profile", label: "Profile", icon: "user" },
+  { key: "home", icon: "home" },
+  { key: "shop", icon: "bag" },
+  { key: "scan", icon: "scan" },
+  { key: "rewards", icon: "gift" },
+  { key: "profile", icon: "user" },
 ] as const;
 
 /**
@@ -25,7 +26,7 @@ const TABS = [
  * headings saying the same word is one more than a screen needs. The bar stays
  * for the search and cart buttons.
  */
-const TITLES: Record<string, string> = { home: "Home", shop: "Shop", scan: "", rewards: "", profile: "" };
+const TITLED_TABS = new Set(["home", "shop"]);
 
 export function ClientAppShell({
   base,
@@ -113,6 +114,7 @@ function Frame({
   rewardsDot: boolean;
   children: React.ReactNode;
 }) {
+  const t = useTranslations("clientApp");
   const pathname = usePathname();
   const router = useRouter();
   const base = useBasePath();
@@ -136,7 +138,7 @@ function Frame({
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   const seg = pathname.slice(base.length).replace(/^\//, "").split("/")[0] ?? "";
-  const routeTab = TABS.some((t) => t.key === seg) ? seg : "home";
+  const routeTab = TABS.some((tab) => tab.key === seg) ? seg : "home";
 
   // The tapped tab lights up immediately; the page follows. Without this the
   // tab bar looked dead until the next page's data had arrived.
@@ -150,7 +152,7 @@ function Frame({
 
   // Load every tab ahead of time so switching is instant in production.
   React.useEffect(() => {
-    for (const t of TABS) router.prefetch(hrefFor(t.key));
+    for (const tab of TABS) router.prefetch(hrefFor(tab.key));
   }, [router, hrefFor]);
 
   function selectTab(key: string) {
@@ -176,14 +178,14 @@ function Frame({
                   {merchantName.charAt(0)}
                 </span>
               ) : (
-                <h1 className="ca-htitle">{TITLES[active]}</h1>
+                <h1 className="ca-htitle">{TITLED_TABS.has(active) ? t(`nav.${active}`) : ""}</h1>
               )}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <button type="button" className="ca-iconbtn" aria-label="Search" onClick={() => setSearchOpen(true)}>
+              <button type="button" className="ca-iconbtn" aria-label={t("search")} onClick={() => setSearchOpen(true)}>
                 <Icon name="search" size={26} />
               </button>
-              <button type="button" className="ca-iconbtn" aria-label="Cart" onClick={openCart}>
+              <button type="button" className="ca-iconbtn" aria-label={t("cart.label")} onClick={openCart}>
                 <Icon name="bag" size={26} />
                 {count > 0 && <span className="ca-cartbadge tabular">{count}</span>}
               </button>
@@ -199,7 +201,7 @@ function Frame({
       {count > 0 && !open && (
         <button type="button" className="ca-cartbar" onClick={openCart}>
           <span className="lab">
-            View cart <span className="count tabular">· {count} {count === 1 ? "item" : "items"}</span>
+            {t("cart.view")} <span className="count tabular">{t("cart.itemCount", { count })}</span>
           </span>
           <span className="total tabular">{money(subtotal, currency)}</span>
         </button>
@@ -210,32 +212,33 @@ function Frame({
             would cut the raised Scan button in half along with it. */}
         <span className="bar" aria-hidden="true" />
         <div className="row" role="tablist" aria-label="Main">
-          {TABS.map((t) => {
-            const on = t.key === active;
+          {TABS.map((tab) => {
+            const on = tab.key === active;
+            const label = t(`nav.${tab.key}`);
             // Scan keeps only its label in the bar; its control is the raised
             // button, which sits over the notch rather than in a column.
-            if (t.key === "scan") {
+            if (tab.key === "scan") {
               return (
-                <span key={t.key} className={cn("ca-tabbtn", "ca-tabscan", on && "on")} aria-hidden="true">
-                  <span className="tlab">{t.label}</span>
+                <span key={tab.key} className={cn("ca-tabbtn", "ca-tabscan", on && "on")} aria-hidden="true">
+                  <span className="tlab">{label}</span>
                 </span>
               );
             }
             return (
               <button
-                key={t.key}
+                key={tab.key}
                 type="button"
                 role="tab"
                 aria-selected={on}
-                aria-label={t.label}
+                aria-label={label}
                 className={cn("ca-tabbtn", on && "on")}
-                onClick={() => selectTab(t.key)}
+                onClick={() => selectTab(tab.key)}
               >
                 <span className="tic">
-                  <Icon name={t.icon} size={24} />
-                  {t.key === "rewards" && rewardsDot && <span className="ca-rdot" />}
+                  <Icon name={tab.icon} size={24} />
+                  {tab.key === "rewards" && rewardsDot && <span className="ca-rdot" />}
                 </span>
-                <span className="tlab">{t.label}</span>
+                <span className="tlab">{label}</span>
               </button>
             );
           })}
@@ -243,7 +246,7 @@ function Frame({
             type="button"
             role="tab"
             aria-selected={active === "scan"}
-            aria-label="Scan"
+            aria-label={t("nav.scan")}
             className="ca-scanbtn"
             onClick={() => selectTab("scan")}
           >

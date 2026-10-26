@@ -81,6 +81,8 @@ const generalSchema = z.object({
   termsContent: optionalText(20000),
   privacyContent: optionalText(20000),
   cancellationPolicy: optionalText(5000),
+  defaultClientLocale: z.enum(["nl", "en"]),
+  clientFormality: z.enum(["INFORMAL", "FORMAL"]),
 });
 
 export async function saveGeneralSettingsAction(merchantId: string, fd: FormData): Promise<ActionResult> {
@@ -96,6 +98,8 @@ export async function saveGeneralSettingsAction(merchantId: string, fd: FormData
       termsContent: formText(fd, "termsContent"),
       privacyContent: formText(fd, "privacyContent"),
       cancellationPolicy: formText(fd, "cancellationPolicy"),
+      defaultClientLocale: formText(fd, "defaultClientLocale") ?? "nl",
+      clientFormality: formText(fd, "clientFormality") ?? "INFORMAL",
     });
 
     await upsertSettings(merchantId, {
@@ -105,6 +109,8 @@ export async function saveGeneralSettingsAction(merchantId: string, fd: FormData
       shopBannerHeadline: data.shopBannerHeadline ?? null,
       shopBannerSubtitle: data.shopBannerSubtitle ?? null,
       shopBannerButtonLabel: data.shopBannerButtonLabel ?? null,
+      defaultClientLocale: data.defaultClientLocale,
+      clientFormality: data.clientFormality,
     });
     await ensureBranding(merchantId);
     await rawDb.tenantBranding.update({

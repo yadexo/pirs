@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { useBasePath } from "../base-path";
 import { Sheet, Icon, Stepper, Carousel, EmptyState, money, useToast } from "@/components/client-app/ui";
 import { Button, PriceBlock, ProductCard, SegmentedControl, Tag } from "@/components/client-app/v2";
@@ -21,11 +22,7 @@ export interface ShopPlan {
   benefits: string[];
 }
 
-const SEGMENTS = [
-  { value: "browse", label: "Browse" },
-  { value: "memberships", label: "Memberships" },
-  { value: "treatments", label: "Treatments" },
-] as const;
+const SEGMENTS = ["browse", "memberships", "treatments"] as const;
 
 export function ShopView({
   merchantSlug,
@@ -74,6 +71,11 @@ export function ShopView({
   const router = useRouter();
   const base = useBasePath();
   const { refresh } = useCart();
+  const t = useTranslations("clientApp.shop");
+  const tc = useTranslations("clientApp");
+  const tm = useTranslations("clientApp.membership");
+  const locale = useLocale();
+  const fmtMoney = React.useCallback((cents: number) => money(cents, currency, locale === "nl" ? "nl" : "en"), [currency, locale]);
   const { toast } = useToast();
 
   const [detail, setDetail] = React.useState<ShopCard | null>(null);
@@ -141,10 +143,10 @@ export function ShopView({
         return false;
       }
       await refresh();
-      toast(`${card.name} added to cart`);
+      toast(tc("addedToCart", { name: card.name }));
       return true;
     },
-    [merchantSlug, refresh, toast],
+    [merchantSlug, refresh, toast, tc],
   );
 
   /**
@@ -163,13 +165,13 @@ export function ShopView({
     setPlanDetail(null);
 
     if (res.paid) {
-      toast(`Welcome to ${res.name}`);
+      toast(t("welcomeToPlan", { name: res.name }));
       router.refresh();
       return;
     }
     if (!res.payment.clientSecret) {
       // Nothing to pay for this plan; Stripe still confirms it by webhook.
-      toast("Setting up your membership…");
+      toast(t("settingUpMembership"));
       router.refresh();
       return;
     }
@@ -214,21 +216,23 @@ export function ShopView({
             {/* No saving, no tag at all — see lib/package-pricing.ts. */}
             {pkg.savingCents !== null && (
               <Tag kind="brand">
-                {pkg.savingAtLeast ? "Save at least" : "Save"} {money(pkg.savingCents, currency)}
+                {pkg.savingAtLeast ? t("saveAtLeast") : t("save")} {fmtMoney(pkg.savingCents)}
               </Tag>
             )}
           </span>
-          <span className="sessions">{pkg.sessions} sessions</span>
+          <span className="sessions">{t("sessionsCount", { count: pkg.sessions })}</span>
         </button>
         <button type="button" className="body" onClick={() => setPackageDetail(pkg)}>
           <b>{pkg.name}</b>
           <span className="meta">
-            {pkg.expiryDays ? `Valid ${validityLabel(pkg.expiryDays)}` : "No expiry"}
+            {pkg.expiryDays ? t("validFromPurchase", { label: validityLabel(pkg.expiryDays, locale === "nl" ? "nl" : "en") }) : t("noExpiry")}
             {pkg.covers.length > 0 ? ` · ${pkg.covers.map((c) => c.name).join(", ")}` : ""}
           </span>
           <span className="price">
-            <b className="tabular">{money(pkg.priceCents, currency)}</b>
-            <span className="tabular">{money(pkg.perSessionCents, currency)} per session</span>
+            <b className="tabular">{fmtMoney(pkg.priceCents)}</b>
+            <span className="tabular">
+              {fmtMoney(pkg.perSessionCents)} {t("perSession")}
+            </span>
           </span>
         </button>
       </article>
@@ -241,7 +245,7 @@ export function ShopView({
         <div className="v2-sechead">
           <h2>{title}</h2>
           <button type="button" onClick={() => go(seeAll, categoryId)}>
-            See all <Icon name="chevR" size={18} />
+            {tc("seeAll")} <Icon name="chevR" size={18} />
           </button>
         </div>
         <div className="v2-rail no-scrollbar">{cards.map(card)}</div>
@@ -256,10 +260,10 @@ export function ShopView({
         {/* A clinic that cannot bill a recurring plan has no memberships to
             show, so the tab goes too rather than leading to an empty shelf. */}
         <SegmentedControl
-          label="Shop sections"
+          label={t("sectionsLabel")}
           value={tab}
           onChange={(next) => go(next, categoryId)}
-          options={SEGMENTS.filter((s) => s.value !== "memberships" || plans.length > 0).map((s) => ({ value: s.value as string, label: s.label }))}
+          options={SEGMENTS.filter((s) => s !== "memberships" || plans.length > 0).map((s) => ({ value: s, label: t(`sections.${s}`) }))}
         />
       </div>
 
@@ -268,7 +272,7 @@ export function ShopView({
           {categories.length > 0 && (
             <div className="v2-chips no-scrollbar">
               <button type="button" className={categoryId === null ? "on" : undefined} onClick={() => go("browse", null)}>
-                All
+                {t("all")}
               </button>
               {categories.map((c) => (
                 <button key={c.id} type="button" className={categoryId === c.id ? "on" : undefined} onClick={() => go("browse", categoryId === c.id ? null : c.id)}>
@@ -284,7 +288,7 @@ export function ShopView({
                 <Icon name="star" size={20} />
               </span>
               <span className="txt">
-                <b>Members save {memberRate}%</b> on everything at {merchantName}
+                {t.rich("membersSave", { rate: memberRate, name: merchantName, b: (chunks) => <b>{chunks}</b> })}
               </span>
               <Icon name="chevR" size={20} />
             </button>
@@ -293,27 +297,27 @@ export function ShopView({
           {everything.length === 0 ? (
             <div className="v2-sec">
               <div className="v2-empty">
-                <EmptyState text="The shop is being stocked" sub="Check back soon — new treatments and products are on their way." />
+                <EmptyState text={t("shopBeingStocked")} sub={t("shopBeingStockedSub")} />
               </div>
             </div>
           ) : (
             <>
-              {shelf("Popular treatments", inCategory(popularTreatments), "treatments")}
+              {shelf(t("popularTreatments"), inCategory(popularTreatments), "treatments")}
               {packages.length > 0 && (
                 <section className="v2-sec">
                   <div className="v2-sechead">
-                    <h2>Session packages</h2>
+                    <h2>{t("sessionPackages")}</h2>
                     <button type="button" onClick={() => go("treatments", categoryId)}>
-                      See all <Icon name="chevR" size={18} />
+                      {tc("seeAll")} <Icon name="chevR" size={18} />
                     </button>
                   </div>
                   <div className="v2-rail no-scrollbar">{packages.map(packageCard)}</div>
                 </section>
               )}
-              {shelf("Skin care products", inCategory(products), "browse")}
+              {shelf(t("products"), inCategory(products), "browse")}
               <p className="v2-vatnote">
-                All prices include VAT.
-                {packages.length > 0 ? " Package savings compare with buying the same sessions one by one." : ""}
+                {t("allPricesIncludeVat")}
+                {packages.length > 0 ? t("packageSavingsNote") : ""}
               </p>
             </>
           )}
@@ -324,18 +328,20 @@ export function ShopView({
         <div className="v2-plans">
           {plans.length === 0 ? (
             <div className="v2-empty">
-              <EmptyState text="No memberships available" sub="Plans will appear here once the clinic publishes them." />
+              <EmptyState text={t("noMemberships")} sub={t("noMembershipsSub")} />
             </div>
           ) : (
             plans.map((pl) => {
               const current = pl.id === currentPlanId;
+              const intervalPhrase = pl.interval === "month" ? t("perMonth") : t("perYear");
+              const intervalWord = pl.interval === "month" ? t("intervalWordMonth") : t("intervalWordYear");
               return (
                 <div key={pl.id} className="v2-plan" data-plan={pl.id}>
                   <div className="top">
                     <h3>{pl.name}</h3>
                     <span className="price">
-                      <b className="tabular">{money(pl.priceCents, currency)}</b>
-                      <span>per {pl.interval}</span>
+                      <b className="tabular">{fmtMoney(pl.priceCents)}</b>
+                      <span>{intervalPhrase}</span>
                     </span>
                   </div>
                   {pl.description && <p className="blurb">{pl.description}</p>}
@@ -348,14 +354,12 @@ export function ShopView({
                       ))}
                     </ul>
                   )}
-                  <p className="terms">
-                    Price includes VAT. Renews automatically every {pl.interval}. Cancel any time in Profile → Membership.
-                  </p>
+                  <p className="terms">{t("priceIncludesVatRenews", { interval: intervalWord })}</p>
                   {current ? (
-                    <span className="v2-tag v2-tag-soft">{membershipPending ? "Waiting for your first payment" : "Current plan"}</span>
+                    <span className="v2-tag v2-tag-soft">{membershipPending ? t("waitingForFirstPayment") : t("currentPlan")}</span>
                   ) : (
                     <Button disabled={pending || membershipPending} onClick={() => joinPlan(pl.id)}>
-                      Join {pl.name}
+                      {t("joinPlan", { name: pl.name })}
                     </Button>
                   )}
                 </div>
@@ -365,13 +369,13 @@ export function ShopView({
           {plans.length > 0 && (
             <div className="v2-reassure">
               <span>
-                <Icon name="check" size={18} /> Cancel anytime
+                <Icon name="check" size={18} /> {t("cancelAnytime")}
               </span>
               <span>
-                <Icon name="check" size={18} /> Perks start today
+                <Icon name="check" size={18} /> {t("perksStartToday")}
               </span>
               <span>
-                <Icon name="shield" size={18} /> Pay securely
+                <Icon name="shield" size={18} /> {t("paySecurely")}
               </span>
             </div>
           )}
@@ -382,16 +386,16 @@ export function ShopView({
         <div className="v2-treatments">
           <div className="filters">
             <button type="button" className="v2-btn v2-btn-pill" onClick={() => setFilterOpen(true)}>
-              <Icon name="sliders" size={18} /> Filter
+              <Icon name="sliders" size={18} /> {t("filter")}
             </button>
             <button type="button" className="v2-btn v2-btn-pill" onClick={() => setSortOpen(true)}>
-              Sort <Icon name="chevD" size={16} />
+              {t("sort")} <Icon name="chevD" size={16} />
             </button>
           </div>
 
           {visibleTreatments.length === 0 ? (
             <div className="v2-empty">
-              <EmptyState text="No treatments found" sub="Try clearing filters, or check back soon." />
+              <EmptyState text={t("noTreatmentsFound")} sub={t("noTreatmentsFoundSub")} />
             </div>
           ) : (
             <div className="rows">
@@ -400,7 +404,9 @@ export function ShopView({
                   key={s.id}
                   shape="row"
                   name={s.name}
-                  meta={[s.meta, pointsPerCents > 0 ? `+${Math.floor(s.viewerPriceCents * pointsPerCents)} points` : null].filter(Boolean).join(" · ")}
+                  meta={[s.meta, pointsPerCents > 0 ? t("pointsSuffix", { count: Math.floor(s.viewerPriceCents * pointsPerCents) }) : null]
+                    .filter(Boolean)
+                    .join(" · ")}
                   imageUrl={s.imageUrl}
                   tags={s.tag && <Tag kind={s.tag.kind}>{s.tag.label}</Tag>}
                   cents={s.viewerPriceCents}
@@ -420,25 +426,29 @@ export function ShopView({
           )}
           {packages.length > 0 && (
             <section className="v2-pkggroup">
-              <h2>Packages</h2>
+              <h2>{t("packages")}</h2>
               <div className="rows">
                 {packages.map((pkg) => (
                   <button type="button" className="row" key={pkg.id} onClick={() => setPackageDetail(pkg)}>
                     <span className="txt">
                       <b>{pkg.name}</b>
                       <span>
-                        {pkg.sessions} sessions
-                        {pkg.expiryDays ? ` · valid ${validityLabel(pkg.expiryDays)}` : " · no expiry"}
+                        {t("sessionsCount", { count: pkg.sessions })}
+                        {pkg.expiryDays
+                          ? t("validSuffix", { label: validityLabel(pkg.expiryDays, locale === "nl" ? "nl" : "en") })
+                          : t("noExpirySuffix")}
                       </span>
                       {pkg.savingCents !== null && (
                         <span className="save">
-                          {pkg.savingAtLeast ? "Save at least" : "Save"} {money(pkg.savingCents, currency)}
+                          {pkg.savingAtLeast ? t("saveAtLeast") : t("save")} {fmtMoney(pkg.savingCents)}
                         </span>
                       )}
                     </span>
                     <span className="right">
-                      <b className="tabular">{money(pkg.priceCents, currency)}</b>
-                      <span className="tabular">{money(pkg.perSessionCents, currency)} per session</span>
+                      <b className="tabular">{fmtMoney(pkg.priceCents)}</b>
+                      <span className="tabular">
+                        {fmtMoney(pkg.perSessionCents)} {t("perSession")}
+                      </span>
                     </span>
                   </button>
                 ))}
@@ -446,8 +456,8 @@ export function ShopView({
             </section>
           )}
           <p className="v2-vatnote">
-            All prices include VAT.
-            {packages.length > 0 ? " Package savings compare with buying the same sessions one by one." : ""} Results vary per person.
+            {t("allPricesIncludeVat")}
+            {packages.length > 0 ? t("packageSavingsNote") : ""} {t("resultsVaryPerPerson")}
           </p>
         </div>
       )}
@@ -461,7 +471,7 @@ export function ShopView({
         cta={
           detail &&
           (detail.soldOut ? (
-            <Button disabled>Sold out</Button>
+            <Button disabled>{t("soldOut")}</Button>
           ) : detail.kind === "SERVICE" && detail.bookable && !externalBookingUrl ? (
             <div className="v2-ctapair">
               <Button
@@ -471,7 +481,7 @@ export function ShopView({
                   if (await addCard(detail, qty)) setDetail(null);
                 }}
               >
-                Add to cart
+                {t("addToCart")}
               </Button>
               <Button
                 onClick={() => {
@@ -479,7 +489,7 @@ export function ShopView({
                   setDetail(null);
                 }}
               >
-                <Icon name="calendar" size={20} /> Book
+                <Icon name="calendar" size={20} /> {tc("home.book")}
               </Button>
             </div>
           ) : (
@@ -491,7 +501,7 @@ export function ShopView({
                 if (await addCard(detail, qty)) setDetail(null);
               }}
             >
-              Add to cart
+              {t("addToCart")}
             </Button>
           ))
         }
@@ -508,7 +518,7 @@ export function ShopView({
             {/* The sheet is the one place the handoff allows two tags. */}
             <div className="tags">
               {detail.offerLabel && <Tag kind="brand">{detail.offerLabel}</Tag>}
-              {detail.popular && <Tag kind="photo">Popular</Tag>}
+              {detail.popular && <Tag kind="photo">{t("popular")}</Tag>}
             </div>
 
             <h2>{detail.name}</h2>
@@ -525,18 +535,18 @@ export function ShopView({
                 }}
               />
               <span className="facts">
-                {[detail.meta, pointsPerCents > 0 ? `+${Math.floor(detail.viewerPriceCents * pointsPerCents)} points` : null].filter(Boolean).join(" · ")}
+                {[detail.meta, pointsPerCents > 0 ? t("pointsSuffix", { count: Math.floor(detail.viewerPriceCents * pointsPerCents) }) : null]
+                  .filter(Boolean)
+                  .join(" · ")}
               </span>
             </div>
 
             {detail.description && <p className="desc">{detail.description}</p>}
-            {detail.kind === "SERVICE" && externalBookingUrl && (
-              <p className="desc">After buying, book your time on {merchantName}&rsquo;s booking page.</p>
-            )}
-            {detail.kind === "SERVICE" && <p className="desc">Results vary per person.</p>}
+            {detail.kind === "SERVICE" && externalBookingUrl && <p className="desc">{t("bookOnBookingPage", { name: merchantName })}</p>}
+            {detail.kind === "SERVICE" && <p className="desc">{t("resultsVaryPerPerson")}</p>}
 
             <div className="qty">
-              <span>Quantity</span>
+              <span>{t("quantity")}</span>
               <Stepper value={qty} onChange={setQty} />
             </div>
           </div>
@@ -565,11 +575,11 @@ export function ShopView({
                   return;
                 }
                 await refresh();
-                toast(`${packageDetail.name} added to cart`);
+                toast(tc("addedToCart", { name: packageDetail.name }));
                 setPackageDetail(null);
               }}
             >
-              Add to cart
+              {t("addToCart")}
             </Button>
           )
         }
@@ -586,34 +596,34 @@ export function ShopView({
             <div className="tags">
               {packageDetail.savingCents !== null && (
                 <Tag kind="brand">
-                  {packageDetail.savingAtLeast ? "Save at least" : "Save"} {money(packageDetail.savingCents, currency)}
+                  {packageDetail.savingAtLeast ? t("saveAtLeast") : t("save")} {fmtMoney(packageDetail.savingCents)}
                 </Tag>
               )}
-              <Tag kind="photo">Package</Tag>
+              <Tag kind="photo">{t("package")}</Tag>
             </div>
 
             <h2>{packageDetail.name}</h2>
             <div className="priceline">
               <PriceBlock cents={packageDetail.priceCents} currency={currency} />
               <span className="facts">
-                {money(packageDetail.perSessionCents, currency)} per session
-                {pointsPerCents > 0 ? ` · +${Math.floor(packageDetail.priceCents * pointsPerCents)} points` : ""}
+                {fmtMoney(packageDetail.perSessionCents)} {t("perSession")}
+                {pointsPerCents > 0 ? ` · ${t("pointsSuffix", { count: Math.floor(packageDetail.priceCents * pointsPerCents) })}` : ""}
               </span>
             </div>
 
             <div className="v2-pkgfacts">
               <span>
                 <b>{packageDetail.sessions}</b>
-                sessions
+                {t("sessionsLabel")}
               </span>
               <span>
-                <b>{packageDetail.expiryDays ? validityLabel(packageDetail.expiryDays) : "No expiry"}</b>
-                {packageDetail.expiryDays ? "from purchase" : "use any time"}
+                <b>{packageDetail.expiryDays ? validityLabel(packageDetail.expiryDays, locale === "nl" ? "nl" : "en") : t("noExpiry")}</b>
+                {packageDetail.expiryDays ? t("fromPurchase") : t("useAnyTime")}
               </span>
               {packageDetail.transferable && (
                 <span>
-                  <b>Shareable</b>
-                  give sessions away
+                  <b>{t("shareable")}</b>
+                  {t("giveSessionsAway")}
                 </span>
               )}
             </div>
@@ -622,14 +632,16 @@ export function ShopView({
 
             {packageDetail.covers.length > 0 && (
               <div className="v2-pkgcovers">
-                <h3>What a session can be used for</h3>
+                <h3>{t("whatSessionCanBeUsedFor")}</h3>
                 {packageDetail.covers.map((c) => (
                   <div className="row" key={c.id}>
                     <span className="txt">
                       <b>{c.name}</b>
-                      <span className="tabular">{money(c.singlePriceCents, currency)} on its own</span>
+                      <span className="tabular">
+                        {fmtMoney(c.singlePriceCents)} {t("onItsOwn")}
+                      </span>
                     </span>
-                    <span className="how">{c.bookingUrl ? "Book online after buying" : "Book at the desk"}</span>
+                    <span className="how">{c.bookingUrl ? t("bookOnlineAfterBuying") : t("bookAtDesk")}</span>
                   </div>
                 ))}
               </div>
@@ -638,11 +650,11 @@ export function ShopView({
             {packageDetail.savingCents !== null && (
               <p className="desc">
                 {packageDetail.savingAtLeast
-                  ? `Compared with buying ${packageDetail.sessions} sessions of the cheapest treatment this covers, one by one.`
-                  : `Compared with buying ${packageDetail.sessions} sessions one by one.`}
+                  ? t("comparedWithBuyingCheapestSeparately", { count: packageDetail.sessions })
+                  : t("comparedWithBuyingSeparately", { count: packageDetail.sessions })}
               </p>
             )}
-            <p className="desc">Results vary per person.</p>
+            <p className="desc">{t("resultsVaryPerPerson")}</p>
           </div>
         )}
       </Sheet>
@@ -650,7 +662,7 @@ export function ShopView({
       <Sheet
         open={filterOpen}
         onClose={() => setFilterOpen(false)}
-        title="Filter treatments"
+        title={t("filterTreatments")}
         cta={
           <div className="v2-ctapair">
             <Button
@@ -660,19 +672,19 @@ export function ShopView({
                 setDuration(null);
               }}
             >
-              Reset
+              {t("reset")}
             </Button>
-            <Button onClick={() => setFilterOpen(false)}>Apply</Button>
+            <Button onClick={() => setFilterOpen(false)}>{t("apply")}</Button>
           </div>
         }
       >
-        <div className="grouplab">Price</div>
+        <div className="grouplab">{t("price")}</div>
         <div className="chipsel">
           {(
             [
-              ["u50", "Under €50"],
-              ["50-100", "€50–€100"],
-              ["o100", "Over €100"],
+              ["u50", t("priceUnder", { amount: 50 })],
+              ["50-100", t("priceRange", { min: 50, max: 100 })],
+              ["o100", t("priceOver", { amount: 100 })],
             ] as const
           ).map(([k, label]) => (
             <button key={k} className={`schip ${priceBand === k ? "on" : ""}`} onClick={() => setPriceBand(priceBand === k ? null : k)}>
@@ -680,22 +692,22 @@ export function ShopView({
             </button>
           ))}
         </div>
-        <div className="grouplab">Duration</div>
+        <div className="grouplab">{t("duration")}</div>
         <div className="chipsel">
           {[30, 45, 60].map((d) => (
             <button key={d} className={`schip ${duration === d ? "on" : ""}`} onClick={() => setDuration(duration === d ? null : d)}>
-              {d} min
+              {t("minutesAbbrev", { count: d })}
             </button>
           ))}
         </div>
       </Sheet>
 
-      <Sheet open={sortOpen} onClose={() => setSortOpen(false)} title="Sort treatments">
+      <Sheet open={sortOpen} onClose={() => setSortOpen(false)} title={t("sortTreatments")}>
         {(
           [
-            ["pop", "Popularity"],
-            ["pasc", "Price: low → high"],
-            ["pdesc", "Price: high → low"],
+            ["pop", t("popularity")],
+            ["pasc", t("priceLowHigh")],
+            ["pdesc", t("priceHighLow")],
           ] as const
         ).map(([k, label]) => (
           <button
@@ -719,7 +731,7 @@ export function ShopView({
         onClose={() => setBooking(null)}
         onBooked={() => {
           setBooking(null);
-          toast("Booking requested");
+          toast(t("bookingRequested"));
           router.refresh();
         }}
       />
@@ -731,7 +743,7 @@ export function ShopView({
         cta={
           planDetail && (
             <Button disabled={pending} onClick={() => joinPlan(planDetail.id)}>
-              Join {planDetail.name}
+              {t("joinPlan", { name: planDetail.name })}
             </Button>
           )
         }
@@ -749,23 +761,23 @@ export function ShopView({
 
       {/* The first payment. Until it goes through there is no membership, so
           this sheet is the whole of joining rather than a formality after it. */}
-      <Sheet open={!!firstPayment} onClose={() => setFirstPayment(null)} title={firstPayment ? `Start ${firstPayment.plan}` : ""}>
+      <Sheet open={!!firstPayment} onClose={() => setFirstPayment(null)} title={firstPayment ? t("startPlan", { plan: firstPayment.plan }) : ""}>
         {firstPayment && (
           <>
             <p style={{ fontSize: 14, color: "var(--text-2)", paddingBottom: 4 }}>
-              {money(firstPayment.amountCents, currency)} now, then the same each period. Cancel any time from your profile.
+              {tm("firstPaymentThenRecurring", { amount: fmtMoney(firstPayment.amountCents) })}
             </p>
             <CardPayment
               payment={firstPayment.payment}
               orderNumber={{ membership: true }}
               amountCents={firstPayment.amountCents}
               currency={currency}
-              payLabel={`Pay ${money(firstPayment.amountCents, currency)} and join`}
+              becomeMember
               onPaid={() => {
                 setFirstPayment(null);
                 // The clinic's Stripe account confirms it; the plan switches on
                 // when that lands, which is usually a second or two.
-                toast("Payment sent — your membership starts in a moment");
+                toast(t("paymentSentMembershipStarts"));
                 router.refresh();
               }}
               onCancel={() => setFirstPayment(null)}

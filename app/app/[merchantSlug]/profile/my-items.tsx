@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslations } from "next-intl";
 import { Icon, QrCode, Sheet } from "@/components/client-app/ui";
 import { redeemQrValue } from "@/lib/redeemable-shared";
 import { formatDay } from "@/lib/client-format";
@@ -35,16 +36,10 @@ export interface ClientItem {
   bookingUrl: string | null;
 }
 
-const STATUS_LABEL: Record<ClientItem["status"], string> = {
-  AVAILABLE: "Ready to collect",
-  REDEEMED: "Redeemed",
-  VOIDED: "Refunded",
-  EXPIRED: "Expired",
-};
-
 const day = (iso: string, timeZone: string) => formatDay(iso, timeZone);
 
 export function MyItems({ items, packages, merchantSlug }: { items: ClientItem[]; packages: OwnedPackage[]; merchantSlug: string }) {
+  const t = useTranslations("clientApp.myItems");
   const timeZone = useClinicTimeZone();
   const [giving, setGiving] = React.useState<OwnedPackage | null>(null);
   const usable = packages.filter((p) => !p.expired && p.remainingUses > 0);
@@ -83,7 +78,7 @@ export function MyItems({ items, packages, merchantSlug }: { items: ClientItem[]
   if (items.length === 0 && packages.length === 0) {
     return (
       <div className="v2-items">
-        <p className="none">Anything you buy in the app appears here with its own code to show at the clinic.</p>
+        <p className="none">{t("nothingYet")}</p>
       </div>
     );
   }
@@ -92,7 +87,7 @@ export function MyItems({ items, packages, merchantSlug }: { items: ClientItem[]
     <div className="v2-items">
       {(available.length > 0 || usable.length > 0) && (
         <section>
-          <h2>Ready to use</h2>
+          <h2>{t("readyToUse")}</h2>
 
           {/* Packages first: they are several sessions and the most to say. */}
           {usable.map((pkg) => (
@@ -108,13 +103,13 @@ export function MyItems({ items, packages, merchantSlug }: { items: ClientItem[]
                 </span>
                 <span className="txt">
                   <b>
-                    {pkg.name} <span className="v2-tag v2-tag-photo">Package</span>
+                    {pkg.name} <span className="v2-tag v2-tag-photo">{t("package")}</span>
                   </b>
                   <span>
                     {pkg.sessionsLabel}
-                    {pkg.expiresAt ? `, valid until ${formatDay(pkg.expiresAt, timeZone)}` : ""}
+                    {pkg.expiresAt ? t("validUntil", { date: formatDay(pkg.expiresAt, timeZone) }) : ""}
                   </span>
-                  {pkg.receivedFromName && <span className="from">Given to you by {pkg.receivedFromName}</span>}
+                  {pkg.receivedFromName && <span className="from">{t("givenToYouBy", { name: pkg.receivedFromName })}</span>}
                 </span>
               </div>
 
@@ -132,11 +127,11 @@ export function MyItems({ items, packages, merchantSlug }: { items: ClientItem[]
                       <span>{c.name}</span>
                       {c.bookingUrl ? (
                         <a className="book" href={c.bookingUrl} target="_blank" rel="noreferrer">
-                          Book
+                          {t("book")}
                           <Icon name="share" size={14} />
                         </a>
                       ) : (
-                        <span className="desk">Book at the desk</span>
+                        <span className="desk">{t("bookAtDesk")}</span>
                       )}
                     </div>
                   ))}
@@ -146,7 +141,7 @@ export function MyItems({ items, packages, merchantSlug }: { items: ClientItem[]
               {pkg.canGive && (
                 <button type="button" className="give" onClick={() => setGiving(pkg)}>
                   <Icon name="share" size={18} />
-                  Give sessions to someone
+                  {t("giveSessionsToSomeone")}
                   <Icon name="chevR" size={18} />
                 </button>
               )}
@@ -162,7 +157,7 @@ export function MyItems({ items, packages, merchantSlug }: { items: ClientItem[]
                   </span>
                   <span className="txt">
                     <b>{item.name}</b>
-                    <span>{item.bookingUrl ? "Ready to book" : "Show your code at the desk"}</span>
+                    <span>{item.bookingUrl ? t("readyToBook") : t("showCodeAtDesk")}</span>
                   </span>
                   <Icon name="chevR" size={20} />
                 </button>
@@ -170,7 +165,7 @@ export function MyItems({ items, packages, merchantSlug }: { items: ClientItem[]
                     book on; otherwise the row above is the whole story. */}
                 {item.bookingUrl && (
                   <a className="book" href={item.bookingUrl} target="_blank" rel="noreferrer">
-                    Book appointment
+                    {t("bookAppointment")}
                     <Icon name="share" size={16} />
                   </a>
                 )}
@@ -182,7 +177,7 @@ export function MyItems({ items, packages, merchantSlug }: { items: ClientItem[]
 
       {(past.length > 0 || spent.length > 0) && (
         <section>
-          <h2>Past items</h2>
+          <h2>{t("pastItems")}</h2>
           <div className="list past">
             {spent.map((pkg) => (
               <div className="row" key={pkg.id}>
@@ -192,7 +187,7 @@ export function MyItems({ items, packages, merchantSlug }: { items: ClientItem[]
                 <span className="txt">
                   <b>{pkg.name}</b>
                   <span>
-                    {pkg.expired ? "Expired" : "All sessions used"}
+                    {pkg.expired ? t("expired") : t("allSessionsUsed")}
                     {pkg.expiresAt ? ` · ${formatDay(pkg.expiresAt, timeZone)}` : ""}
                   </span>
                 </span>
@@ -206,7 +201,7 @@ export function MyItems({ items, packages, merchantSlug }: { items: ClientItem[]
                 <span className="txt">
                   <b>{item.name}</b>
                   <span>
-                    {STATUS_LABEL[statusOf(item)]}
+                    {t(`statusLabel.${statusOf(item)}`)}
                     {item.redeemedAt ? ` · ${day(item.redeemedAt, timeZone)}` : ""}
                   </span>
                 </span>
@@ -223,16 +218,12 @@ export function MyItems({ items, packages, merchantSlug }: { items: ClientItem[]
           <div style={{ textAlign: "center", paddingBottom: 24 }}>
             {openStatus === "AVAILABLE" ? (
               <>
-                <p style={{ color: "var(--muted)", fontSize: 15, margin: "0 0 18px" }}>
-                  Show this at the clinic. Turn your screen brightness up so the camera can read it.
-                </p>
+                <p style={{ color: "var(--muted)", fontSize: 15, margin: "0 0 18px" }}>{t("showAtClinic")}</p>
                 <div className="ca-itemqrbox">
-                  <QrCode value={redeemQrValue(open.token)} label={`Code for ${open.name}`} />
+                  <QrCode value={redeemQrValue(open.token)} label={t("codeFor", { name: open.name })} />
                 </div>
                 <p className="ca-itemcode tabular">{open.code}</p>
-                <p style={{ color: "var(--muted)", fontSize: 14, margin: "6px 0 0" }}>
-                  Staff can type this code if the camera won&apos;t read the screen.
-                </p>
+                <p style={{ color: "var(--muted)", fontSize: 14, margin: "6px 0 0" }}>{t("staffCanType")}</p>
               </>
             ) : (
               <div style={{ padding: "40px 0" }}>
@@ -240,14 +231,10 @@ export function MyItems({ items, packages, merchantSlug }: { items: ClientItem[]
                   {openStatus === "REDEEMED" ? "✓" : "—"}
                 </p>
                 <p style={{ fontSize: 20, fontWeight: 700, color: "var(--ink-strong)", margin: "8px 0 4px" }}>
-                  {openStatus ? STATUS_LABEL[openStatus] : ""}
+                  {openStatus ? t(`statusLabel.${openStatus}`) : ""}
                 </p>
                 <p style={{ color: "var(--muted)", fontSize: 15, margin: 0 }}>
-                  {openStatus === "REDEEMED"
-                    ? "Enjoy! This code has been used."
-                    : openStatus === "VOIDED"
-                      ? "This order was refunded, so the code no longer works."
-                      : "This item is past its date."}
+                  {openStatus === "REDEEMED" ? t("redeemedEnjoyed") : openStatus === "VOIDED" ? t("voidedRefunded") : t("itemPastDate")}
                 </p>
               </div>
             )}
@@ -275,6 +262,7 @@ function GiveSessionsSheet({
   timeZone: string;
   onClose: () => void;
 }) {
+  const t = useTranslations("clientApp.myItems");
   const router = useRouter();
   const { toast } = useToast();
   const [count, setCount] = React.useState(1);
@@ -302,7 +290,7 @@ function GiveSessionsSheet({
       setError(res.error);
       return;
     }
-    toast(`${res.sessions} session${res.sessions === 1 ? "" : "s"} given`);
+    toast(t("sessionsGiven", { count: res.sessions }));
     onClose();
     router.refresh();
   }
@@ -311,10 +299,10 @@ function GiveSessionsSheet({
     <Sheet
       open
       onClose={onClose}
-      title="Give sessions"
+      title={t("giveSessions")}
       cta={
         <Button loading={pending} disabled={!contact.trim()} onClick={() => void give()}>
-          Give {count} session{count === 1 ? "" : "s"}
+          {t("giveCount", { count })}
         </Button>
       }
     >
@@ -323,17 +311,17 @@ function GiveSessionsSheet({
           <b>{pkg.name}</b>
           <span>
             {pkg.sessionsLabel}
-            {pkg.expiresAt ? `, valid until ${formatDay(pkg.expiresAt, timeZone)}` : ""}
+            {pkg.expiresAt ? t("validUntil", { date: formatDay(pkg.expiresAt, timeZone) }) : ""}
           </span>
         </div>
 
         <div className="howmany">
-          <span>How many</span>
+          <span>{t("howMany")}</span>
           <Stepper value={count} min={1} max={pkg.remainingUses} onChange={setCount} />
         </div>
 
         <TextField
-          label="Their email or phone number"
+          label={t("theirContact")}
           value={contact}
           onChange={(e) => setContact(e.target.value)}
           placeholder="name@example.com"
@@ -341,14 +329,12 @@ function GiveSessionsSheet({
         />
 
         <ul className="facts">
-          <li>They need an account at this clinic already.</li>
-          <li>The sessions arrive in their My items with the same treatments and the same end date.</li>
-          <li>This can&apos;t be undone.</li>
+          <li>{t("needsAccount")}</li>
+          <li>{t("sessionsArrive")}</li>
+          <li>{t("cannotBeUndone")}</li>
         </ul>
 
-        <p className="left">
-          You&apos;ll have {pkg.remainingUses - count} session{pkg.remainingUses - count === 1 ? "" : "s"} left.
-        </p>
+        <p className="left">{t("youllHaveLeft", { count: pkg.remainingUses - count })}</p>
 
         {error && (
           <p className="err" role="alert">

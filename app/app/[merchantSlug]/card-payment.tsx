@@ -3,6 +3,7 @@
 import * as React from "react";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
 import { Elements, ExpressCheckoutElement, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import { useLocale, useTranslations } from "next-intl";
 import { money } from "@/components/client-app/ui";
 import { Button } from "@/components/client-app/v2";
 
@@ -47,7 +48,7 @@ export function CardPayment({
   orderNumber,
   amountCents,
   currency,
-  payLabel,
+  becomeMember,
   onPaid,
   onCancel,
 }: {
@@ -60,17 +61,16 @@ export function CardPayment({
   orderNumber: string | { membership: true };
   amountCents: number;
   currency: string;
-  /** Overrides "Pay €X" — a first membership payment says what it starts. */
-  payLabel?: string;
+  /** A first membership payment says what it starts, not just what it costs. */
+  becomeMember?: boolean;
   /** The payment went through, as far as the browser can tell. */
   onPaid: () => void;
   onCancel: () => void;
 }) {
+  const t = useTranslations("clientApp.checkout");
   if (!payment.publishableKey) {
     return (
-      <p style={{ color: "var(--danger)", fontSize: "var(--small-size)", padding: "12px 0" }}>
-        This clinic&apos;s payments aren&apos;t set up completely yet. Please pay at the clinic.
-      </p>
+      <p style={{ color: "var(--danger)", fontSize: "var(--small-size)", padding: "12px 0" }}>{t("paymentsNotSetUp")}</p>
     );
   }
   return (
@@ -93,7 +93,7 @@ export function CardPayment({
         },
       }}
     >
-      <PayForm orderNumber={orderNumber} amountCents={amountCents} currency={currency} payLabel={payLabel} onPaid={onPaid} onCancel={onCancel} />
+      <PayForm orderNumber={orderNumber} amountCents={amountCents} currency={currency} becomeMember={becomeMember} onPaid={onPaid} onCancel={onCancel} />
     </Elements>
   );
 }
@@ -102,17 +102,20 @@ function PayForm({
   orderNumber,
   amountCents,
   currency,
-  payLabel,
+  becomeMember,
   onPaid,
   onCancel,
 }: {
   orderNumber: string | { membership: true };
   amountCents: number;
   currency: string;
-  payLabel?: string;
+  becomeMember?: boolean;
   onPaid: () => void;
   onCancel: () => void;
 }) {
+  const t = useTranslations("clientApp.checkout");
+  const tc = useTranslations("common");
+  const locale = useLocale();
   const stripe = useStripe();
   const elements = useElements();
   const [busy, setBusy] = React.useState(false);
@@ -133,7 +136,7 @@ function PayForm({
 
     const submitted = await elements.submit();
     if (submitted.error) {
-      setError(submitted.error.message ?? "Check your payment details.");
+      setError(submitted.error.message ?? t("checkPaymentDetails"));
       setBusy(false);
       return;
     }
@@ -148,11 +151,11 @@ function PayForm({
     });
     setBusy(false);
     if (confirmError) {
-      setError(confirmError.message ?? "That payment didn't go through. Try another method.");
+      setError(confirmError.message ?? t("paymentFailed"));
       return;
     }
     onPaid();
-  }, [stripe, elements, returnUrl, onPaid]);
+  }, [stripe, elements, returnUrl, onPaid, t]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -191,10 +194,10 @@ function PayForm({
       )}
 
       <Button type="submit" disabled={!stripe || !ready || busy} loading={busy} className="go">
-        {payLabel ?? `Pay ${money(amountCents, currency)}`}
+        {t(becomeMember ? "payAndBecomeMember" : "pay", { amount: money(amountCents, currency, locale === "nl" ? "nl" : "en") })}
       </Button>
       <button type="button" className="cancel" onClick={onCancel} disabled={busy}>
-        Cancel
+        {tc("cancel")}
       </button>
     </form>
   );

@@ -406,7 +406,7 @@ export async function saveServiceAction(merchantId: string, id: string | null, f
     if (data.active) {
       // A treatment description has no deadline of its own, so urgency words
       // in one have nothing behind them.
-      assertTextIsPublishable({ name: { text: data.name, hasEndDate: false }, description: { text: data.description ?? "", hasEndDate: false } });
+      await assertTextIsPublishable({ name: { text: data.name, hasEndDate: false }, description: { text: data.description ?? "", hasEndDate: false } });
     }
     // A treatment is bought in the app and booked on the clinic's own page.
     // Without the link the client is left holding something they cannot use,
@@ -489,7 +489,7 @@ export async function saveProductAction(merchantId: string, id: string | null, f
     });
     const shared = readShopItemFields(fd);
     if (data.active) {
-      assertTextIsPublishable({ name: { text: data.name, hasEndDate: false }, description: { text: data.description ?? "", hasEndDate: false } });
+      await assertTextIsPublishable({ name: { text: data.name, hasEndDate: false }, description: { text: data.description ?? "", hasEndDate: false } });
     }
     const { categoryName, sku, ...rest } = data;
     const fields = {
@@ -717,7 +717,7 @@ export async function savePromotionAction(merchantId: string, id: string | null,
     // live harms nobody, so only publishing is blocked — a draft can keep a
     // sentence somebody is still working on.
     if (data.active) {
-      assertTextIsPublishable({
+      await assertTextIsPublishable({
         title: { text: data.title, hasEndDate: true },
         description: { text: data.description ?? "", hasEndDate: true },
         notifyTitle: { text: data.notifyTitle ?? "", hasEndDate: true },

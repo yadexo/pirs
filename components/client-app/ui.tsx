@@ -64,11 +64,17 @@ export function Scribble() {
 /* --------------------------------------------------------------- helpers */
 
 /**
- * Whole amounts drop the decimals ("€50"), others keep two ("€49.50"). Uses
- * the real ISO code, so a CHF or SEK clinic is not shown dollar signs.
+ * Whole amounts drop the decimals ("€50" / "€ 50"), others keep two
+ * ("€49.50" / "€ 49,50"). Uses the real ISO code, so a CHF or SEK clinic is
+ * not shown dollar signs.
+ *
+ * `locale` defaults to "en" rather than reading from context, so every
+ * existing call site keeps its current output until it's deliberately
+ * updated to pass the client's actual resolved locale (useLocale() from
+ * next-intl) — not yet done everywhere money() is called.
  */
-export const money = (cents: number, currency = DEFAULT_CURRENCY) =>
-  new Intl.NumberFormat("en", {
+export const money = (cents: number, currency = DEFAULT_CURRENCY, locale: "en" | "nl" = "en") =>
+  new Intl.NumberFormat(locale === "nl" ? "nl-NL" : "en", {
     style: "currency",
     currency,
     minimumFractionDigits: cents % 100 === 0 ? 0 : 2,

@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import { AlertTriangle, Check, Info } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { checkFields, blockingCount, type TextCheckInput, type TextIssue } from "@/lib/text-check";
+import { issueCopy } from "@/lib/text-check-copy";
 
 /**
  * The Text check panel, and the hook the editors drive it with.
@@ -23,21 +25,25 @@ export function useTextCheck(fields: Record<string, TextCheckInput | undefined>)
 
 /** The issues for one field, shown under it. */
 export function FieldIssues({ issues }: { issues: TextIssue[] | undefined }) {
+  const t = useTranslations("textCheck");
   if (!issues || issues.length === 0) return null;
   return (
     <ul className="mt-2 space-y-2">
-      {issues.map((issue, i) => (
-        <li key={`${issue.rule}-${i}`} className="flex gap-2 text-[14px] leading-5">
-          <AlertTriangle
-            className={`mt-0.5 h-4 w-4 shrink-0 ${issue.level === "block" ? "text-[var(--danger)]" : "text-[var(--warning)]"}`}
-            aria-hidden="true"
-          />
-          <span>
-            <span className={issue.level === "block" ? "text-[var(--danger)]" : "text-[var(--warning)]"}>{issue.message}</span>{" "}
-            <span className="text-ink-muted">{issue.fix}</span>
-          </span>
-        </li>
-      ))}
+      {issues.map((issue, i) => {
+        const { message, fix } = issueCopy(issue, t);
+        return (
+          <li key={`${issue.rule}-${i}`} className="flex gap-2 text-[14px] leading-5">
+            <AlertTriangle
+              className={`mt-0.5 h-4 w-4 shrink-0 ${issue.level === "block" ? "text-[var(--danger)]" : "text-[var(--warning)]"}`}
+              aria-hidden="true"
+            />
+            <span>
+              <span className={issue.level === "block" ? "text-[var(--danger)]" : "text-[var(--warning)]"}>{message}</span>{" "}
+              <span className="text-ink-muted">{fix}</span>
+            </span>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -48,16 +54,17 @@ export function FieldIssues({ issues }: { issues: TextIssue[] | undefined }) {
  * learns the check exists before it ever fires.
  */
 export function TextCheckPanel({ issues, blocking }: { issues: TextIssue[]; blocking: number }) {
+  const t = useTranslations("textCheck.panel");
   const checks = [
-    { label: "No result promises", failed: issues.some((i) => i.rule === "result-promise") },
-    { label: "No prescription medicine names", failed: issues.some((i) => i.rule === "prescription-name") },
-    { label: "“Free” only for things that cost nothing", failed: issues.some((i) => i.rule === "free") },
-    { label: "Urgency only with a real end date", failed: issues.some((i) => i.rule === "urgency-without-date") },
+    { label: t("noResultPromises"), failed: issues.some((i) => i.rule === "result-promise") },
+    { label: t("noPrescriptionNames"), failed: issues.some((i) => i.rule === "prescription-name") },
+    { label: t("freeOnlyWhenTrue"), failed: issues.some((i) => i.rule === "free") },
+    { label: t("urgencyOnlyWithDate"), failed: issues.some((i) => i.rule === "urgency-without-date") },
   ];
 
   return (
     <div className="rounded-[14px] bg-app p-4">
-      <p className="text-[15px] font-bold text-ink">Text check</p>
+      <p className="text-[15px] font-bold text-ink">{t("title")}</p>
       <ul className="mt-3 space-y-2">
         {checks.map((check) => (
           <li key={check.label} className="flex items-start gap-2 text-[14px] leading-5">
@@ -73,15 +80,13 @@ export function TextCheckPanel({ issues, blocking }: { issues: TextIssue[]; bloc
 
       <p className="mt-3 flex items-start gap-2 text-[14px] leading-5 text-ink-muted">
         <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-        Runs on everything clients read. It is not legal advice — have your final copy reviewed.
+        {t("disclaimer")}
       </p>
 
       {blocking > 0 && (
         <p className="pk-notice pk-notice-warn mt-3">
           <AlertTriangle className="ic h-4 w-4" aria-hidden="true" />
-          <span className="txt">
-            Fix {blocking} issue{blocking === 1 ? "" : "s"} to publish.
-          </span>
+          <span className="txt">{t("fixToPublish", { count: blocking })}</span>
         </p>
       )}
     </div>

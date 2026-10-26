@@ -153,14 +153,15 @@ export function canGiveSessions(input: {
  * "1 year", "6 months", "90 days" — how long a package stays usable, said the
  * way a person would say it rather than always in days.
  */
-export function validityLabel(expiryDays: number): string {
+export function validityLabel(expiryDays: number, locale: "en" | "nl" = "en"): string {
+  const nl = locale === "nl";
   if (expiryDays % 365 === 0) {
     const years = expiryDays / 365;
-    return `${years} year${years === 1 ? "" : "s"}`;
+    return nl ? `${years} jaar` : `${years} year${years === 1 ? "" : "s"}`;
   }
   if (expiryDays % 30 === 0) {
     const months = expiryDays / 30;
-    return `${months} month${months === 1 ? "" : "s"}`;
+    return nl ? `${months} ${months === 1 ? "maand" : "maanden"}` : `${months} month${months === 1 ? "" : "s"}`;
   }
-  return `${expiryDays} day${expiryDays === 1 ? "" : "s"}`;
+  return nl ? `${expiryDays} ${expiryDays === 1 ? "dag" : "dagen"}` : `${expiryDays} day${expiryDays === 1 ? "" : "s"}`;
 }

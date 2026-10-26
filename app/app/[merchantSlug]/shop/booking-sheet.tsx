@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslations } from "next-intl";
 import { Sheet, useToast } from "@/components/client-app/ui";
 import { getBookingOptionsForServiceAction, getClientSlotsAction, clientBookAction, clientOrderStatusAction, clientAbandonOrderAction } from "@/lib/actions/client-app";
 import { CardPayment, type PaymentHandoff } from "../card-payment";
@@ -44,6 +45,7 @@ export function BookingSheet({
 }) {
   const timeZone = useClinicTimeZone();
   const { toast } = useToast();
+  const t = useTranslations("clientApp.booking");
   const [options, setOptions] = React.useState<Options | null>(null);
   const [staffId, setStaffId] = React.useState("");
   const [locationId, setLocationId] = React.useState("");
@@ -99,7 +101,7 @@ export function BookingSheet({
       setDeposit({ payment: res.deposit.payment, orderNumber: res.deposit.orderNumber, amountCents: res.deposit.amountCents });
       return;
     }
-    toast(appointmentId ? "Appointment updated" : "Booking requested");
+    toast(appointmentId ? t("appointmentUpdated") : t("bookingRequested"));
     onBooked();
   }
 
@@ -114,13 +116,13 @@ export function BookingSheet({
       else if (status && "ok" in status && status.status === "FAILED") {
         setSettling(false);
         setDeposit(null);
-        setError("That payment didn't go through. Please pick a time again.");
+        setError(t("paymentFailedPickAgain"));
         return;
       } else await new Promise((r) => setTimeout(r, 700));
     }
     setSettling(false);
     setDeposit(null);
-    toast(confirmed ? "Booking confirmed" : "Deposit received. Your booking is being confirmed.");
+    toast(confirmed ? t("bookingConfirmed") : t("depositReceivedConfirming"));
     onBooked();
   }
 
@@ -135,23 +137,21 @@ export function BookingSheet({
     <Sheet
       open={!!service}
       onClose={onClose}
-      title={service ? (deposit ? "Deposit" : `${appointmentId ? "Reschedule" : "Book"} · ${service.name}`) : undefined}
+      title={service ? (deposit ? t("deposit") : `${appointmentId ? t("reschedule") : t("book")} · ${service.name}`) : undefined}
       cta={
         deposit ? undefined : (
           <button className="btn-black" disabled={!slot || pending} onClick={confirm}>
-            {pending ? "Confirming…" : "Confirm booking"}
+            {pending ? t("confirming") : t("confirmBooking")}
           </button>
         )
       }
     >
       {deposit ? (
         settling ? (
-          <p style={{ textAlign: "center", padding: "32px 0", color: "var(--muted)", fontSize: 15 }}>Confirming your booking…</p>
+          <p style={{ textAlign: "center", padding: "32px 0", color: "var(--muted)", fontSize: 15 }}>{t("confirmingYourBooking")}</p>
         ) : (
           <>
-            <p style={{ color: "var(--muted)", fontSize: 15, paddingBottom: 8 }}>
-              This clinic asks for a deposit to hold your appointment. Your slot is reserved until you pay.
-            </p>
+            <p style={{ color: "var(--muted)", fontSize: 15, paddingBottom: 8 }}>{t("depositNotice")}</p>
             <CardPayment
               payment={deposit.payment}
               orderNumber={deposit.orderNumber}
@@ -165,12 +165,10 @@ export function BookingSheet({
       ) : (
         <>
       {options && options.staff.length === 0 ? (
-        <p style={{ color: "var(--muted)", fontSize: 15 }}>
-          No practitioner is assigned to this treatment yet. Please call the clinic to book.
-        </p>
+        <p style={{ color: "var(--muted)", fontSize: 15 }}>{t("noPractitionerAssigned")}</p>
       ) : (
         <>
-          <div className="grouplab">Date</div>
+          <div className="grouplab">{t("date")}</div>
           <div className="chipsel">
             {days.map((d) => (
               <button key={d.iso} className={`schip ${date === d.iso ? "on" : ""}`} onClick={() => setDate(d.iso)}>
@@ -179,13 +177,11 @@ export function BookingSheet({
             ))}
           </div>
 
-          <div className="grouplab">Time</div>
+          <div className="grouplab">{t("time")}</div>
           {loading ? (
-            <p style={{ color: "var(--muted)", fontSize: 15, padding: "6px 0 14px" }}>Checking availability…</p>
+            <p style={{ color: "var(--muted)", fontSize: 15, padding: "6px 0 14px" }}>{t("checkingAvailability")}</p>
           ) : slots.length === 0 ? (
-            <p style={{ color: "var(--muted)", fontSize: 15, padding: "6px 0 14px" }}>
-              Nothing free that day. Try another date.
-            </p>
+            <p style={{ color: "var(--muted)", fontSize: 15, padding: "6px 0 14px" }}>{t("nothingFreeThatDay")}</p>
           ) : (
             <div className="chipsel">
               {slots.map((s) => (
@@ -198,7 +194,7 @@ export function BookingSheet({
 
           {options && options.staff.length > 1 && (
             <>
-              <div className="grouplab">Practitioner</div>
+              <div className="grouplab">{t("practitioner")}</div>
               <div className="chipsel">
                 {options.staff.map((s) => (
                   <button key={s.id} className={`schip ${staffId === s.id ? "on" : ""}`} onClick={() => setStaffId(s.id)}>
@@ -211,7 +207,7 @@ export function BookingSheet({
 
           {options && options.locations.length > 1 && (
             <>
-              <div className="grouplab">Location</div>
+              <div className="grouplab">{t("location")}</div>
               <div className="chipsel">
                 {options.locations.map((l) => (
                   <button key={l.id} className={`schip ${locationId === l.id ? "on" : ""}`} onClick={() => setLocationId(l.id)}>

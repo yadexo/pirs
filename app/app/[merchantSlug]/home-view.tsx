@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { useBasePath } from "./base-path";
 import { Icon, money, useToast } from "@/components/client-app/ui";
 import { NotificationCard } from "@/components/client-app/push";
@@ -45,6 +46,11 @@ export function HomeView({
   const { refresh } = useCart();
   const { toast } = useToast();
   const [busy, setBusy] = React.useState<string | null>(null);
+  const t = useTranslations("clientApp.home");
+  const tc = useTranslations("clientApp");
+  const tm = useTranslations("clientApp.membership");
+  const locale = useLocale();
+  const fmtMoney = React.useCallback((cents: number) => money(cents, currency, locale === "nl" ? "nl" : "en"), [currency, locale]);
 
   const add = React.useCallback(
     async (kind: "SERVICE" | "PRODUCT", id: string, name: string) => {
@@ -56,9 +62,9 @@ export function HomeView({
         return;
       }
       await refresh();
-      toast(`${name} added to cart`);
+      toast(tc("addedToCart", { name }));
     },
-    [merchantSlug, refresh, toast],
+    [merchantSlug, refresh, toast, tc],
   );
 
   const openItem = (card: { kind: "SERVICE" | "PRODUCT"; id: string }) =>
@@ -70,7 +76,7 @@ export function HomeView({
         <div className="v2-sechead">
           <h2>{title}</h2>
           <button type="button" onClick={() => router.push(`${base}/shop?tab=${seeAllTab}`)}>
-            See all <Icon name="chevR" size={18} />
+            {tc("seeAll")} <Icon name="chevR" size={18} />
           </button>
         </div>
         <div className="v2-rail no-scrollbar">
@@ -105,10 +111,8 @@ export function HomeView({
             <span className="n tabular">{sections.itemsToRedeem}</span>
           </span>
           <span className="txt">
-            <b>
-              You have {sections.itemsToRedeem} {sections.itemsToRedeem === 1 ? "item" : "items"} to redeem
-            </b>
-            <span>Show your code at the desk</span>
+            <b>{t("itemsToRedeem", { count: sections.itemsToRedeem })}</b>
+            <span>{t("showCodeAtDesk")}</span>
           </span>
           <Icon name="chevR" size={20} />
         </button>
@@ -116,11 +120,11 @@ export function HomeView({
 
     personalOffer: sections.personalOffer ? (
       <div className="v2-personal" key="personal">
-        <span className="lead">Just for you</span>
+        <span className="lead">{t("justForYou")}</span>
         <b>{sections.personalOffer.title}</b>
         {sections.personalOffer.scope && <span className="scope">{sections.personalOffer.scope}</span>}
         <Button variant="brand" className="use" onClick={() => router.push(`${base}/shop`)}>
-          Use now
+          {t("useNow")}
         </Button>
       </div>
     ) : null,
@@ -129,7 +133,7 @@ export function HomeView({
       sections.buyAgain.length > 0 ? (
         <section className="v2-sec" key="buyagain">
           <div className="v2-sechead">
-            <h2>Buy again</h2>
+            <h2>{t("buyAgain")}</h2>
           </div>
           <div className="v2-stack">
             {sections.buyAgain.map((b) => (
@@ -145,18 +149,18 @@ export function HomeView({
                 <div className="info">
                   <b>{b.name}</b>
                   <span>
-                    {formatShortDay(b.lastBoughtAt, timeZone)} · {money(b.lastPaidCents, currency)}
+                    {formatShortDay(b.lastBoughtAt, timeZone)} · {fmtMoney(b.lastPaidCents)}
                   </span>
                 </div>
                 <div className="acts">
                   <Button variant="outline" className="again" loading={busy === b.id} onClick={() => void add(b.kind, b.id, b.name)}>
-                    Buy again
+                    {t("buyAgain")}
                   </Button>
                   {/* Side by side when the clinic gave this treatment a page
                       to book on; Buy again alone when it did not. */}
                   {b.bookingUrl && (
                     <a className="bookagain" href={b.bookingUrl} target="_blank" rel="noreferrer">
-                      Book
+                      {t("book")}
                       <Icon name="share" size={14} />
                     </a>
                   )}
@@ -171,9 +175,9 @@ export function HomeView({
       sections.offers.length > 0 ? (
         <section className="v2-sec" key="offers">
           <div className="v2-sechead">
-            <h2>Featured offers</h2>
+            <h2>{t("featuredOffers")}</h2>
             <button type="button" onClick={() => router.push(`${base}/shop`)}>
-              See all <Icon name="chevR" size={18} />
+              {tc("seeAll")} <Icon name="chevR" size={18} />
             </button>
           </div>
           <div className="v2-rail no-scrollbar">
@@ -187,17 +191,15 @@ export function HomeView({
                   {o.discountLabel && <span className="disc">{o.discountLabel}</span>}
                 </span>
                 <b>{o.title}</b>
-                <span className="meta">
-                  {o.scope ? `${o.scope} · ` : ""}until {formatShortDay(o.endsAt, timeZone)}
-                </span>
+                <span className="meta">{t("offerMeta", { scope: o.scope || "none", date: formatShortDay(o.endsAt, timeZone) })}</span>
               </button>
             ))}
           </div>
         </section>
       ) : null,
 
-    popularTreatments: row("Popular treatments", sections.popularTreatments, "treatments"),
-    products: row("Skin care products", sections.products, "browse"),
+    popularTreatments: row(t("popularTreatments"), sections.popularTreatments, "treatments"),
+    products: row(t("products"), sections.products, "browse"),
 
     membershipPitch: sections.membershipPitch ? (
       <section className="v2-sec" key="pitch">
@@ -205,18 +207,21 @@ export function HomeView({
           <div className="top">
             <Tag kind="soft">MEMBERSHIP</Tag>
             <span className="price">
-              <b className="tabular">{money(sections.membershipPitch.priceCents, currency)}</b>
-              <span>per {sections.membershipPitch.interval}</span>
+              <b className="tabular">{fmtMoney(sections.membershipPitch.priceCents)}</b>
+              <span>{sections.membershipPitch.interval === "month" ? t("perMonth") : t("perYear")}</span>
             </span>
           </div>
           <h3>
             {sections.membershipPitch.savingCents
-              ? `Save ${money(sections.membershipPitch.savingCents, currency)} a ${sections.membershipPitch.interval}`
-              : `Become a ${merchantName} member`}
+              ? t("saveAmountPerInterval", {
+                  amount: fmtMoney(sections.membershipPitch.savingCents),
+                  interval: sections.membershipPitch.interval === "month" ? t("perMonth") : t("perYear"),
+                })
+              : t("becomeMemberOf", { name: merchantName })}
           </h3>
           {sections.membershipPitch.blurb && <p>{sections.membershipPitch.blurb}</p>}
-          {sections.membershipPitch.savingCents != null && <p className="basis">Based on what you bought before.</p>}
-          <Button onClick={() => router.push(`${base}/shop?tab=memberships`)}>Become a member</Button>
+          {sections.membershipPitch.savingCents != null && <p className="basis">{t("basedOnPastPurchases")}</p>}
+          <Button onClick={() => router.push(`${base}/shop?tab=memberships`)}>{tm("becomeMember")}</Button>
         </div>
       </section>
     ) : null,
@@ -226,18 +231,18 @@ export function HomeView({
         <button type="button" className="v2-points" onClick={() => router.push(`${base}/rewards`)}>
           <div className="head">
             <span>
-              <span className="lab">Your points</span>
+              <span className="lab">{t("yourPoints")}</span>
               <b className="tabular">{sections.points}</b>
             </span>
             <span className="next">
-              <span className="lab">Next reward</span>
+              <span className="lab">{t("nextReward")}</span>
               <b>{sections.nextReward.name}</b>
             </span>
           </div>
           <span className="bar" aria-hidden="true">
             <span style={{ width: `${Math.min(100, Math.round((sections.points / sections.nextReward.pointsCost) * 100))}%` }} />
           </span>
-          <span className="togo">{sections.nextReward.pointsToGo} more points to go</span>
+          <span className="togo">{t("pointsToGo", { count: sections.nextReward.pointsToGo })}</span>
         </button>
       </section>
     ) : null,
@@ -261,14 +266,14 @@ export function HomeView({
             )}
           </span>
         </div>
-        <p className="hi">Welcome back, {summary.firstName}</p>
+        <p className="hi">{t("welcomeBack", { name: summary.firstName })}</p>
         <h1>{merchantName}</h1>
         {sections.address && (
           <p className="addr">
             <Icon name="pin" size={18} />
             <span>{sections.address}</span>
             <a href={`https://maps.google.com/?q=${encodeURIComponent(sections.address)}`} target="_blank" rel="noreferrer">
-              Directions
+              {t("directions")}
             </a>
           </p>
         )}
@@ -277,8 +282,8 @@ export function HomeView({
       {/* 2. Wallet strip */}
       <div className="v2-wallet">
         <button type="button" className="credit" onClick={() => router.push(`${base}/profile`)}>
-          <span className="lab">Credit</span>
-          <b className="tabular">{money(sections.creditCents, currency)}</b>
+          <span className="lab">{t("credit")}</span>
+          <b className="tabular">{fmtMoney(sections.creditCents)}</b>
         </button>
         <div className="side">
           <button type="button" className="chip" onClick={() => router.push(`${base}/profile?tab=membership`)}>
@@ -286,7 +291,7 @@ export function HomeView({
           </button>
           <button type="button" className="chip points" onClick={() => router.push(`${base}/rewards`)}>
             <Icon name="star" size={14} />
-            <span className="tabular">{sections.points} points</span>
+            <span className="tabular">{t("pointsCount", { count: sections.points })}</span>
           </button>
         </div>
       </div>

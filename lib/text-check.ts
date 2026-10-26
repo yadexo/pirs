@@ -22,14 +22,20 @@ export type IssueLevel =
 
 export interface TextIssue {
   level: IssueLevel;
-  /** A stable key, for tests and for counting "Fix 1 issue to publish". */
+  /**
+   * A stable key, for tests, for counting "Fix 1 issue to publish", and for
+   * looking up the message and fix text a caller shows — this module only
+   * detects, it never builds the sentence. One rule ("free") has two message
+   * variants, picked by `conditional`; everything else has exactly one.
+   * Message keys live under `textCheck.<camelCase(rule)>` in messages/*.json
+   * (e.g. "result-promise" → textCheck.resultPromise), so clinic staff see
+   * the explanation in their own portal language.
+   */
   rule: string;
   /** The words in the text that triggered it, as the clinic wrote them. */
   match: string;
-  /** Plain language: what is wrong, in one sentence. */
-  message: string;
-  /** Plain language: what to write instead. */
-  fix: string;
+  /** Only set on the "free" rule — which of its two message variants applies. */
+  conditional?: boolean;
 }
 
 export interface TextCheckInput {
@@ -77,6 +83,21 @@ const RESULT_PROMISES = [
   "miracle",
   "cure",
   "cures",
+  // Dutch equivalents — a clinic typing in Dutch should trip the same rules.
+  // ("permanent" is spelled the same in both languages, so it's not repeated.)
+  "gegarandeerd",
+  "garantie",
+  "pijnloos",
+  "risicovrij",
+  "zonder risico",
+  "100% effectief",
+  "100% veilig",
+  "volledig veilig",
+  "werkt altijd",
+  "bewezen resultaten",
+  "gegarandeerde resultaten",
+  "wondermiddel",
+  "geneest",
 ];
 
 /**
@@ -129,10 +150,33 @@ const URGENCY = [
   "selling fast",
   "almost gone",
   "final hours",
+  // Dutch equivalents.
+  "snel zijn",
+  "laatste kans",
+  "bijna op",
+  "beperkte tijd",
+  "beperkte aanbieding",
+  "op=op",
+  "alleen vandaag",
+  "nu bestellen",
+  "mis het niet",
+  "bijna uitverkocht",
 ];
 
 /** "Free" is a price, and a price has to be true. */
-const FREE_WORDS = ["free", "for free", "no cost", "at no cost", "complimentary", "on the house", "gift"];
+const FREE_WORDS = [
+  "free",
+  "for free",
+  "no cost",
+  "at no cost",
+  "complimentary",
+  "on the house",
+  "gift",
+  // Dutch equivalents.
+  "gratis",
+  "kosteloos",
+  "cadeau",
+];
 
 /**
  * Matches a phrase as whole words, case-insensitively, so "cure" does not fire
@@ -164,6 +208,7 @@ function scanPhrases(text: string, phrases: readonly string[]): { match: string;
 
 /** "Free" next to a word that takes the promise back is the trick, not the word. */
 const FREE_IS_CONDITIONAL = /\bfree\b[^.!?]{0,40}\b(with|when|after|on orders?|purchase|minimum|spend)\b/iu;
+const DUTCH_FREE_IS_CONDITIONAL = /\bgratis\b[^.!?]{0,40}\b(bij|wanneer|na|vanaf|minimaal|besteding)\b/iu;
 
 export function checkText(input: TextCheckInput): TextIssue[] {
   const { text, hasEndDate = true, costsNothing = false } = input;
@@ -179,66 +224,33 @@ export function checkText(input: TextCheckInput): TextIssue[] {
   };
 
   for (const { match } of scanPhrases(text, RESULT_PROMISES)) {
-    add({
-      level: "block",
-      rule: "result-promise",
-      match,
-      message: `“${match}” promises a result you can't promise. How a treatment turns out depends on the person.`,
-      fix: "Describe what the treatment does, and end with “Results vary per person.”",
-    });
+    add({ level: "block", rule: "result-promise", match });
   }
 
   for (const { match } of scanPhrases(text, PRESCRIPTION_NAMES)) {
-    add({
-      level: "block",
-      rule: "prescription-name",
-      match,
-      message: `“${match}” is a prescription-only medicine, and those may not be advertised to the public by name.`,
-      fix: "Use the name of the treatment instead — what the client books, not what is in it.",
-    });
+    add({ level: "block", rule: "prescription-name", match });
   }
 
   if (!costsNothing) {
     for (const { match } of scanPhrases(text, FREE_WORDS)) {
       // "Free with any facial" is the one worth blocking: it reads as free and
       // is not. A plain "free" on something that costs money is the same lie.
-      const conditional = FREE_IS_CONDITIONAL.test(text);
-      add({
-        level: "block",
-        rule: "free",
-        match,
-        message: conditional
-          ? `“${match}” here depends on buying something else, so it isn't free.`
-          : `“${match}” can only describe something that costs the client nothing. Rewards are paid for with points.`,
-        fix: "Say what it costs, or what it costs in points — “included with”, “250 points”.",
-      });
+      add({ level: "block", rule: "free", match, conditional: FREE_IS_CONDITIONAL.test(text) || DUTCH_FREE_IS_CONDITIONAL.test(text) });
     }
   }
 
   if (!hasEndDate) {
     for (const { match } of scanPhrases(text, URGENCY)) {
-      add({
-        level: "block",
-        rule: "urgency-without-date",
-        match,
-        message: `“${match}” tells clients to hurry, but this offer has no end date for them to hurry towards.`,
-        fix: "Set the offer's end date, then say it: “until 31 Oct”.",
-      });
+      add({ level: "block", rule: "urgency-without-date", match });
     }
   }
 
   // Advice rather than a refusal: a treatment description that never says
   // results vary is incomplete, not a false claim.
-  const mentionsResults = /\bresults?\b/iu.test(text);
-  const hasDisclaimer = /results\s+vary/iu.test(text);
+  const mentionsResults = /\b(results?|resultaten|resultaat)\b/iu.test(text);
+  const hasDisclaimer = /results\s+vary|(resultaten|resultaat)\s+(kunnen\s+)?vari[eë]ren/iu.test(text);
   if (mentionsResults && !hasDisclaimer && !issues.some((i) => i.rule === "result-promise")) {
-    add({
-      level: "warn",
-      rule: "results-vary",
-      match: "results",
-      message: "This talks about results without saying they differ from person to person.",
-      fix: "Add “Results vary per person.” at the end.",
-    });
+    add({ level: "warn", rule: "results-vary", match: "results" });
   }
 
   return issues;

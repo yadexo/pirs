@@ -1370,6 +1370,24 @@ export async function clientSaveProfileAction(
   return { ok: true };
 }
 
+const SUPPORTED_CLIENT_LOCALES = ["nl", "en"] as const;
+
+/**
+ * Profile > Account > Language. Only the client's own choice ever writes
+ * this — a later change to the clinic's TenantSettings.defaultClientLocale
+ * must never move an existing client who already picked for themselves
+ * (see lib/locale.ts).
+ */
+export async function clientSaveLocaleAction(slug: string, locale: string): Promise<{ error: string } | { ok: true }> {
+  const { user } = await requireCustomerContext();
+  if (!(SUPPORTED_CLIENT_LOCALES as readonly string[]).includes(locale)) return { error: "Unsupported language." };
+
+  await rawDb.user.update({ where: { id: user.id }, data: { locale } });
+
+  revalidateClient(slug);
+  return { ok: true };
+}
+
 export async function clientSaveConsentAction(
   slug: string,
   consent: { emailConsent: boolean; smsConsent: boolean; pushConsent: boolean; marketingConsent: boolean },

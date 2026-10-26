@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useBasePath, useFinderPath } from "../base-path";
 import { NotificationSettings } from "@/components/client-app/push";
 import { MyItems, type ClientItem } from "./my-items";
@@ -14,6 +15,7 @@ import { signOutOfClinicAction } from "@/lib/actions/session";
 import {
   clientSaveProfileAction,
   clientSaveConsentAction,
+  clientSaveLocaleAction,
   clientDeleteAccountAction,
   clientCancelPlanAction,
   clientCancelAppointmentAction,
@@ -52,19 +54,7 @@ export interface BillingRow {
   occurredAt: string;
 }
 
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-/**
- * Three tabs, as the handoff draws them. Appointments and orders used to be a
- * fourth; they are now sheets opened from the bottom of My items, which is
- * where the board puts "Orders and receipts" — nothing was dropped, it just
- * stopped competing for a tab with the things a client came here to use.
- */
-const SEGMENTS = [
-  { value: "items", label: "My items" },
-  { value: "membership", label: "Membership" },
-  { value: "settings", label: "Account" },
-] as const;
+const SEGMENT_VALUES = ["items", "membership", "settings"] as const;
 
 type SettingsSheet =
   | null
@@ -109,6 +99,7 @@ export function ProfileView({
   packages,
   appVersion,
   platformName,
+  locale,
 }: {
   merchantSlug: string;
   merchantName: string;
@@ -128,8 +119,13 @@ export function ProfileView({
   appVersion: string;
   /** The agency's own white-label name — never a hardcoded one. */
   platformName: string;
+  /** This client's own saved language — the actual source of truth, resolved server-side (lib/locale.ts). */
+  locale: string;
 }) {
   const router = useRouter();
+  const t = useTranslations("clientApp");
+  const tp = useTranslations("clientApp.profile");
+  const fmtMoney = React.useCallback((cents: number) => money(cents, currency, locale === "nl" ? "nl" : "en"), [currency, locale]);
   const timeZone = useClinicTimeZone();
   const { toast } = useToast();
   const base = useBasePath();
@@ -156,7 +152,7 @@ export function ProfileView({
     setPending(false);
     if ("error" in res) toast(res.error);
     else {
-      toast("Appointment cancelled");
+      toast(tp("appointmentCancelled"));
       router.refresh();
     }
   }
@@ -168,7 +164,7 @@ export function ProfileView({
     setConfirmCancelPlan(false);
     if ("error" in res) toast(res.error);
     else {
-      toast("Membership cancelled");
+      toast(tp("membershipCancelled"));
       router.refresh();
     }
   }
@@ -188,29 +184,34 @@ export function ProfileView({
             {summary.firstName} {summary.lastName}
           </h1>
           <div className="meta">
-            <span className="v2-tag v2-tag-soft">{summary.isMember ? (summary.membershipPlanName ?? "MEMBER") : "NOT A MEMBER"}</span>
+            <span className="v2-tag v2-tag-soft">{summary.isMember ? (summary.membershipPlanName ?? tp("member")) : tp("notAMember")}</span>
             <span className="points tabular">
-              <Icon name="star" size={14} /> {summary.loyaltyPoints} points
+              <Icon name="star" size={14} /> {tp("pointsSuffix", { count: summary.loyaltyPoints })}
             </span>
           </div>
         </div>
       </header>
 
       <div className="tabs">
-        <SegmentedControl label="Profile sections" value={tab} onChange={(next: string) => go(next)} options={SEGMENTS.map((s) => ({ value: s.value as string, label: s.label }))} />
+        <SegmentedControl
+          label={tp("sectionsLabel")}
+          value={tab}
+          onChange={(next: string) => go(next)}
+          options={SEGMENT_VALUES.map((s) => ({ value: s, label: tp(`sections.${s}`) }))}
+        />
       </div>
 
       {/* Appointments and orders, opened from the bottom of My items. */}
-      <Sheet open={sheet === "appointments"} onClose={() => setSheet(null)} title="Appointments">
+      <Sheet open={sheet === "appointments"} onClose={() => setSheet(null)} title={tp("appointments")}>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {!hasTreatments ? (
             <div className="ca-card">
               <EmptyState
-                text="No treatment purchased"
-                sub="Browse the shop to book your first visit."
+                text={tp("noTreatmentPurchased")}
+                sub={tp("noTreatmentPurchasedSub")}
                 cta={
                   <button className="btn-black" onClick={() => router.push(`${base}/shop`)}>
-                    Browse the shop
+                    {tp("browseShop")}
                   </button>
                 }
               />
@@ -236,14 +237,14 @@ export function ProfileView({
                           onClick={() => setReschedule({ appt: a })}
                           style={{ color: "var(--muted)", fontSize: 14, fontWeight: 500 }}
                         >
-                          Reschedule
+                          {tp("reschedule")}
                         </button>
                         <button
                           disabled={pending}
                           onClick={() => cancelAppt(a.id)}
                           style={{ color: "var(--danger)", fontSize: 14, fontWeight: 500 }}
                         >
-                          Cancel
+                          {tp("cancel")}
                         </button>
                       </span>
                     )}
@@ -262,13 +263,13 @@ export function ProfileView({
                       {o.itemNames.length > 1 && ` +${o.itemNames.length - 1}`}
                     </b>
                     <span className="tabular" style={{ fontSize: 14, color: "var(--muted)" }}>
-                      {date(o.placedAt)} · {money(o.totalCents, currency)}
+                      {date(o.placedAt)} · {fmtMoney(o.totalCents)}
                     </span>
                   </div>
                   <span style={{ marginLeft: "auto", flex: "none", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
-                    <span className="status-pill">Paid</span>
+                    <span className="status-pill">{tp("paid")}</span>
                     <button onClick={() => setReceipt(o)} style={{ color: "var(--muted)", fontSize: 14, fontWeight: 500 }}>
-                      View receipt
+                      {tp("viewReceipt")}
                     </button>
                   </span>
                 </div>
@@ -290,36 +291,36 @@ export function ProfileView({
                   {summary.membershipPriceCents != null && (
                     <>
                       <span className="tabular" style={{ fontSize: 24, fontWeight: 700 }}>
-                        {money(summary.membershipPriceCents, currency)}
+                        {fmtMoney(summary.membershipPriceCents)}
                       </span>
-                      <span style={{ color: "var(--muted)", fontSize: 15 }}>/month</span>
+                      <span style={{ color: "var(--muted)", fontSize: 15 }}>{tp("perMonthSuffix")}</span>
                     </>
                   )}
                 </span>
                 {summary.membershipNextBillingAt && (
-                  <p style={{ color: "var(--muted)", fontSize: 14 }}>Next billing {date(summary.membershipNextBillingAt)}</p>
+                  <p style={{ color: "var(--muted)", fontSize: 14 }}>{tp("nextBilling", { date: date(summary.membershipNextBillingAt) })}</p>
                 )}
                 <button
                   className="btn-black"
                   style={{ background: "transparent", color: "var(--danger)", boxShadow: "none", border: "1.5px solid var(--hairline)" }}
                   onClick={() => setConfirmCancelPlan(true)}
                 >
-                  Cancel membership
+                  {tp("cancelMembership")}
                 </button>
               </div>
 
               <h2 className="h-sec" style={{ fontSize: 20, padding: "8px 0 0" }}>
-                Billing history
+                {tp("billingHistory")}
               </h2>
               {billing.length === 0 ? (
-                <p style={{ color: "var(--muted)", fontSize: 14 }}>No bills yet.</p>
+                <p style={{ color: "var(--muted)", fontSize: 14 }}>{tp("noBillsYet")}</p>
               ) : (
                 billing.map((b) => (
                   <div key={b.id} className="optrow">
                     <span>{b.description}</span>
                     <span style={{ flex: 1 }} />
                     <span style={{ color: "var(--muted)", fontSize: 14 }}>{date(b.occurredAt)}</span>
-                    {b.amountCents != null && <b className="tabular">{money(b.amountCents, currency)}</b>}
+                    {b.amountCents != null && <b className="tabular">{fmtMoney(b.amountCents)}</b>}
                   </div>
                 ))
               )}
@@ -327,11 +328,11 @@ export function ProfileView({
           ) : (
             <div className="ca-card">
               <EmptyState
-                text="No subscription here"
-                sub="Join a plan to unlock free treatments and perks."
+                text={tp("noSubscription")}
+                sub={tp("noSubscriptionSub")}
                 cta={
                   <button className="btn-black" onClick={() => router.push(`${base}/shop?tab=memberships`)}>
-                    Browse memberships
+                    {tp("browseMemberships")}
                   </button>
                 }
               />
@@ -348,14 +349,14 @@ export function ProfileView({
               <span className="ic" aria-hidden="true">
                 <Icon name="calendar" size={20} />
               </span>
-              <span className="txt">Appointments</span>
+              <span className="txt">{tp("appointments")}</span>
               <Icon name="chevR" size={20} />
             </button>
             <button type="button" className="row" onClick={() => setSheet("orders")}>
               <span className="ic" aria-hidden="true">
                 <Icon name="bag" size={20} />
               </span>
-              <span className="txt">Orders and receipts</span>
+              <span className="txt">{tp("ordersAndReceipts")}</span>
               <Icon name="chevR" size={20} />
             </button>
           </div>
@@ -367,46 +368,51 @@ export function ProfileView({
           then the app, then the clinic, then the two destructive ones. */}
       {tab === "settings" && (
         <div className="v2-account">
-          <h2>Your details</h2>
+          <h2>{tp("yourDetailsHeading")}</h2>
           <div className="group">
-            <AccountRow icon="user" label="Personal details" onClick={() => setSheet("personal")} />
-            <AccountRow icon="card" label="Saved payment methods" onClick={() => setSheet("payment")} />
-            <AccountRow icon="tag" label="Credit and points history" onClick={() => setSheet("balances")} />
-            <AccountRow icon="globe" label="Language" value="English" onClick={() => setSheet("language")} />
+            <AccountRow icon="user" label={tp("personalDetails")} onClick={() => setSheet("personal")} />
+            <AccountRow icon="card" label={tp("savedPaymentMethods")} onClick={() => setSheet("payment")} />
+            <AccountRow icon="tag" label={tp("creditAndPointsHistory")} onClick={() => setSheet("balances")} />
+            <AccountRow
+              icon="globe"
+              label={t("profile.language")}
+              value={locale === "nl" ? t("profile.dutch") : t("profile.english")}
+              onClick={() => setSheet("language")}
+            />
           </div>
 
-          <h2>App</h2>
+          <h2>{tp("appHeading")}</h2>
           <div className="group">
-            <AccountRow icon="bell" label="Notifications" onClick={() => setSheet("notifications")} />
-            <AccountRow icon="users" label="Referral link" onClick={() => setSheet("referral")} />
+            <AccountRow icon="bell" label={tp("notifications")} onClick={() => setSheet("notifications")} />
+            <AccountRow icon="users" label={tp("referralLink")} onClick={() => setSheet("referral")} />
             <Link className="row" href={`${finder}?switch=1`} prefetch={false}>
               <span className="ic" aria-hidden="true">
                 <Icon name="pin" size={20} />
               </span>
-              <span className="txt">Switch clinic</span>
+              <span className="txt">{tp("switchClinic")}</span>
               <Icon name="chevR" size={20} />
             </Link>
           </div>
 
-          <h2>Clinic</h2>
+          <h2>{tp("clinicHeading")}</h2>
           <div className="group">
-            <AccountRow icon="help" label="Contact the clinic" onClick={() => setSheet("help")} />
-            <AccountRow icon="shield" label="Terms and privacy" onClick={() => setSheet("legal")} />
+            <AccountRow icon="help" label={tp("contactClinic")} onClick={() => setSheet("help")} />
+            <AccountRow icon="shield" label={tp("termsAndPrivacy")} onClick={() => setSheet("legal")} />
           </div>
 
           <form action={signOutOfClinicAction.bind(null, merchantSlug)}>
             <button type="submit" className="v2-logout">
-              <Icon name="exit" size={20} /> Log out
+              <Icon name="exit" size={20} /> {tp("logOut")}
             </button>
           </form>
           <button type="button" className="v2-delete" onClick={() => setSheet("delete")}>
-            Delete account
+            {tp("deleteAccount")}
           </button>
 
           {/* A platform that has not named itself says nothing, rather than
               leaving a gap where a name should be. */}
           <p className="v2-poweredby">
-            {platformName ? `Powered by ${platformName} · ` : ""}Version {appVersion}
+            {tp("poweredByVersion", { poweredBy: platformName ? tp("poweredByPrefix", { name: platformName }) : "", version: appVersion })}
           </p>
         </div>
       )}
@@ -420,7 +426,7 @@ export function ProfileView({
         summary={summary}
         onSaved={() => {
           setSheet(null);
-          toast("Saved");
+          toast(tp("saved"));
           router.refresh();
         }}
       />
@@ -432,33 +438,30 @@ export function ProfileView({
         summary={summary}
         onSaved={() => {
           setSheet(null);
-          toast("Preferences saved");
+          toast(tp("preferencesSaved"));
           router.refresh();
         }}
       />
 
-      <Sheet open={sheet === "payment"} onClose={() => setSheet(null)} title="Payment methods">
-        <p style={{ color: "var(--muted)", fontSize: 15 }}>
-          Payment details are held by the clinic&apos;s payment provider and never stored in this app. Add or change a card at
-          checkout.
-        </p>
+      <Sheet open={sheet === "payment"} onClose={() => setSheet(null)} title={tp("paymentMethodsTitle")}>
+        <p style={{ color: "var(--muted)", fontSize: 15 }}>{tp("paymentMethodsNotice")}</p>
         <button className="optrow" onClick={() => setSheet(null)}>
-          <Icon name="card" size={20} /> Manage at checkout
+          <Icon name="card" size={20} /> {tp("manageAtCheckout")}
         </button>
       </Sheet>
 
       {/* Where a client finds out why their balance changed. The clinic's
           own words are shown as they were written, because a push
           notification scrolls away and this does not. */}
-      <Sheet open={sheet === "balances"} onClose={() => setSheet(null)} title="Credit & points history">
+      <Sheet open={sheet === "balances"} onClose={() => setSheet(null)} title={tp("creditPointsHistoryTitle")}>
         {balanceHistory.length === 0 ? (
-          <EmptyState text="Nothing yet" sub="Changes your clinic makes to your credit or points show up here." />
+          <EmptyState text={tp("nothingYetBalances")} sub={tp("nothingYetBalancesSub")} />
         ) : (
           balanceHistory.map((row) => (
             <div key={row.id} className="optrow">
               <span style={{ flex: 1 }}>
                 <b style={{ fontSize: 15 }}>
-                  {row.headline} by {merchantName}
+                  {row.headline} {tp("byClinic", { name: merchantName })}
                 </b>
                 {row.reason && (
                   <>
@@ -471,16 +474,16 @@ export function ProfileView({
               </span>
               <b className="tabular" style={{ color: row.amount < 0 ? "var(--danger)" : undefined }}>
                 {row.amount < 0 ? "−" : "+"}
-                {row.kind === "credit" ? money(Math.abs(row.amount), currency) : `${Math.abs(row.amount)} pts`}
+                {row.kind === "credit" ? fmtMoney(Math.abs(row.amount)) : tp("pointsSuffix", { count: Math.abs(row.amount) })}
               </b>
             </div>
           ))
         )}
       </Sheet>
 
-      <Sheet open={sheet === "orders"} onClose={() => setSheet(null)} title="Order history">
+      <Sheet open={sheet === "orders"} onClose={() => setSheet(null)} title={tp("orderHistoryTitle")}>
         {orders.length === 0 ? (
-          <EmptyState text="No orders yet" />
+          <EmptyState text={tp("noOrdersYet")} />
         ) : (
           orders.map((o) => (
             <button key={o.id} className="optrow" onClick={() => setReceipt(o)}>
@@ -492,13 +495,14 @@ export function ProfileView({
                   <>
                     <br />
                     <span style={{ color: "var(--danger)", fontSize: 14 }}>
-                      Refunded {money(o.refundedCents, currency)}
-                      {o.refundedAt ? ` on ${date(o.refundedAt)}` : ""}
+                      {o.refundedAt
+                        ? tp("refundedOn", { amount: fmtMoney(o.refundedCents), date: date(o.refundedAt) })
+                        : tp("refunded", { amount: fmtMoney(o.refundedCents) })}
                     </span>
                   </>
                 )}
               </span>
-              <b className="tabular">{money(o.totalCents, currency)}</b>
+              <b className="tabular">{fmtMoney(o.totalCents)}</b>
             </button>
           ))
         )}
@@ -507,7 +511,7 @@ export function ProfileView({
       <Sheet
         open={sheet === "referral"}
         onClose={() => setSheet(null)}
-        title="Referral link"
+        title={tp("referralLinkTitle")}
         cta={
           <button
             className="btn-black"
@@ -516,47 +520,55 @@ export function ProfileView({
               if (navigator.share) await navigator.share({ title: merchantName, url }).catch(() => {});
               else {
                 await navigator.clipboard.writeText(url).catch(() => {});
-                toast("Link copied");
+                toast(tp("linkCopied"));
               }
             }}
           >
-            <Icon name="share" size={20} /> Share link
+            <Icon name="share" size={20} /> {tp("shareLink")}
           </button>
         }
       >
-        <p style={{ color: "var(--muted)", fontSize: 15 }}>
-          Invite a friend to {merchantName}. You both benefit when they join.
-        </p>
+        <p style={{ color: "var(--muted)", fontSize: 15 }}>{tp("inviteFriend", { name: merchantName })}</p>
       </Sheet>
 
-      <Sheet open={sheet === "language"} onClose={() => setSheet(null)} title="Language">
-        <button className="optrow on">
-          <span className="rad" /> English
-        </button>
-        <p style={{ color: "var(--muted)", fontSize: 14, paddingTop: 10 }}>
-          More languages will appear here once the clinic enables them.
-        </p>
+      <Sheet open={sheet === "language"} onClose={() => setSheet(null)} title={t("profile.language")}>
+        {(["nl", "en"] as const).map((option) => (
+          <button
+            key={option}
+            className={`optrow${locale === option ? " on" : ""}`}
+            disabled={pending}
+            onClick={async () => {
+              if (locale === option) return;
+              setPending(true);
+              const res = await clientSaveLocaleAction(merchantSlug, option);
+              setPending(false);
+              if ("error" in res) toast(res.error);
+              else {
+                setSheet(null);
+                router.refresh();
+              }
+            }}
+          >
+            <span className="rad" /> {option === "nl" ? t("profile.dutch") : t("profile.english")}
+          </button>
+        ))}
+        <p style={{ color: "var(--muted)", fontSize: 14, paddingTop: 10 }}>{t("profile.languageMoreComingSoon")}</p>
       </Sheet>
 
-      <Sheet open={sheet === "help"} onClose={() => setSheet(null)} title="Help & support">
+      <Sheet open={sheet === "help"} onClose={() => setSheet(null)} title={tp("helpSupportTitle")}>
         {supportUrl ? (
           <a className="optrow" href={supportUrl} target="_blank" rel="noreferrer">
-            <Icon name="help" size={20} /> Contact support
+            <Icon name="help" size={20} /> {tp("contactSupport")}
             <span style={{ flex: 1 }} />
             <Icon name="chevR" size={18} />
           </a>
         ) : (
-          <p style={{ color: "var(--muted)", fontSize: 15 }}>
-            Call the clinic directly from the Home screen, or reply to any message from {merchantName}.
-          </p>
+          <p style={{ color: "var(--muted)", fontSize: 15 }}>{tp("callClinicDirectly", { name: merchantName })}</p>
         )}
       </Sheet>
 
-      <Sheet open={sheet === "legal"} onClose={() => setSheet(null)} title="Terms & privacy">
-        <p style={{ color: "var(--muted)", fontSize: 15 }}>
-          Your data is held by {merchantName} and used to manage your care, purchases and rewards. Marketing messages are only
-          sent with your consent, which you can withdraw at any time under Notification preferences.
-        </p>
+      <Sheet open={sheet === "legal"} onClose={() => setSheet(null)} title={tp("termsPrivacyTitle")}>
+        <p style={{ color: "var(--muted)", fontSize: 15 }}>{tp("dataHeldBy", { name: merchantName })}</p>
       </Sheet>
 
       <Sheet
@@ -565,7 +577,7 @@ export function ProfileView({
           setSheet(null);
           setDeleteText("");
         }}
-        title="Delete account"
+        title={tp("deleteAccountTitle")}
         cta={
           <button
             className="btn-black"
@@ -578,20 +590,19 @@ export function ProfileView({
               await signOutOfClinicAction(merchantSlug);
             }}
           >
-            Delete my account
+            {tp("deleteMyAccount")}
           </button>
         }
       >
         <p style={{ color: "var(--muted)", fontSize: 15 }}>
-          This closes your account with {merchantName} and stops all messages. Your treatment and payment history is kept by the
-          clinic where it is legally required to. Type <b style={{ color: "var(--ink)" }}>DELETE</b> to confirm.
+          {tp.rich("deleteAccountBody", { name: merchantName, b: (chunks) => <b style={{ color: "var(--ink)" }}>{chunks}</b> })}
         </p>
         <div className="frm" style={{ marginTop: 14 }}>
           <input
             value={deleteText}
             onChange={(e) => setDeleteText(e.target.value)}
             placeholder="DELETE"
-            aria-label="Type DELETE to confirm"
+            aria-label={tp("typeDeleteToConfirm")}
             style={{ letterSpacing: "0.08em" }}
           />
         </div>
@@ -600,24 +611,22 @@ export function ProfileView({
       <Sheet
         open={confirmCancelPlan}
         onClose={() => setConfirmCancelPlan(false)}
-        title="Cancel membership?"
+        title={tp("cancelMembershipTitle")}
         cta={
           <div style={{ display: "flex", gap: 10 }}>
             <button className="btn-ghost" style={{ flex: 1 }} onClick={() => setConfirmCancelPlan(false)}>
-              Keep it
+              {tp("keepIt")}
             </button>
             <button className="btn-black" style={{ flex: 2, background: "var(--danger)" }} disabled={pending} onClick={cancelPlan}>
-              Cancel membership
+              {tp("cancelMembership")}
             </button>
           </div>
         }
       >
-        <p style={{ color: "var(--muted)", fontSize: 15 }}>
-          You&apos;ll keep your benefits until the end of the current billing period.
-        </p>
+        <p style={{ color: "var(--muted)", fontSize: 15 }}>{tp("keepBenefitsUntil")}</p>
       </Sheet>
 
-      <Sheet open={!!receipt} onClose={() => setReceipt(null)} title={receipt ? `Receipt ${receipt.number}` : undefined}>
+      <Sheet open={!!receipt} onClose={() => setReceipt(null)} title={receipt ? tp("receiptTitle", { number: receipt.number }) : undefined}>
         {receipt && (
           <>
             {receipt.itemNames.map((n, i) => (
@@ -626,17 +635,17 @@ export function ProfileView({
               </div>
             ))}
             <div className="optrow">
-              <span>Date</span>
+              <span>{tp("date")}</span>
               <span style={{ flex: 1 }} />
               <span>{date(receipt.placedAt)}</span>
             </div>
             <div className="optrow">
-              <span>Total</span>
+              <span>{tp("total")}</span>
               <span style={{ flex: 1 }} />
-              <b className="tabular">{money(receipt.totalCents, currency)}</b>
+              <b className="tabular">{fmtMoney(receipt.totalCents)}</b>
             </div>
             <div className="optrow" style={{ border: 0 }}>
-              <span>Points earned</span>
+              <span>{tp("pointsEarned")}</span>
               <span style={{ flex: 1 }} />
               <b className="tabular">+{receipt.pointsEarned}</b>
             </div>
@@ -681,6 +690,8 @@ function PersonalSheet({
   summary: ClientSummary;
   onSaved: () => void;
 }) {
+  const t = useTranslations("clientApp.profile");
+  const months = t.raw("months") as string[];
   const [first, setFirst] = React.useState(summary.firstName);
   const [last, setLast] = React.useState(summary.lastName);
   const [phone, setPhone] = React.useState(summary.phone ?? "");
@@ -706,7 +717,7 @@ function PersonalSheet({
     <Sheet
       open={open}
       onClose={onClose}
-      title="Personal details"
+      title={t("personalDetailsTitle")}
       cta={
         <button
           className="btn-black"
@@ -726,37 +737,37 @@ function PersonalSheet({
             else onSaved();
           }}
         >
-          {pending ? "Saving…" : "Save"}
+          {pending ? t("saving") : t("save")}
         </button>
       }
     >
       <div className="frm">
-        <label htmlFor="pf-first">First name</label>
+        <label htmlFor="pf-first">{t("firstName")}</label>
         <input id="pf-first" value={first} onChange={(e) => setFirst(e.target.value)} />
       </div>
       <div className="frm">
-        <label htmlFor="pf-last">Last name</label>
+        <label htmlFor="pf-last">{t("lastName")}</label>
         <input id="pf-last" value={last} onChange={(e) => setLast(e.target.value)} />
       </div>
       <div className="frm">
-        <label htmlFor="pf-phone">Phone</label>
+        <label htmlFor="pf-phone">{t("phone")}</label>
         <input id="pf-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
       </div>
       <div className="frm">
-        <label htmlFor="pf-bday">Birthday</label>
+        <label htmlFor="pf-bday">{t("birthday")}</label>
         <div style={{ display: "flex", gap: 8 }}>
           <input
             id="pf-bday"
             inputMode="numeric"
-            placeholder="Day"
+            placeholder={t("day")}
             maxLength={2}
             value={bDay}
             onChange={(e) => setBDay(e.target.value.replace(/\D/g, ""))}
             style={{ flex: 1 }}
           />
-          <select value={bMonth} onChange={(e) => setBMonth(e.target.value)} style={{ flex: 2 }} aria-label="Birthday month">
-            <option value="">Month</option>
-            {MONTHS.map((name, i) => (
+          <select value={bMonth} onChange={(e) => setBMonth(e.target.value)} style={{ flex: 2 }} aria-label={t("month")}>
+            <option value="">{t("month")}</option>
+            {months.map((name, i) => (
               <option key={name} value={i + 1}>
                 {name}
               </option>
@@ -764,17 +775,15 @@ function PersonalSheet({
           </select>
           <input
             inputMode="numeric"
-            placeholder="Year"
+            placeholder={t("year")}
             maxLength={4}
             value={bYear}
             onChange={(e) => setBYear(e.target.value.replace(/\D/g, ""))}
-            aria-label="Birthday year, optional"
+            aria-label={t("birthdayYearOptional")}
             style={{ flex: 1.2 }}
           />
         </div>
-        <p style={{ color: "var(--muted)", fontSize: 14, margin: "6px 0 0" }}>
-          The year is optional — the clinic only needs the day to wish you a happy birthday.
-        </p>
+        <p style={{ color: "var(--muted)", fontSize: 14, margin: "6px 0 0" }}>{t("yearOptionalNote")}</p>
       </div>
       {error && <p style={{ color: "var(--danger)", fontSize: 14 }}>{error}</p>}
     </Sheet>
@@ -794,6 +803,7 @@ function NotificationsSheet({
   summary: ClientSummary;
   onSaved: () => void;
 }) {
+  const t = useTranslations("clientApp.profile");
   const [state, setState] = React.useState({
     emailConsent: summary.emailConsent,
     smsConsent: summary.smsConsent,
@@ -813,17 +823,17 @@ function NotificationsSheet({
   }, [open, summary]);
 
   const rows: [keyof typeof state, string][] = [
-    ["emailConsent", "Email"],
-    ["smsConsent", "SMS"],
-    ["pushConsent", "Push notifications"],
-    ["marketingConsent", "Offers and promotions"],
+    ["emailConsent", t("email")],
+    ["smsConsent", t("sms")],
+    ["pushConsent", t("pushNotifications")],
+    ["marketingConsent", t("offersAndPromotions")],
   ];
 
   return (
     <Sheet
       open={open}
       onClose={onClose}
-      title="Notification preferences"
+      title={t("notificationPreferencesTitle")}
       cta={
         <button
           className="btn-black"
@@ -835,7 +845,7 @@ function NotificationsSheet({
             onSaved();
           }}
         >
-          {pending ? "Saving…" : "Save preferences"}
+          {pending ? t("saving") : t("savePreferences")}
         </button>
       }
     >
@@ -846,9 +856,7 @@ function NotificationsSheet({
           {label}
         </button>
       ))}
-      <p style={{ color: "var(--muted)", fontSize: 14, paddingTop: 12 }}>
-        Appointment reminders are always sent — turning these off only stops marketing.
-      </p>
+      <p style={{ color: "var(--muted)", fontSize: 14, paddingTop: 12 }}>{t("appointmentRemindersNote")}</p>
     </Sheet>
   );
 }

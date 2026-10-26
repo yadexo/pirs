@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { Icon, QrCode, money } from "@/components/client-app/ui";
 import { Tag } from "@/components/client-app/v2";
 import { mintScanTokenAction } from "@/lib/actions/client-scan";
@@ -40,6 +41,8 @@ export function ScanView({
   currency: string;
   readyItems: ReadyItem[];
 }) {
+  const t = useTranslations("clientApp.scan");
+  const locale = useLocale();
   const [token, setToken] = React.useState<string | null>(null);
   const [failed, setFailed] = React.useState(false);
 
@@ -85,17 +88,17 @@ export function ScanView({
 
   return (
     <div className="v2-scan">
-      <h1>Scan</h1>
-      <p className="lead">Show this code at the desk to earn points, pay with Credit or redeem your items.</p>
+      <h1>{t("title")}</h1>
+      <p className="lead">{t("lead")}</p>
 
       <div className="card">
         <div className="qr">
           {token ? (
-            <QrCode value={token} label="Your check-in code" />
+            <QrCode value={token} label={t("codeLabel")} />
           ) : failed ? (
-            <span className="msg">Couldn&apos;t load your code. Check your connection, or sign in again.</span>
+            <span className="msg">{t("couldNotLoad")}</span>
           ) : (
-            <span className="msg">Loading…</span>
+            <span className="msg">{t("loading")}</span>
           )}
         </div>
         <b className="who">
@@ -104,19 +107,19 @@ export function ScanView({
         <span className="num tabular">{clientNumber}</span>
         <div className="tiles">
           <div className="tile">
-            <span>Points</span>
+            <span>{t("points")}</span>
             <b className="tabular">{points}</b>
           </div>
           <div className="tile">
-            <span>Credit</span>
-            <b className="tabular">{money(creditCents, currency)}</b>
+            <span>{t("credit")}</span>
+            <b className="tabular">{money(creditCents, currency, locale === "nl" ? "nl" : "en")}</b>
           </div>
         </div>
       </div>
 
       {readyItems.length > 0 && (
         <section className="ready">
-          <h2>Ready to redeem · {readyItems.length}</h2>
+          <h2>{t("readyCount", { count: readyItems.length })}</h2>
           <div className="list">
             {readyItems.map((item) => (
               <div className="row" key={item.id}>
@@ -132,14 +135,14 @@ export function ScanView({
                   <b>{item.name}</b>
                   {item.detail && <span>{item.detail}</span>}
                 </span>
-                <Tag kind="success">READY</Tag>
+                <Tag kind="success">{t("readyBadge")}</Tag>
               </div>
             ))}
           </div>
         </section>
       )}
 
-      <p className="tip">Tip: turn up your screen brightness so the desk can scan it fast.</p>
+      <p className="tip">{t("tip")}</p>
     </div>
   );
 }
