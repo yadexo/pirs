@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useLocale, useTranslations } from "next-intl";
 import { formatMoney } from "@/lib/utils";
 import {
   adjustClientCreditAction,
@@ -39,6 +40,9 @@ export function ClientAccountPanel({
   canAdjustPoints: boolean;
 }) {
   const router = useRouter();
+  const t = useTranslations("portal.clients.clientAccount");
+  const tc = useTranslations("common");
+  const locale = useLocale();
   const [account, setAccount] = React.useState<ClientAccount | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [form, setForm] = React.useState<null | { kind: "credit" | "points"; direction: "add" | "remove" }>(null);
@@ -83,8 +87,15 @@ export function ClientAccountPanel({
       setError(res.error);
       return;
     }
-    const noun = form.kind === "credit" ? "Credit" : "Points";
-    toast.success(`${noun} ${form.direction === "add" ? "added" : "removed"}`);
+    toast.success(
+      form.kind === "credit"
+        ? form.direction === "add"
+          ? t("toastCreditAdded")
+          : t("toastCreditRemoved")
+        : form.direction === "add"
+          ? t("toastPointsAdded")
+          : t("toastPointsRemoved"),
+    );
     setForm(null);
     await load();
     // The client's row shows the balance too.
@@ -94,31 +105,37 @@ export function ClientAccountPanel({
   if (loading && !account) {
     return (
       <p className="flex items-center gap-2 py-8 text-[12px] text-ink-muted">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading the account…
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> {t("loadingAccount")}
       </p>
     );
   }
-  if (!account) return <p className="py-8 text-center text-[12px] text-danger">{error ?? "Couldn't load this account."}</p>;
+  if (!account) return <p className="py-8 text-center text-[12px] text-danger">{error ?? t("couldntLoad")}</p>;
 
   const formTitle = form
-    ? `${form.direction === "add" ? "Add" : "Remove"} ${form.kind === "credit" ? "credit" : "points"}`
+    ? form.kind === "credit"
+      ? form.direction === "add"
+        ? t("addCredit")
+        : t("removeCredit")
+      : form.direction === "add"
+        ? t("addPoints")
+        : t("removePoints")
     : "";
 
   return (
     <div className="space-y-5">
       <section className="space-y-3">
         <div className="rounded-[12px] border border-border bg-app px-4 py-3">
-          <span className="block text-[11px] uppercase tracking-wide text-ink-faint">Credit</span>
+          <span className="block text-[11px] uppercase tracking-wide text-ink-faint">{t("credit")}</span>
           <span className="tabular block text-[22px] font-semibold">{formatMoney(account.creditCents, currency)}</span>
         </div>
 
         {canEdit && !form && (
           <div className="flex gap-2">
             <Button type="button" size="sm" variant="outline" onClick={() => openForm("credit", "add")}>
-              Add credit
+              {t("addCredit")}
             </Button>
             <Button type="button" size="sm" variant="outline" onClick={() => openForm("credit", "remove")} disabled={account.creditCents <= 0}>
-              Remove credit
+              {t("removeCredit")}
             </Button>
           </div>
         )}
@@ -126,17 +143,17 @@ export function ClientAccountPanel({
 
       <section className="space-y-3">
         <div className="rounded-[12px] border border-border bg-app px-4 py-3">
-          <span className="block text-[11px] uppercase tracking-wide text-ink-faint">Loyalty points</span>
+          <span className="block text-[11px] uppercase tracking-wide text-ink-faint">{t("loyaltyPoints")}</span>
           <span className="tabular block text-[22px] font-semibold">{account.pointsBalance}</span>
         </div>
 
         {canAdjustPoints && !form && (
           <div className="flex gap-2">
             <Button type="button" size="sm" variant="outline" onClick={() => openForm("points", "add")}>
-              Add points
+              {t("addPoints")}
             </Button>
             <Button type="button" size="sm" variant="outline" onClick={() => openForm("points", "remove")} disabled={account.pointsBalance <= 0}>
-              Remove points
+              {t("removePoints")}
             </Button>
           </div>
         )}
@@ -146,7 +163,7 @@ export function ClientAccountPanel({
         <form onSubmit={submit} className="space-y-3 rounded-[12px] border border-border p-4">
           <p className="text-[13px] font-semibold">{formTitle}</p>
           <label className="block space-y-1">
-            <span className="text-[12px] text-ink-muted">{form.kind === "credit" ? "Amount" : "Points"}</span>
+            <span className="text-[12px] text-ink-muted">{form.kind === "credit" ? t("amountField") : t("pointsField")}</span>
             <input
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
@@ -157,52 +174,72 @@ export function ClientAccountPanel({
             />
           </label>
           <label className="block space-y-1">
-            <span className="text-[12px] text-ink-muted">Reason</span>
+            <span className="text-[12px] text-ink-muted">{t("reason")}</span>
             <input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Goodwill after a late appointment"
+              placeholder={t("reasonPlaceholder")}
               className="h-9 w-full rounded-[10px] border border-border bg-surface px-3 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-primary"
             />
           </label>
           {/* Said plainly, because the client is told it word for word. */}
-          <p className="text-[11px] text-ink-faint">The client sees this reason in their app and gets a notification.</p>
+          <p className="text-[11px] text-ink-faint">{t("clientSeesReason")}</p>
           {error && <p className="text-[12px] text-danger">{error}</p>}
           <div className="flex gap-2">
             <Button type="submit" size="sm" disabled={busy}>
               {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {form.direction === "add" ? "Add" : "Remove"}
+              {form.direction === "add" ? t("addAction") : t("removeAction")}
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => setForm(null)} disabled={busy}>
-              Cancel
+              {tc("cancel")}
             </Button>
           </div>
         </form>
       )}
 
-      <Ledger title="Credit history" rows={account.credit} currency={currency} />
-      <Ledger title="Points history" rows={account.points} currency={null} />
+      <Ledger title={t("creditHistory")} rows={account.credit} currency={currency} locale={locale} t={t} />
+      <Ledger title={t("pointsHistory")} rows={account.points} currency={null} locale={locale} t={t} />
     </div>
   );
 }
 
-const WHEN = (iso: string) => new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
-
-/** What each kind of row is, in the clinic's words rather than the enum's. */
-const LEDGER_LABEL: Record<string, string> = {
-  MANUAL_ADJUSTMENT: "Adjusted by staff",
-  MEMBERSHIP_GRANT: "Membership credit",
-  REFUND: "Refunded",
-  REFUNDED: "Returned",
-  REDEEMED: "Spent",
-  EARNED: "Earned",
-  EXPIRED: "Expired",
-};
-
 /** Money when there is a currency, points when there is not. */
-function Ledger({ title, rows, currency }: { title: string; rows: LedgerRow[]; currency: string | null }) {
+function Ledger({
+  title,
+  rows,
+  currency,
+  locale,
+  t,
+}: {
+  title: string;
+  rows: LedgerRow[];
+  currency: string | null;
+  locale: string;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const ledgerLabel = (type: string): string => {
+    switch (type) {
+      case "MANUAL_ADJUSTMENT":
+        return t("ledgerManual");
+      case "MEMBERSHIP_GRANT":
+        return t("ledgerMembershipGrant");
+      case "REFUND":
+        return t("ledgerRefund");
+      case "REFUNDED":
+        return t("ledgerRefunded");
+      case "REDEEMED":
+        return t("ledgerRedeemed");
+      case "EARNED":
+        return t("ledgerEarned");
+      case "EXPIRED":
+        return t("ledgerExpired");
+      default:
+        return type;
+    }
+  };
+  const when = (iso: string) => new Date(iso).toLocaleString(locale === "nl" ? "nl-NL" : "en-US", { dateStyle: "medium", timeStyle: "short" });
   const show = (value: number) => (currency ? formatMoney(value, currency) : String(value));
-  if (rows.length === 0) return <p className="py-6 text-center text-[12px] text-ink-muted">Nothing here yet.</p>;
+  if (rows.length === 0) return <p className="py-6 text-center text-[12px] text-ink-muted">{t("nothingHere")}</p>;
 
   return (
     <div>
@@ -211,10 +248,10 @@ function Ledger({ title, rows, currency }: { title: string; rows: LedgerRow[]; c
         {rows.map((row) => (
           <li key={row.id} className="flex items-start justify-between gap-3 py-2.5">
             <span className="min-w-0">
-              <span className="block text-[12px] font-medium">{LEDGER_LABEL[row.type] ?? row.type}</span>
+              <span className="block text-[12px] font-medium">{ledgerLabel(row.type)}</span>
               {row.reason && <span className="block text-[12px] text-ink-muted">{row.reason}</span>}
               <span className="block text-[11px] text-ink-faint">
-                {WHEN(row.at)}
+                {when(row.at)}
                 {row.by ? ` · ${row.by}` : ""}
               </span>
             </span>

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/primitives";
 import { FormSection, TextAreaField, TextField, type FieldErrors } from "@/components/merchant/form";
@@ -56,6 +57,7 @@ export function NotifyOffer({
   errors: FieldErrors;
 }) {
   const router = useRouter();
+  const t = useTranslations("portal.appBuilder.notifyOffer");
   const [mode, setMode] = React.useState<"none" | "now" | "schedule">("none");
   const [title, setTitle] = React.useState(offerTitle);
   const [body, setBody] = React.useState(offerDescription);
@@ -86,38 +88,35 @@ export function NotifyOffer({
     if (!scheduled) return;
     const res = await cancelCampaignAction(merchantId, scheduled.id).catch((err) => ({ error: describeActionFailure(err) }) as const);
     if ("error" in res) return toast.error(res.error);
-    toast.success("Notification cancelled");
+    toast.success(t("cancelled"));
     router.refresh();
   }
 
   if (!canSend) {
     return (
-      <FormSection title="Notify clients">
+      <FormSection title={t("title")}>
         <input type="hidden" name="notifyMode" value="none" />
-        <p className="text-[12px] text-ink-muted">
-          You can write offers, but sending notifications needs the &ldquo;Send messages&rdquo; permission. Ask an owner to send it, or to give you that
-          permission.
-        </p>
-        {sent && <p className="text-[12px] text-ink-muted">Clients were notified on {when(sent.sentAt)}.</p>}
+        <p className="text-[12px] text-ink-muted">{t("needsSendPermission")}</p>
+        {sent && <p className="text-[12px] text-ink-muted">{t("notifiedOn", { when: when(sent.sentAt) })}</p>}
       </FormSection>
     );
   }
 
   return (
-    <FormSection title="Notify clients">
+    <FormSection title={t("title")}>
       {(sent || scheduled) && (
         <div className="flex items-center gap-2 rounded-[10px] bg-app px-3 py-2 text-[12px]">
           {sent && (
             <span>
-              Sent on {when(sent.sentAt)} to {sent.devicesReached} {sent.devicesReached === 1 ? "device" : "devices"}.
+              {t("sentOnTo", { when: when(sent.sentAt), count: sent.devicesReached })}
             </span>
           )}
           {scheduled && (
             <>
-              <Pill tone="amber">scheduled</Pill>
-              <span>Goes out {when(scheduled.scheduledAt)}.</span>
+              <Pill tone="amber">{t("scheduledPill")}</Pill>
+              <span>{t("goesOut", { when: when(scheduled.scheduledAt) })}</span>
               <Button type="button" size="sm" variant="outline" onClick={cancelScheduled}>
-                Cancel it
+                {t("cancelIt")}
               </Button>
             </>
           )}
@@ -127,9 +126,9 @@ export function NotifyOffer({
       <div className="flex flex-col gap-1.5">
         {(
           [
-            ["none", "Don't notify"],
-            ["now", startsLater ? "Notify when the offer starts" : "Notify now"],
-            ["schedule", "Schedule"],
+            ["none", t("dontNotify")],
+            ["now", startsLater ? t("notifyWhenStarts") : t("notifyNow")],
+            ["schedule", t("schedule")],
           ] as const
         ).map(([value, label]) => (
           <label key={value} className="flex items-center gap-2 text-[13px]">
@@ -143,18 +142,18 @@ export function NotifyOffer({
         <>
           {mode === "schedule" && (
             <TextField
-              label="When"
+              label={t("when")}
               name="notifyAt"
               type="datetime-local"
               min={startsLater ? localInput(start) : undefined}
               defaultValue={localInput(startsLater ? start : new Date(Date.now() + 60 * 60 * 1000))}
               errors={errors}
-              hint={startsLater ? `Not before the offer starts, ${when(startAt)}.` : "Outside your sending hours it waits until they next open."}
+              hint={startsLater ? t("notBeforeStart", { when: when(startAt) }) : t("outsideSendingHours")}
             />
           )}
 
           <TextField
-            label="Notification title"
+            label={t("notificationTitle")}
             name="notifyTitle"
             value={title}
             onChange={(e) => {
@@ -165,7 +164,7 @@ export function NotifyOffer({
             errors={errors}
           />
           <TextAreaField
-            label="Message"
+            label={t("message")}
             name="notifyBody"
             rows={2}
             value={body}
@@ -179,31 +178,27 @@ export function NotifyOffer({
 
           {/* Roughly what lands on a phone: clinic name, then the message. */}
           <div className="rounded-card border border-border bg-app p-3">
-            <p className="mb-1.5 text-[10px] uppercase tracking-wide text-ink-faint">Preview</p>
+            <p className="mb-1.5 text-[10px] uppercase tracking-wide text-ink-faint">{t("preview")}</p>
             <div className="rounded-[12px] bg-surface p-3 shadow-card">
               <p className="text-[13px] font-semibold">{title || clinicName}</p>
-              <p className="mt-0.5 text-[12px] text-ink-muted">{body || "Your message will appear here."}</p>
+              <p className="mt-0.5 text-[12px] text-ink-muted">{body || t("messagePlaceholder")}</p>
             </div>
           </div>
 
           <p className="text-[12px] text-ink-muted">
-            {audience === null
-              ? "Counting clients…"
-              : audience === 0
-                ? "Nobody will get this yet: it goes only to clients with notifications on who left “offers and news” switched on."
-                : `${audience} ${audience === 1 ? "client has" : "clients have"} notifications and offers switched on.`}{" "}
-            Nothing is sent outside your sending hours, and your daily limit per client applies unless you tick the box above.
+            {audience === null ? t("countingClients") : audience === 0 ? t("nobodyWillGetThis") : t("audienceCount", { count: audience })}{" "}
+            {t("sendingHoursNote")}
           </p>
 
           <label className="flex items-center gap-2 text-[12px]">
             <input type="checkbox" name="notifyIgnoreDailyLimit" className="h-3.5 w-3.5" />
-            Also send to clients who already got a notification today
+            {t("alsoSendToAlreadyNotified")}
           </label>
 
           {sent && (
             <label className="flex items-center gap-2 text-[12px]">
               <input type="checkbox" name="notifyAgain" checked={again} onChange={(e) => setAgain(e.target.checked)} className="h-3.5 w-3.5" />
-              Clients already got one for this offer on {when(sent.sentAt)} — send it again.
+              {t("alreadyGotOne", { when: when(sent.sentAt) })}
             </label>
           )}
         </>

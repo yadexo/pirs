@@ -4,6 +4,7 @@ import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Camera, CheckCircle2, Keyboard, Loader2, Search, Ticket } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Drawer, Pill } from "@/components/ui/primitives";
 import { useQrCamera, type CameraProblem } from "@/components/use-qr-camera";
@@ -34,6 +35,7 @@ type Stage =
 export function RedeemButton() {
   const params = useParams<{ merchantId?: string }>();
   const merchantId = params?.merchantId;
+  const t = useTranslations("merchant.redeem");
   const [open, setOpen] = React.useState(false);
 
   if (!merchantId) return null;
@@ -41,9 +43,9 @@ export function RedeemButton() {
   return (
     <>
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-        <Ticket className="h-3.5 w-3.5" /> Redeem
+        <Ticket className="h-3.5 w-3.5" /> {t("redeem")}
       </Button>
-      <Drawer open={open} onClose={() => setOpen(false)} title="Redeem an item" subtitle="Scan the code in the client's app.">
+      <Drawer open={open} onClose={() => setOpen(false)} title={t("redeemAnItem")} subtitle={t("scanSubtitle")}>
         {open && <RedeemFlow merchantId={merchantId} onClose={() => setOpen(false)} />}
       </Drawer>
     </>
@@ -59,6 +61,7 @@ const STATUS_TONE = {
 
 function RedeemFlow({ merchantId, onClose }: { merchantId: string; onClose: () => void }) {
   const router = useRouter();
+  const t = useTranslations("merchant.redeem");
   const [stage, setStage] = React.useState<Stage>({ kind: "scanning" });
   const [pending, setPending] = React.useState(false);
 
@@ -108,13 +111,13 @@ function RedeemFlow({ merchantId, onClose }: { merchantId: string; onClose: () =
       <div className="flex flex-col items-center gap-3 py-6 text-center">
         <CheckCircle2 className="h-10 w-10 text-[var(--accent-green)]" />
         <p className="text-[16px] font-semibold">{stage.item.name}</p>
-        <p className="text-[13px] text-ink-muted">Redeemed for {stage.item.client.name}.</p>
+        <p className="text-[13px] text-ink-muted">{t("redeemedFor", { name: stage.item.client.name })}</p>
         <div className="mt-2 flex w-full gap-2">
           <Button variant="outline" className="flex-1" onClick={onClose}>
-            Done
+            {t("done")}
           </Button>
           <Button className="flex-1" onClick={() => setStage({ kind: "scanning" })}>
-            Next item
+            {t("nextItem")}
           </Button>
         </div>
       </div>
@@ -127,11 +130,11 @@ function RedeemFlow({ merchantId, onClose }: { merchantId: string; onClose: () =
         <div className="rounded-card bg-app p-4">
           <p className="text-[15px] font-semibold">{stage.name}</p>
           {/* Sessions are a count, not a ticket, so there is nothing to scan. */}
-          <p className="mt-0.5 text-[13px] text-ink-muted">Session packages this client can use today.</p>
+          <p className="mt-0.5 text-[13px] text-ink-muted">{t("sessionPackagesToday")}</p>
         </div>
         <ClientPackages merchantId={merchantId} customerProfileId={stage.customerProfileId} />
         <Button variant="outline" className="w-full" onClick={() => setStage({ kind: "finding" })}>
-          Find someone else
+          {t("findSomeoneElse")}
         </Button>
       </div>
     );
@@ -160,7 +163,7 @@ function RedeemFlow({ merchantId, onClose }: { merchantId: string; onClose: () =
             className={`flex flex-1 items-center justify-center gap-1.5 rounded-[10px] py-2 ${stage.kind === k ? "bg-surface font-bold text-ink" : "text-ink-muted"}`}
           >
             {k === "scanning" ? <Camera className="h-4 w-4" /> : k === "typing" ? <Keyboard className="h-4 w-4" /> : <Search className="h-4 w-4" />}
-            {k === "scanning" ? "Scan code" : k === "typing" ? "Type code" : "Find client"}
+            {k === "scanning" ? t("scanCode") : k === "typing" ? t("typeCode") : t("findClient")}
           </button>
         ))}
       </div>
@@ -192,6 +195,7 @@ export function ItemCard({
   note?: string;
   onNoteChange?: (value: string) => void;
 }) {
+  const t = useTranslations("merchant.redeem");
   const purchased = new Date(item.purchasedAt).toLocaleDateString();
   const redeemed = item.redeemedAt ? new Date(item.redeemedAt).toLocaleString() : null;
 
@@ -210,30 +214,26 @@ export function ItemCard({
         </div>
         <dl className="mt-4 grid grid-cols-2 gap-3 text-[12px]">
           <div>
-            <dt className="text-ink-muted">Purchased</dt>
+            <dt className="text-ink-muted">{t("purchased")}</dt>
             <dd className="font-medium">{purchased}</dd>
           </div>
           <div>
-            <dt className="text-ink-muted">Code</dt>
+            <dt className="text-ink-muted">{t("code")}</dt>
             <dd className="tabular font-medium">{item.code}</dd>
           </div>
         </dl>
-        {item.refundedAfterUse && (
-          <p className="mt-3 rounded-[10px] bg-[var(--accent-amber)]/10 px-3 py-2 text-[12px]">
-            This order was refunded after the item had already been redeemed.
-          </p>
-        )}
+        {item.refundedAfterUse && <p className="mt-3 rounded-[10px] bg-[var(--accent-amber)]/10 px-3 py-2 text-[12px]">{t("refundedAfterUseNotice")}</p>}
       </div>
 
       {item.status === "AVAILABLE" ? (
         <>
           {onNoteChange && (
             <label className="block text-[12px] text-ink-muted">
-              Note (optional)
+              {t("noteOptional")}
               <input
                 value={note ?? ""}
                 onChange={(e) => onNoteChange(e.target.value)}
-                placeholder="Client's phone was dead"
+                placeholder={t("notePlaceholder")}
                 maxLength={200}
                 className="mt-1 h-10 w-full rounded-[10px] border border-border bg-surface px-3 text-[13px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-primary"
               />
@@ -241,35 +241,41 @@ export function ItemCard({
           )}
           <Button className="w-full" onClick={onConfirm} disabled={pending}>
             {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Redeem this item
+            {t("redeemThisItem")}
           </Button>
         </>
       ) : (
         <p className="rounded-[10px] bg-app px-3 py-2 text-center text-[13px] text-ink-muted">
           {item.status === "REDEEMED"
-            ? `Already redeemed${redeemed ? ` on ${redeemed}` : ""}${item.redeemedByName ? ` by ${item.redeemedByName}` : ""}.`
+            ? redeemed && item.redeemedByName
+              ? t("alreadyRedeemedOnBy", { date: redeemed, name: item.redeemedByName })
+              : redeemed
+                ? t("alreadyRedeemedOn", { date: redeemed })
+                : item.redeemedByName
+                  ? t("alreadyRedeemedBy", { name: item.redeemedByName })
+                  : t("alreadyRedeemed")
             : item.status === "VOIDED"
-              ? "This item was refunded, so it can't be redeemed."
-              : "This item has expired."}
+              ? t("voidedNotice")
+              : t("expiredNotice")}
         </p>
       )}
 
       {onBack && (
         <Button variant="ghost" className="w-full" onClick={onBack}>
-          Back
+          {t("back")}
         </Button>
       )}
     </div>
   );
 }
 
-const CAMERA_PROBLEMS: Record<CameraProblem, string> = {
-  unsupported: "This browser can't use a camera here. Type the code instead.",
-  denied: "Camera access was blocked. Allow it in the browser's site settings, or type the code.",
-  missing: "No camera found. Type the code instead.",
-};
-
 function CodeScanner({ onCode, onUnavailable }: { onCode: (value: string) => void; onUnavailable: () => void }) {
+  const t = useTranslations("merchant.redeem");
+  const CAMERA_PROBLEMS: Record<CameraProblem, string> = {
+    unsupported: t("cameraProblems.unsupported"),
+    denied: t("cameraProblems.denied"),
+    missing: t("cameraProblems.missing"),
+  };
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const { problem: problemKind, starting } = useQrCamera(videoRef, onCode);
   const problem = problemKind ? CAMERA_PROBLEMS[problemKind] : null;
@@ -279,7 +285,7 @@ function CodeScanner({ onCode, onUnavailable }: { onCode: (value: string) => voi
       <div className="space-y-3 py-4 text-center">
         <p className="text-[13px] text-ink-muted">{problem}</p>
         <Button variant="outline" onClick={onUnavailable}>
-          <Keyboard className="h-3.5 w-3.5" /> Type the code
+          <Keyboard className="h-3.5 w-3.5" /> {t("typeTheCode")}
         </Button>
       </div>
     );
@@ -296,12 +302,13 @@ function CodeScanner({ onCode, onUnavailable }: { onCode: (value: string) => voi
           </div>
         )}
       </div>
-      <p className="text-center text-[12px] text-ink-muted">Ask the client to open the item in My items and hold up their phone.</p>
+      <p className="text-center text-[12px] text-ink-muted">{t("askClientToOpen")}</p>
     </div>
   );
 }
 
 function CodeEntry({ onSubmit }: { onSubmit: (value: string) => void }) {
+  const t = useTranslations("merchant.redeem");
   const [value, setValue] = React.useState("");
   const clean = value.trim().toUpperCase();
 
@@ -314,7 +321,7 @@ function CodeEntry({ onSubmit }: { onSubmit: (value: string) => void }) {
       }}
     >
       <label className="block text-[12px] text-ink-muted">
-        Code under the QR
+        {t("codeUnderQr")}
         <input
           autoFocus
           value={value}
@@ -324,12 +331,12 @@ function CodeEntry({ onSubmit }: { onSubmit: (value: string) => void }) {
           autoCapitalize="characters"
           autoComplete="off"
           spellCheck={false}
-          aria-label="Item code"
+          aria-label={t("itemCode")}
           className="tabular mt-1 h-11 w-full rounded-[10px] border border-border bg-surface px-3 text-[16px] uppercase tracking-[0.15em] outline-none focus-visible:ring-2 focus-visible:ring-primary"
         />
       </label>
       <Button type="submit" className="w-full" disabled={clean.length < 8}>
-        Find item
+        {t("findItem")}
       </Button>
     </form>
   );
@@ -341,6 +348,7 @@ function CodeEntry({ onSubmit }: { onSubmit: (value: string) => void }) {
  * them.
  */
 function ClientFinder({ merchantId, onPick }: { merchantId: string; onPick: (customerProfileId: string, name: string) => void }) {
+  const t = useTranslations("merchant.redeem");
   const [query, setQuery] = React.useState("");
   const [results, setResults] = React.useState<{ customerProfileId: string; name: string; email: string | null }[]>([]);
   const [searching, setSearching] = React.useState(false);
@@ -367,7 +375,7 @@ function ClientFinder({ merchantId, onPick }: { merchantId: string; onPick: (cus
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Name, email or phone"
+        placeholder={t("nameEmailPhone")}
         autoFocus
         className="h-12 w-full rounded-[14px] bg-surface px-4 text-[16px] text-ink shadow-[inset_0_0_0_1px_var(--line-strong)] outline-none focus-visible:shadow-[inset_0_0_0_1.5px_var(--ink)]"
       />
@@ -391,7 +399,7 @@ function ClientFinder({ merchantId, onPick }: { merchantId: string; onPick: (cus
         </ul>
       )}
       {!searching && query.trim().length >= 2 && results.length === 0 && (
-        <p className="py-4 text-center text-[13px] text-ink-muted">Nobody found. Try their email or phone number.</p>
+        <p className="py-4 text-center text-[13px] text-ink-muted">{t("nobodyFound")}</p>
       )}
     </div>
   );

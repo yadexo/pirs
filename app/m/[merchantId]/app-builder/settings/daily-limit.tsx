@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslations } from "next-intl";
 import { SelectField, type FieldErrors } from "@/components/merchant/form";
 
 /**
@@ -10,37 +11,35 @@ import { SelectField, type FieldErrors } from "@/components/merchant/form";
  * app noisy turns notifications off entirely, and that is not a decision they
  * come back and reverse.
  */
-export const DAILY_LIMIT_CHOICES = [
-  { value: "1", label: "1 a day (recommended)" },
-  { value: "2", label: "2 a day" },
-  { value: "3", label: "3 a day" },
-  { value: "5", label: "5 a day" },
-  { value: "0", label: "No limit" },
-];
+const DAILY_LIMIT_VALUES = ["1", "2", "3", "5", "0"] as const;
+// Value → messages/*.json portal.appBuilder.settings.dailyLimit.choices key.
+const DAILY_LIMIT_CHOICE_KEYS: Record<(typeof DAILY_LIMIT_VALUES)[number], string> = {
+  "1": "oneADay",
+  "2": "twoADay",
+  "3": "threeADay",
+  "5": "fiveADay",
+  "0": "noLimit",
+};
 
 export function DailyLimitField({ defaultValue, errors }: { defaultValue: number; errors: FieldErrors }) {
+  const t = useTranslations("portal.appBuilder.settings.dailyLimit");
+  const tChoices = useTranslations("portal.appBuilder.settings.dailyLimit.choices");
   const [value, setValue] = React.useState(String(defaultValue));
   const loose = value === "5" || value === "0";
+  const choices = DAILY_LIMIT_VALUES.map((v) => ({ value: v, label: tChoices(DAILY_LIMIT_CHOICE_KEYS[v]) }));
 
   return (
     <>
       <SelectField
-        label="Maximum marketing notifications per client per day"
+        label={t("maxPerClientPerDay")}
         name="marketingDailyLimit"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        options={DAILY_LIMIT_CHOICES}
+        options={choices}
         errors={errors}
       />
-      {loose && (
-        <p className="rounded-[10px] bg-[var(--accent-amber)]/10 px-3 py-2 text-[12px] text-ink">
-          Clients who get too many notifications tend to switch them off altogether — and they rarely switch them back on.
-        </p>
-      )}
-      <p className="text-[12px] text-ink-muted">
-        Birthday messages and discounts meant for one client don&apos;t count towards this, and a single notification can be marked to reach
-        everyone anyway.
-      </p>
+      {loose && <p className="rounded-[10px] bg-[var(--accent-amber)]/10 px-3 py-2 text-[12px] text-ink">{t("looseWarning")}</p>}
+      <p className="text-[12px] text-ink-muted">{t("exemptionsNote")}</p>
     </>
   );
 }

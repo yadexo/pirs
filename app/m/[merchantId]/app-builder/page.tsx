@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Eye } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 import { requireMerchantContext } from "@/lib/merchant-context";
 import { rawDb } from "@/lib/db";
 import { MerchantPageHeader } from "@/components/merchant/page-header";
@@ -14,6 +15,19 @@ import { viewerCan } from "@/lib/viewer";
 import type { MerchantRequirement } from "@/lib/merchant-action";
 import type { SettingsSection } from "@/lib/nav";
 import { defaultFilterFor } from "@/lib/app-builder-filters";
+
+// lib/nav.ts's APP_BUILDER_TABS key → messages/*.json portal.appBuilder.tabs key.
+// Same reasoning as components/shell/app-shell.tsx's MERCHANT_NAV_KEYS: the
+// label in lib/nav.ts stays the stable English string tests/nav.test.ts
+// checks; what a person sees is translated here, keyed by tab key.
+const APP_BUILDER_TAB_KEYS: Record<string, string> = {
+  "custom-plans": "customPlans",
+  offers: "offers",
+  products: "products",
+  membership: "membership",
+  rewards: "rewards",
+  settings: "settings",
+};
 
 /** What saving each Settings section requires — mirrors lib/actions/clinic-settings.ts. */
 const SECTION_NEEDS: Record<SettingsSection, MerchantRequirement> = {
@@ -38,6 +52,8 @@ export default async function AppBuilderPage({
   const { merchantId } = await params;
   const sp = await searchParams;
   const ctx = await requireMerchantContext(merchantId);
+  const t = await getTranslations("portal.appBuilder");
+  const tTabs = await getTranslations("portal.appBuilder.tabs");
 
   const tab = isAppBuilderTab(sp.tab) ? sp.tab : DEFAULT_APP_BUILDER_TAB;
   const section = isSettingsSection(sp.section) ? sp.section : DEFAULT_SETTINGS_SECTION;
@@ -50,23 +66,20 @@ export default async function AppBuilderPage({
 
   return (
     <div className="mx-auto max-w-[1180px]">
-      <MerchantPageHeader
-        title="App Builder"
-        description="Everything your clients see in the app. Changes go live as soon as you save."
-      />
+      <MerchantPageHeader title={t("title")} description={t("description")} />
 
       <div className="mt-5 flex items-end justify-between border-b border-border">
         <nav className="no-scrollbar flex gap-5 overflow-x-auto">
-          {APP_BUILDER_TABS.map((t) => (
+          {APP_BUILDER_TABS.map((tabItem) => (
             <Link
-              key={t.key}
-              href={`/m/${merchantId}/app-builder?tab=${t.key}`}
+              key={tabItem.key}
+              href={`/m/${merchantId}/app-builder?tab=${tabItem.key}`}
               className={cn(
                 "-mb-px shrink-0 border-b-2 pb-2.5 text-[13px] transition-colors",
-                tab === t.key ? "border-primary font-medium text-primary" : "border-transparent text-ink-muted hover:text-ink",
+                tab === tabItem.key ? "border-primary font-medium text-primary" : "border-transparent text-ink-muted hover:text-ink",
               )}
             >
-              {t.label}
+              {tTabs(APP_BUILDER_TAB_KEYS[tabItem.key]!)}
             </Link>
           ))}
         </nav>
@@ -77,7 +90,7 @@ export default async function AppBuilderPage({
             rel="noreferrer"
             className="mb-2 flex shrink-0 items-center gap-1 text-[12px] text-ink-muted hover:text-ink"
           >
-            <Eye className="h-3.5 w-3.5" /> View app
+            <Eye className="h-3.5 w-3.5" /> {t("viewApp")}
           </a>
         )}
       </div>
@@ -100,7 +113,7 @@ export default async function AppBuilderPage({
             q={q}
             typeFilter={typeFilter}
             currency={currency}
-            items={await loadItems(ctx.db, tab, q, typeFilter, currency)}
+            items={await loadItems(ctx.db, tab, q, typeFilter, currency, await getTranslations("portal.appBuilder.catalogMeta"))}
           />
         )}
       </div>
@@ -118,6 +131,7 @@ async function loadItems(
   q: string,
   typeFilter: string,
   currency: string,
+  tc: Awaited<ReturnType<typeof getTranslations>>,
 ): Promise<CatalogItem[]> {
   const nameFilter = q ? { name: { contains: q, mode: "insensitive" as const } } : {};
 
@@ -139,17 +153,19 @@ async function loadItems(
         id: r.id,
         name: r.name,
         meta: [
-          `${r.totalUses} sessions`,
-          `${formatMoney(Math.round(r.priceCents / Math.max(1, r.totalUses)), currency)} per session`,
-          r.expiryDays ? `valid ${r.expiryDays} days` : "no expiry",
-          covered.length > 0 ? covered.map((s) => s.name).join(", ") : "covers nothing yet",
-          r.transferable ? "transferable" : null,
-          r._count.customerPackages > 0 ? `${r._count.customerPackages} sold` : null,
+          tc("sessions", { count: r.totalUses }),
+          tc("perSession", { amount: formatMoney(Math.round(r.priceCents / Math.max(1, r.totalUses)), currency) }),
+          r.expiryDays ? tc("validDays", { count: r.expiryDays }) : tc("noExpiry"),
+          covered.length > 0 ? covered.map((s) => s.name).join(", ") : tc("coversNothingYet"),
+          r.transferable ? tc("transferable") : null,
+          r._count.customerPackages > 0 ? tc("sold", { count: r._count.customerPackages }) : null,
         ]
           .filter(Boolean)
           .join(" · "),
         // A package whose treatments cannot be booked sells sessions a client
-        // then cannot use without coming to the desk.
+        // then cannot use without coming to the desk. Kept as the same
+        // literal English as the products tab below (test-locked there) so
+        // the badge reads identically everywhere it appears.
         warning: unbookable > 0 ? "Booking link missing" : undefined,
         priceCents: r.priceCents,
         active: r.active,
@@ -184,10 +200,10 @@ async function loadItems(
     return rows.map((r) => {
       const notice = r.campaigns[0];
       const notified = !notice
-        ? "not notified"
+        ? tc("notNotified")
         : notice.status === "SCHEDULED"
-          ? `notification ${shortDate(notice.scheduledAt)}`
-          : `notified ${notice.devicesReached} ${notice.devicesReached === 1 ? "device" : "devices"}`;
+          ? tc("notificationScheduledFor", { date: shortDate(notice.scheduledAt) })
+          : tc("notifiedDevices", { count: notice.devicesReached });
       // Why the others missed out, so a bare zero is never the whole story.
       const why = notice?.outcomeNote ?? null;
       return {
@@ -195,8 +211,8 @@ async function loadItems(
         id: r.id,
         name: r.title,
         meta: [
-          r.code ? `Code ${r.code}` : "Automatic",
-          r.endAt.getTime() < now ? "ended" : r.startAt.getTime() > now ? "scheduled" : null,
+          r.code ? tc("codeLabel", { code: r.code }) : tc("automatic"),
+          r.endAt.getTime() < now ? tc("ended") : r.startAt.getTime() > now ? tc("scheduledLower") : null,
           notified,
           why,
         ]
@@ -219,14 +235,22 @@ async function loadItems(
         kind: "service" as const,
         id: s.id,
         name: s.name,
-        meta: `Treatment · ${s.durationMinutes} min`,
+        meta: tc("treatmentMinutes", { count: s.durationMinutes }),
         // A treatment clients can buy but cannot book: worth saying on the row
-        // rather than only inside the editor.
+        // rather than only inside the editor. This exact literal string is
+        // asserted by tests/booking-links.test.ts — do not translate it.
         warning: s.schedulingUrl ? undefined : "Booking link missing",
         priceCents: s.priceCents,
         active: s.active,
       })),
-      ...products.map((p) => ({ kind: "product" as const, id: p.id, name: p.name, meta: `Product · ${p.inventoryQuantity} in stock`, priceCents: p.priceCents, active: p.active })),
+      ...products.map((p) => ({
+        kind: "product" as const,
+        id: p.id,
+        name: p.name,
+        meta: tc("productInStock", { count: p.inventoryQuantity }),
+        priceCents: p.priceCents,
+        active: p.active,
+      })),
     ];
   }
 
@@ -240,7 +264,7 @@ async function loadItems(
       kind: "membershipPlan",
       id: r.id,
       name: r.name,
-      meta: `${r.billingFrequency === "MONTHLY" ? "Monthly" : "Yearly"} · ${r._count.customerMemberships} member${r._count.customerMemberships === 1 ? "" : "s"}`,
+      meta: `${r.billingFrequency === "MONTHLY" ? tc("monthly") : tc("yearly")} · ${tc("members", { count: r._count.customerMemberships })}`,
       priceCents: r.priceCents,
       active: r.active,
     }));
@@ -248,5 +272,5 @@ async function loadItems(
 
   // rewards
   const rows = await db.loyaltyReward.findMany({ where: nameFilter, orderBy: { pointsCost: "asc" } });
-  return rows.map((r) => ({ kind: "reward", id: r.id, name: r.name, meta: `${r.pointsCost} points`, priceCents: null, active: r.active }));
+  return rows.map((r) => ({ kind: "reward", id: r.id, name: r.name, meta: tc("points", { count: r.pointsCost }), priceCents: null, active: r.active }));
 }

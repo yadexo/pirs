@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { CirclePlus, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { Panel, Pill, Drawer } from "@/components/ui/primitives";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
@@ -38,47 +39,53 @@ export interface CatalogItem {
   active: boolean;
 }
 
-/** Per-tab copy. Empty-state strings are verbatim from the spec. */
-const TAB_CONFIG: Record<string, { heading: string; create: string; empty: string; filters: [string, string][]; kinds: ItemKind[] }> = {
-  "custom-plans": { heading: "Custom Plans", create: "Create custom plan", empty: "No custom plans available", filters: [["all", "All"]], kinds: ["package"] },
-  offers: {
-    heading: "Offers",
-    create: "Create offer",
-    empty: "No offers available",
-    filters: [
-      ["all", "All"],
-      ["visible", "Visible"],
-      // An offer that was used is hidden rather than deleted, so this is
-      // where those go to be found again — or left out of the way.
-      ["hidden", "Hidden"],
-      ["campaigns", "Campaigns"],
-    ],
-    kinds: ["promotion"],
-  },
-  products: {
-    heading: "Products",
-    create: "Create product",
-    empty: "No products available",
-    filters: [
-      ["all", "All"],
-      ["service", "Treatments"],
-      ["product", "Products"],
-    ],
-    kinds: ["service", "product"],
-  },
-  membership: { heading: "Membership", create: "Create membership", empty: "No memberships available", filters: [["all", "All"]], kinds: ["membershipPlan"] },
-  rewards: { heading: "Rewards", create: "Create reward", empty: "No rewards available", filters: [["all", "All"]], kinds: ["reward"] },
-};
+type TabKey = "custom-plans" | "offers" | "products" | "membership" | "rewards";
 
-const KIND_LABEL: Record<ItemKind, string> = {
-  service: "treatment",
-  product: "product",
-  package: "custom plan",
-  promotion: "offer",
-  membershipPlan: "membership plan",
-  reward: "reward",
-  campaign: "campaign",
-};
+/** Per-tab copy, built from translations so it can't go stale against KIND_LABEL. */
+function tabConfig(t: ReturnType<typeof useTranslations>): Record<TabKey, { heading: string; create: string; empty: string; filters: [string, string][]; kinds: ItemKind[] }> {
+  return {
+    "custom-plans": { heading: t("tabs.customPlans.heading"), create: t("tabs.customPlans.create"), empty: t("tabs.customPlans.empty"), filters: [["all", t("filterAll")]], kinds: ["package"] },
+    offers: {
+      heading: t("tabs.offers.heading"),
+      create: t("tabs.offers.create"),
+      empty: t("tabs.offers.empty"),
+      filters: [
+        ["all", t("filterAll")],
+        ["visible", t("visible")],
+        // An offer that was used is hidden rather than deleted, so this is
+        // where those go to be found again — or left out of the way.
+        ["hidden", t("hidden")],
+        ["campaigns", t("filterCampaigns")],
+      ],
+      kinds: ["promotion"],
+    },
+    products: {
+      heading: t("tabs.products.heading"),
+      create: t("tabs.products.create"),
+      empty: t("tabs.products.empty"),
+      filters: [
+        ["all", t("filterAll")],
+        ["service", t("filterTreatments")],
+        ["product", t("filterProducts")],
+      ],
+      kinds: ["service", "product"],
+    },
+    membership: { heading: t("tabs.membership.heading"), create: t("tabs.membership.create"), empty: t("tabs.membership.empty"), filters: [["all", t("filterAll")]], kinds: ["membershipPlan"] },
+    rewards: { heading: t("tabs.rewards.heading"), create: t("tabs.rewards.create"), empty: t("tabs.rewards.empty"), filters: [["all", t("filterAll")]], kinds: ["reward"] },
+  };
+}
+
+function kindLabels(t: ReturnType<typeof useTranslations>): Record<ItemKind, string> {
+  return {
+    service: t("kindLabel.service"),
+    product: t("kindLabel.product"),
+    package: t("kindLabel.package"),
+    promotion: t("kindLabel.promotion"),
+    membershipPlan: t("kindLabel.membershipPlan"),
+    reward: t("kindLabel.reward"),
+    campaign: t("kindLabel.campaign"),
+  };
+}
 
 const SAVE: Partial<Record<ItemKind, (merchantId: string, id: string | null, fd: FormData) => ReturnType<typeof saveServiceAction>>> = {
   service: saveServiceAction,
@@ -110,8 +117,12 @@ export function CatalogTab({
   currency: string;
   items: CatalogItem[];
 }) {
+  const t = useTranslations("portal.appBuilder.catalogTab");
+  const tc = useTranslations("common");
   const router = useRouter();
-  const config = TAB_CONFIG[tab] ?? TAB_CONFIG["custom-plans"]!;
+  const TAB_CONFIG = tabConfig(t);
+  const KIND_LABEL = kindLabels(t);
+  const config = TAB_CONFIG[(tab as TabKey) in TAB_CONFIG ? (tab as TabKey) : "custom-plans"];
   const [editor, setEditor] = React.useState<Editor>({ mode: "closed" });
   const [options, setOptions] = React.useState<FormOptions | null>(null);
   const [errors, setErrors] = React.useState<FieldErrors>();
@@ -173,7 +184,7 @@ export function CatalogTab({
     else void open(config.kinds[0]!, null);
   }
 
-  const createdLabel = editor.mode === "open" && (editor.kind === "product" || editor.kind === "service") ? "product" : KIND_LABEL[editor.mode === "open" ? editor.kind : "product"];
+  const createdLabel = editor.mode === "open" && (editor.kind === "product" || editor.kind === "service") ? t("kindLabel.product") : KIND_LABEL[editor.mode === "open" ? editor.kind : "product"];
 
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -181,12 +192,12 @@ export function CatalogTab({
     // return here looks exactly like a dead button: the drawer stays open with
     // the old values and no request is ever made.
     if (editor.mode !== "open") {
-      setFormError("This editor isn't ready yet. Close it and open the item again.");
+      setFormError(t("editorNotReady"));
       return;
     }
     const action = SAVE[editor.kind];
     if (!action) {
-      setFormError(`Saving a ${KIND_LABEL[editor.kind]} isn't supported here.`);
+      setFormError(t("savingNotSupported", { kind: KIND_LABEL[editor.kind] }));
       return;
     }
 
@@ -211,7 +222,7 @@ export function CatalogTab({
       requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>("[aria-invalid='true']")?.focus());
       return;
     }
-    toast.success(editor.id ? "Saved" : `${capitalise(createdLabel)} created`);
+    toast.success(editor.id ? t("saved") : t("createdToast", { kind: capitalise(createdLabel) }));
     setOptions(null); // categories and pickers may have changed
     close();
     router.refresh();
@@ -224,7 +235,7 @@ export function CatalogTab({
     const res = await setItemActiveAction(merchantId, editor.kind, editor.id, next);
     setBusy(null);
     if ("error" in res) return toast.error(res.error);
-    toast.success(next ? "Now visible in the app" : "Hidden from the app");
+    toast.success(next ? t("nowVisible") : t("nowHidden"));
     close();
     router.refresh();
   }
@@ -241,13 +252,13 @@ export function CatalogTab({
     // Hidden and deleted look the same from here — the row simply changes —
     // so the clinic is told which one it got, and why.
     const explanation = res.hidden ? whyHidden(res.usage) : null;
-    toast.success(explanation ?? "Removed");
+    toast.success(explanation ?? t("removed"));
     close();
     router.refresh();
   }
 
   const Form = editor.mode === "open" ? FORMS[editor.kind] : undefined;
-  const kindLabel = editor.mode === "open" || editor.mode === "loading" ? KIND_LABEL[editor.kind] : "item";
+  const kindLabel = editor.mode === "open" || editor.mode === "loading" ? KIND_LABEL[editor.kind] : t("kindLabel.item");
   // Everything sold in the shop is "a product" to the clinic, whatever it
   // chooses to call the thing itself inside the form.
   const isShopItem = editor.mode === "open" && (editor.kind === "product" || editor.kind === "service");
@@ -256,12 +267,12 @@ export function CatalogTab({
       ? config.create
       : isShopItem
         ? editor.id
-          ? "Edit product"
-          : "Create a product"
+          ? t("editProduct")
+          : t("createProduct")
         : editor.mode === "open" && editor.id
-          ? String(editor.item.name ?? editor.item.title ?? `Edit ${kindLabel}`)
-          : `New ${kindLabel}`;
-  const saveLabel = editor.mode === "open" && editor.id ? "Save changes" : isShopItem ? "Create product" : `Create ${kindLabel}`;
+          ? String(editor.item.name ?? editor.item.title ?? t("editKind", { kind: kindLabel }))
+          : t("newKind", { kind: kindLabel });
+  const saveLabel = editor.mode === "open" && editor.id ? t("saveChanges") : isShopItem ? t("createProduct") : t("createKind", { kind: kindLabel });
 
   return (
     <>
@@ -279,8 +290,8 @@ export function CatalogTab({
             <input
               name="q"
               defaultValue={q}
-              placeholder="Search..."
-              aria-label={`Search ${config.heading}`}
+              placeholder={t("searchPlaceholder")}
+              aria-label={t("searchAria", { heading: config.heading })}
               className="h-8 w-44 rounded-[10px] border border-border bg-surface pl-8 pr-3 text-[12px] outline-none focus-visible:ring-2 focus-visible:ring-primary"
             />
           </form>
@@ -288,7 +299,7 @@ export function CatalogTab({
             <select
               value={typeFilter}
               onChange={(e) => navigate({ type: e.target.value })}
-              aria-label="Filter"
+              aria-label={t("filterAria")}
               className="h-8 rounded-[10px] border border-border bg-surface px-2 text-[12px] outline-none"
             >
               {config.filters.map(([value, label]) => (
@@ -326,7 +337,7 @@ export function CatalogTab({
                   <span className="flex shrink-0 items-center gap-2">
                     {item.warning && <Pill tone="amber">{item.warning}</Pill>}
                     {item.priceCents !== null && <span className="tabular text-[13px] font-medium">{formatMoney(item.priceCents, currency)}</span>}
-                    <Pill tone={item.active ? "green" : "neutral"}>{item.active ? "Visible" : "Hidden"}</Pill>
+                    <Pill tone={item.active ? "green" : "neutral"}>{item.active ? t("visible") : t("hidden")}</Pill>
                   </span>
                 </button>
               </li>
@@ -349,29 +360,29 @@ export function CatalogTab({
                   <>
                     <Button type="button" variant="outline" size="sm" onClick={toggleActive} disabled={busy !== null}>
                       {busy === "toggle" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                      {editor.item.active ? "Hide from app" : "Show in app"}
+                      {editor.item.active ? t("hideFromApp") : t("showInApp")}
                     </Button>
                     <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmArchive(true)} disabled={busy !== null}>
-                      Remove
+                      {t("remove")}
                     </Button>
                   </>
                 )}
                 {confirmArchive && (
                   <>
-                    <span className="max-w-md text-[12px] text-ink-muted">{deleteWarning ?? `Remove this ${kindLabel}?`}</span>
+                    <span className="max-w-md text-[12px] text-ink-muted">{deleteWarning ?? t("removeThisKind", { kind: kindLabel })}</span>
                     <Button type="button" variant="danger" size="sm" onClick={archive} disabled={busy !== null}>
                       {busy === "archive" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                      Remove
+                      {t("remove")}
                     </Button>
                     <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmArchive(false)}>
-                      Keep
+                      {t("keep")}
                     </Button>
                   </>
                 )}
               </div>
               <div className="flex items-center gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={close}>
-                  Cancel
+                  {tc("cancel")}
                 </Button>
                 {/* Targets the form by id, so it must not be offered before
                     that form exists — a submit button pointing at nothing is
@@ -395,9 +406,7 @@ export function CatalogTab({
                 className="rounded-card border border-border p-4 text-left hover:border-primary hover:bg-primary-soft"
               >
                 <span className="block text-[14px] font-semibold">{capitalise(KIND_LABEL[k])}</span>
-                <span className="mt-1 block text-[12px] text-ink-muted">
-                  {k === "service" ? "Something clients book an appointment for." : "Something clients buy and take home."}
-                </span>
+                <span className="mt-1 block text-[12px] text-ink-muted">{k === "service" ? t("serviceExplanation") : t("productLikeExplanation")}</span>
               </button>
             ))}
           </div>

@@ -4,6 +4,7 @@ import * as React from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { describeActionFailure } from "@/lib/action-failure";
 import { givePersonalDiscountAction } from "@/lib/actions/personal-discount";
@@ -17,6 +18,7 @@ import { givePersonalDiscountAction } from "@/lib/actions/personal-discount";
  */
 export function PersonalDiscount({ merchantId, customerProfileId, clientName }: { merchantId: string; customerProfileId: string; clientName: string }) {
   const router = useRouter();
+  const t = useTranslations("portal.clients.personalDiscount");
   const [percent, setPercent] = React.useState("10");
   const [days, setDays] = React.useState("14");
   const [reason, setReason] = React.useState("");
@@ -38,10 +40,10 @@ export function PersonalDiscount({ merchantId, customerProfileId, clientName }: 
 
     toast.success(
       result.heldUntil
-        ? `Discount given. ${clientName} will hear about it at 09:00 — nothing is sent overnight.`
+        ? t("toastGivenHeld", { name: clientName })
         : result.notified > 0
-          ? `Discount given and ${clientName} notified.`
-          : "Discount given.",
+          ? t("toastGivenNotified", { name: clientName })
+          : t("toastGiven"),
     );
     setReason("");
     router.refresh();
@@ -49,10 +51,10 @@ export function PersonalDiscount({ merchantId, customerProfileId, clientName }: 
 
   return (
     <div className="space-y-3 rounded-card border border-border p-3">
-      <p className="text-[13px] font-medium">Give a personal discount</p>
+      <p className="text-[13px] font-medium">{t("title")}</p>
       <div className="grid grid-cols-2 gap-2">
         <label className="text-[12px] text-ink-muted">
-          Percent off
+          {t("percentOff")}
           <input
             value={percent}
             onChange={(e) => setPercent(e.target.value.replace(/\D/g, "").slice(0, 3))}
@@ -61,7 +63,7 @@ export function PersonalDiscount({ merchantId, customerProfileId, clientName }: 
           />
         </label>
         <label className="text-[12px] text-ink-muted">
-          Valid for (days)
+          {t("validForDays")}
           <input
             value={days}
             onChange={(e) => setDays(e.target.value.replace(/\D/g, "").slice(0, 3))}
@@ -71,26 +73,24 @@ export function PersonalDiscount({ merchantId, customerProfileId, clientName }: 
         </label>
       </div>
       <label className="block text-[12px] text-ink-muted">
-        What to call it (optional)
+        {t("whatToCallIt")}
         <input
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           maxLength={60}
-          placeholder="Sorry about the wait"
+          placeholder={t("reasonPlaceholder")}
           className="mt-1 h-9 w-full rounded-[10px] border border-border bg-surface px-2 text-[13px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-primary"
         />
       </label>
       <label className="flex items-center gap-2 text-[12px]">
         <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="h-3.5 w-3.5" />
-        Tell them now
+        {t("tellThemNow")}
       </label>
       <Button size="sm" onClick={give} disabled={pending || !percent || !days}>
         {pending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-        Give discount
+        {t("giveDiscount")}
       </Button>
-      <p className="text-[11px] text-ink-muted">
-        Applied automatically at their next checkout. Only sent if they have offers switched on, and only inside your sending hours.
-      </p>
+      <p className="text-[11px] text-ink-muted">{t("appliedAutomatically")}</p>
     </div>
   );
 }

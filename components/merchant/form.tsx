@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { ImagePlus, Loader2, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 
 /**
@@ -206,6 +207,7 @@ export function ImageField({
   /** Called with the current URLs, for forms that keep images in their own state. */
   onChange?: (urls: string[]) => void;
 }) {
+  const t = useTranslations("merchant.form");
   const initial = Array.isArray(defaultValue) ? defaultValue : defaultValue ? [defaultValue] : [];
   const [urls, setUrls] = React.useState<string[]>(initial);
   const [uploading, setUploading] = React.useState(false);
@@ -227,7 +229,7 @@ export function ImageField({
         body.set("file", file);
         const res = await fetch("/api/uploads", { method: "POST", body });
         const json = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-        if (!res.ok || !json.url) throw new Error(json.error ?? "Upload failed.");
+        if (!res.ok || !json.url) throw new Error(json.error ?? t("uploadFailed"));
         added.push(json.url);
       }
       setUrls((prev) => {
@@ -236,7 +238,7 @@ export function ImageField({
         return next;
       });
     } catch (e) {
-      setUploadError(e instanceof Error ? e.message : "Upload failed.");
+      setUploadError(e instanceof Error ? e.message : t("uploadFailed"));
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -244,7 +246,7 @@ export function ImageField({
   }
 
   return (
-    <Field label={label} name={name} error={error} hint={hint ?? "PNG, JPEG, WebP or GIF, up to 5MB."}>
+    <Field label={label} name={name} error={error} hint={hint ?? t("uploadHint")}>
       {urls.map((u) => (
         <input key={u} type="hidden" name={name} value={u} />
       ))}
@@ -262,7 +264,7 @@ export function ImageField({
                 return next;
               })
             }
-              aria-label="Remove image"
+              aria-label={t("removeImage")}
               className="absolute right-1 top-1 rounded-full bg-surface/90 p-0.5 text-ink shadow"
             >
               <X className="h-3 w-3" />
@@ -277,7 +279,7 @@ export function ImageField({
             className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-[10px] border border-dashed border-border text-[11px] text-ink-muted hover:bg-app disabled:opacity-60"
           >
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-            {uploading ? "Uploading" : "Add"}
+            {uploading ? t("uploading") : t("add")}
           </button>
         )}
       </div>

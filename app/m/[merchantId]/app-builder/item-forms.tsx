@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslations } from "next-intl";
 import {
   CheckboxField,
   FormSection,
@@ -51,8 +52,9 @@ const isNew = (item: Record<string, unknown>) => !item.id;
 /** New items start visible; existing ones keep their state. */
 const activeDefault = (item: Record<string, unknown>) => (isNew(item) ? true : Boolean(item.active));
 
-function VisibilityField({ item, label = "Visible in the app" }: { item: Record<string, unknown>; label?: string }) {
-  return <CheckboxField name="active" label={label} description="Clients can see and buy this." defaultChecked={activeDefault(item)} />;
+function VisibilityField({ item, label }: { item: Record<string, unknown>; label?: string }) {
+  const t = useTranslations("portal.appBuilder.itemForms.shared");
+  return <CheckboxField name="active" label={label ?? t("visibleInApp")} description={t("visibleInAppDescription")} defaultChecked={activeDefault(item)} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -70,6 +72,7 @@ export function ProductForm(props: ItemFormProps) {
 }
 
 export function PackageForm({ merchantId, currency, item, options, errors }: ItemFormProps) {
+  const t = useTranslations("portal.appBuilder.itemForms.packageForm");
   const chosen = new Set(((item.items as { serviceId: string }[]) ?? []).map((i) => i.serviceId));
 
   // What clients will see, recomputed as the clinic types. The saving is only
@@ -85,12 +88,12 @@ export function PackageForm({ merchantId, currency, item, options, errors }: Ite
 
   return (
     <div className="space-y-5">
-      <FormSection title="Custom plan">
-        <TextField label="Name" name="name" defaultValue={str(item.name)} errors={errors} required />
-        <TextAreaField label="Description" name="description" defaultValue={str(item.description)} errors={errors} />
+      <FormSection title={t("title")}>
+        <TextField label={t("nameLabel")} name="name" defaultValue={str(item.name)} errors={errors} required />
+        <TextAreaField label={t("descriptionLabel")} name="description" defaultValue={str(item.description)} errors={errors} />
         <div className="grid grid-cols-2 gap-3">
           <MoneyField
-            label="Price incl. VAT"
+            label={t("priceInclVatLabel")}
             name="price"
             currency={currency}
             value={priceInput}
@@ -99,7 +102,7 @@ export function PackageForm({ merchantId, currency, item, options, errors }: Ite
             required
           />
           <TextField
-            label="Sessions included"
+            label={t("sessionsIncludedLabel")}
             name="totalUses"
             type="number"
             min={2}
@@ -113,25 +116,24 @@ export function PackageForm({ merchantId, currency, item, options, errors }: Ite
           <div className="pk-notice pk-notice-info">
             <Info className="ic h-4 w-4" aria-hidden="true" />
             <span className="txt">
-              Clients will see <b>{formatMoney(Math.round(priceCents / sessions), currency)} per session</b>
+              {t("perSessionPreview")} <b>{formatMoney(Math.round(priceCents / sessions), currency)} {t("perSession")}</b>
               {preview.savingCents !== null ? (
                 <>
                   {" "}
-                  and <b>{preview.atLeast ? "Save at least" : "Save"} {formatMoney(preview.savingCents, currency)}</b>. Members see a smaller saving,
-                  because they already pay less for one session.
+                  {t("and")} <b>{preview.atLeast ? t("saveAtLeast") : t("save")} {formatMoney(preview.savingCents, currency)}</b>. {t("membersSeeSmallerSaving")}
                 </>
               ) : (
-                <>. No saving is shown: this costs the same or more than buying the sessions one by one.</>
+                <>. {t("noSavingShown")}</>
               )}
             </span>
           </div>
         )}
-        <TextField label="Expires after (days)" name="expiryDays" type="number" min={1} defaultValue={str(item.expiryDays)} errors={errors} hint="Leave empty for no expiry." />
-        <ImageField label="Image" name="imageUrl" merchantId={merchantId} defaultValue={item.imageUrl as string} errors={errors} />
+        <TextField label={t("expiryLabel")} name="expiryDays" type="number" min={1} defaultValue={str(item.expiryDays)} errors={errors} hint={t("expiryHint")} />
+        <ImageField label={t("imageLabel")} name="imageUrl" merchantId={merchantId} defaultValue={item.imageUrl as string} errors={errors} />
       </FormSection>
-      <FormSection title="Treatments it covers">
+      <FormSection title={t("treatmentsTitle")}>
         {options.services.length === 0 ? (
-          <p className="text-[12px] text-ink-muted">Add a treatment in Products first.</p>
+          <p className="text-[12px] text-ink-muted">{t("addTreatmentFirst")}</p>
         ) : (
           <div className="max-h-56 space-y-1.5 overflow-y-auto">
             {options.services.map((s) => (
@@ -154,9 +156,9 @@ export function PackageForm({ merchantId, currency, item, options, errors }: Ite
         )}
         {errors?.serviceIds && <p className="text-[12px] text-[var(--accent-red)]">{errors.serviceIds}</p>}
       </FormSection>
-      <FormSection title="Settings">
+      <FormSection title={t("settingsTitle")}>
         <VisibilityField item={item} />
-        <CheckboxField name="transferable" label="Transferable" description="The client may give remaining sessions to someone else." defaultChecked={Boolean(item.transferable)} />
+        <CheckboxField name="transferable" label={t("transferableLabel")} description={t("transferableDescription")} defaultChecked={Boolean(item.transferable)} />
       </FormSection>
     </div>
   );
@@ -230,6 +232,7 @@ function scopeOf(item: Record<string, unknown>) {
 }
 
 export function PromotionForm({ merchantId, currency, item, options, errors }: ItemFormProps) {
+  const t = useTranslations("portal.appBuilder.itemForms.promotionForm");
   const [discountType, setDiscountType] = React.useState(str(item.discountType) || "PERCENT");
   const [segment, setSegment] = React.useState(str(item.customerSegment) || "ALL");
   const scope = scopeOf(item);
@@ -254,114 +257,114 @@ export function PromotionForm({ merchantId, currency, item, options, errors }: I
 
   return (
     <div className="space-y-5">
-      <FormSection title="Offer">
+      <FormSection title={t("offerTitle")}>
         <div>
-          <TextField label="Title" name="title" value={title} onChange={(e) => setTitle(e.target.value)} errors={errors} required />
+          <TextField label={t("titleLabel")} name="title" value={title} onChange={(e) => setTitle(e.target.value)} errors={errors} required />
           <FieldIssues issues={check.byField.title} />
         </div>
         <div>
-          <TextAreaField label="Description" name="description" value={description} onChange={(e) => setDescription(e.target.value)} errors={errors} />
+          <TextAreaField label={t("descriptionLabel")} name="description" value={description} onChange={(e) => setDescription(e.target.value)} errors={errors} />
           <FieldIssues issues={check.byField.description} />
         </div>
-        <ImageField label="Image" name="imageUrl" merchantId={merchantId} defaultValue={item.imageUrl as string} errors={errors} />
+        <ImageField label={t("imageLabel")} name="imageUrl" merchantId={merchantId} defaultValue={item.imageUrl as string} errors={errors} />
         <TextCheckPanel issues={check.issues} blocking={check.blocking} />
         {/* The drawer's Save reads this: an offer with an open issue can be
             kept as a draft but not published. */}
         <input type="hidden" name="__textCheckBlocking" value={check.blocking} />
       </FormSection>
-      <FormSection title="Discount">
+      <FormSection title={t("discountTitle")}>
         <div className="grid grid-cols-2 gap-3">
           <SelectField
-            label="Type"
+            label={t("typeLabel")}
             name="discountType"
             value={discountType}
             onChange={(e) => setDiscountType(e.target.value)}
             options={[
-              { value: "PERCENT", label: "Percentage off" },
-              { value: "FIXED_AMOUNT", label: "Amount off" },
+              { value: "PERCENT", label: t("percentageOff") },
+              { value: "FIXED_AMOUNT", label: t("amountOff") },
             ]}
             errors={errors}
           />
           {discountType === "PERCENT" ? (
-            <TextField key="pct" label="Percentage" name="discountValue" type="number" min={1} max={100} defaultValue={valueDefault} errors={errors} required />
+            <TextField key="pct" label={t("percentageLabel")} name="discountValue" type="number" min={1} max={100} defaultValue={valueDefault} errors={errors} required />
           ) : (
-            <MoneyField key="amt" label="Amount" name="discountValue" currency={currency} defaultValue={valueDefault} errors={errors} required />
+            <MoneyField key="amt" label={t("amountLabel")} name="discountValue" currency={currency} defaultValue={valueDefault} errors={errors} required />
           )}
         </div>
-        <TextField label="Code" name="code" defaultValue={str(item.code)} errors={errors} hint="Optional — for your own till. Clients in the app never type one." />
+        <TextField label={t("codeLabel")} name="code" defaultValue={str(item.code)} errors={errors} hint={t("codeHint")} />
         <CheckboxField
           name="autoApply"
-          label="Apply automatically in the client app"
-          description="Eligible clients get it at checkout without typing anything, and see it on the price in the shop."
+          label={t("autoApplyLabel")}
+          description={t("autoApplyDescription")}
           defaultChecked={isNew(item) ? true : Boolean(item.autoApply)}
         />
         <MoneyField
-          label="Minimum order"
+          label={t("minOrderLabel")}
           name="minOrder"
           currency={currency}
           defaultValue={item.minOrderCents ? centsToInput(item.minOrderCents as number) : ""}
           errors={errors}
-          hint="Empty = no minimum."
+          hint={t("minOrderHint")}
         />
       </FormSection>
-      <FormSection title="What it covers">
-        <p className="text-[12px] text-ink-muted">Choose nothing to discount the whole shop.</p>
-        <MultiPick label="Treatment categories" name="serviceCategoryIds" options={options.serviceCategoryOptions ?? []} selected={scope.serviceCategoryIds} />
-        <MultiPick label="Product categories" name="productCategoryIds" options={options.productCategoryOptions ?? []} selected={scope.productCategoryIds} />
-        <MultiPick label="Individual treatments" name="serviceIds" options={options.services} selected={scope.serviceIds} />
-        <MultiPick label="Individual products" name="productIds" options={options.products} selected={scope.productIds} />
+      <FormSection title={t("coversTitle")}>
+        <p className="text-[12px] text-ink-muted">{t("coversHint")}</p>
+        <MultiPick label={t("serviceCategoriesLabel")} name="serviceCategoryIds" options={options.serviceCategoryOptions ?? []} selected={scope.serviceCategoryIds} />
+        <MultiPick label={t("productCategoriesLabel")} name="productCategoryIds" options={options.productCategoryOptions ?? []} selected={scope.productCategoryIds} />
+        <MultiPick label={t("individualTreatmentsLabel")} name="serviceIds" options={options.services} selected={scope.serviceIds} />
+        <MultiPick label={t("individualProductsLabel")} name="productIds" options={options.products} selected={scope.productIds} />
       </FormSection>
-      <FormSection title="When">
+      <FormSection title={t("whenTitle")}>
         <CheckboxField
           name="startNow"
-          label="Start immediately"
-          description="The offer starts the moment you save, so filling in this form doesn't leave it starting in the past."
+          label={t("startImmediatelyLabel")}
+          description={t("startImmediatelyDescription")}
           checked={startNow}
           onChange={setStartNow}
         />
         <div className="grid grid-cols-2 gap-3">
-          {!startNow && <DateTimeField label="Starts" name="startAt" iso={start} errors={errors} />}
-          <DateTimeField label="Ends" name="endAt" iso={end} errors={errors} />
+          {!startNow && <DateTimeField label={t("startsLabel")} name="startAt" iso={start} errors={errors} />}
+          <DateTimeField label={t("endsLabel")} name="endAt" iso={end} errors={errors} />
         </div>
-        <p className="text-[12px] text-ink-muted">Times are your clinic&apos;s own, whatever timezone you happen to be in.</p>
+        <p className="text-[12px] text-ink-muted">{t("timesHint")}</p>
       </FormSection>
-      <FormSection title="Who and how often">
+      <FormSection title={t("whoTitle")}>
         <SelectField
-          label="Clients"
+          label={t("clientsLabel")}
           name="customerSegment"
           value={segment}
           onChange={(e) => setSegment(e.target.value)}
           options={[
-            { value: "ALL", label: "Everyone" },
-            { value: "NEW", label: "New clients" },
-            { value: "MEMBERS", label: "Members" },
-            { value: "NON_MEMBERS", label: "Non-members" },
-            ...(options.tags.length ? [{ value: "TAGGED", label: "Clients with a tag" }] : []),
+            { value: "ALL", label: t("everyone") },
+            { value: "NEW", label: t("newClients") },
+            { value: "MEMBERS", label: t("members") },
+            { value: "NON_MEMBERS", label: t("nonMembers") },
+            ...(options.tags.length ? [{ value: "TAGGED", label: t("clientsWithTag") }] : []),
           ]}
           errors={errors}
         />
         {segment === "TAGGED" && (
           <SelectField
-            label="Tag"
+            label={t("tagLabel")}
             name="segmentTagId"
             defaultValue={str(item.segmentTagId)}
-            options={[{ value: "", label: "Choose a tag" }, ...options.tags.map((t) => ({ value: t.id, label: t.name }))]}
+            options={[{ value: "", label: t("chooseTag") }, ...options.tags.map((tag) => ({ value: tag.id, label: tag.name }))]}
             errors={errors}
           />
         )}
         <div className="grid grid-cols-2 gap-3">
-          <TextField label="Total uses" name="usageLimit" type="number" min={1} defaultValue={str(item.usageLimit)} errors={errors} hint="Empty = unlimited" />
-          <TextField label="Uses per client" name="perCustomerLimit" type="number" min={1} defaultValue={str(item.perCustomerLimit)} errors={errors} hint="Empty = unlimited" />
+          <TextField label={t("totalUsesLabel")} name="usageLimit" type="number" min={1} defaultValue={str(item.usageLimit)} errors={errors} hint={t("unlimitedHint")} />
+          <TextField label={t("usesPerClientLabel")} name="perCustomerLimit" type="number" min={1} defaultValue={str(item.perCustomerLimit)} errors={errors} hint={t("unlimitedHint")} />
         </div>
-        <CheckboxField name="appOnly" label="App only" description="Only redeemable through the client app." defaultChecked={Boolean(item.appOnly)} />
-        <CheckboxField name="active" label="Active" description="Shown to clients between the start and end dates." defaultChecked={activeDefault(item)} />
+        <CheckboxField name="appOnly" label={t("appOnlyLabel")} description={t("appOnlyDescription")} defaultChecked={Boolean(item.appOnly)} />
+        <CheckboxField name="active" label={t("activeLabel")} description={t("activeDescription")} defaultChecked={activeDefault(item)} />
       </FormSection>
       <NotifyOffer
         merchantId={merchantId}
         offerTitle={title}
         offerDescription={description}
         startAt={start}
-        clinicName={options.clinicName ?? "Your clinic"}
+        clinicName={options.clinicName ?? t("yourClinic")}
         campaigns={(item.campaigns as OfferCampaign[]) ?? []}
         canSend={options.canSendMessages ?? false}
         errors={errors}
@@ -371,6 +374,7 @@ export function PromotionForm({ merchantId, currency, item, options, errors }: I
 }
 
 export function MembershipPlanForm({ currency, item, errors }: ItemFormProps) {
+  const t = useTranslations("portal.appBuilder.itemForms.membershipPlanForm");
   const [pauseAllowed, setPauseAllowed] = React.useState(isNew(item) ? true : Boolean(item.pauseAllowed));
   const members = Number(item.activeMembers ?? 0);
   const benefits = ((item.benefits as { description: string }[]) ?? []).map((b) => b.description).join("\n");
@@ -378,22 +382,21 @@ export function MembershipPlanForm({ currency, item, errors }: ItemFormProps) {
     <div className="space-y-5">
       {members > 0 && (
         <p className="rounded-[10px] bg-[var(--accent-amber)]/10 px-3 py-2 text-[12px] text-ink">
-          {members} client{members === 1 ? " is" : "s are"} on this plan. A new price applies to people who join from now on; the billing period is
-          locked while anybody is on it.
+          {t("activeMembersNotice", { count: members })}
         </p>
       )}
-      <FormSection title="Plan">
-        <TextField label="Name" name="name" defaultValue={str(item.name)} errors={errors} required />
-        <TextAreaField label="Description" name="description" defaultValue={str(item.description)} errors={errors} />
+      <FormSection title={t("planTitle")}>
+        <TextField label={t("nameLabel")} name="name" defaultValue={str(item.name)} errors={errors} required />
+        <TextAreaField label={t("descriptionLabel")} name="description" defaultValue={str(item.description)} errors={errors} />
         <div className="grid grid-cols-2 gap-3">
-          <MoneyField label="Price incl. VAT" name="price" currency={currency} defaultValue={centsToInput(item.priceCents as number)} errors={errors} required />
+          <MoneyField label={t("priceInclVatLabel")} name="price" currency={currency} defaultValue={centsToInput(item.priceCents as number)} errors={errors} required />
           <SelectField
-            label="Billed"
+            label={t("billedLabel")}
             name="billingFrequency"
             defaultValue={str(item.billingFrequency) || "MONTHLY"}
             options={[
-              { value: "MONTHLY", label: "Monthly" },
-              { value: "ANNUAL", label: "Yearly" },
+              { value: "MONTHLY", label: t("monthly") },
+              { value: "ANNUAL", label: t("yearly") },
             ]}
             errors={errors}
             disabled={members > 0}
@@ -401,106 +404,107 @@ export function MembershipPlanForm({ currency, item, errors }: ItemFormProps) {
           {/* A disabled select is not submitted; send the locked value. */}
           {members > 0 && <input type="hidden" name="billingFrequency" value={str(item.billingFrequency)} />}
         </div>
-        <TextAreaField label="Benefits" name="benefits" defaultValue={benefits} rows={4} errors={errors} hint="One per line. Shown on the plan card in the app." />
+        <TextAreaField label={t("benefitsLabel")} name="benefits" defaultValue={benefits} rows={4} errors={errors} hint={t("benefitsHint")} />
       </FormSection>
-      <FormSection title="Member perks">
+      <FormSection title={t("memberPerksTitle")}>
         <div className="grid grid-cols-2 gap-3">
           {/* Each rate covers its own half of the catalogue and nothing else,
               which is the easiest thing here to get wrong: a treatment
               discount does nothing for a member buying from the shelf. */}
           <TextField
-            label="Treatment discount %"
+            label={t("serviceDiscountLabel")}
             name="serviceDiscountPercent"
             type="number"
             min={1}
             max={100}
             defaultValue={str(item.serviceDiscountPercent)}
             errors={errors}
-            hint="Members pay this much less for treatments. It does not apply to shop products."
+            hint={t("serviceDiscountHint")}
           />
           <TextField
-            label="Product discount %"
+            label={t("productDiscountLabel")}
             name="productDiscountPercent"
             type="number"
             min={1}
             max={100}
             defaultValue={str(item.productDiscountPercent)}
             errors={errors}
-            hint="Members pay this much less for shop products. It does not apply to treatments."
+            hint={t("productDiscountHint")}
           />
         </div>
-        <MoneyField label="Credit included each period" name="includedCredit" currency={currency} defaultValue={centsToInput(item.includedCreditCents as number)} errors={errors} />
+        <MoneyField label={t("includedCreditLabel")} name="includedCredit" currency={currency} defaultValue={centsToInput(item.includedCreditCents as number)} errors={errors} />
         {members > 0 && (
           <div className="rounded-[10px] border border-border p-3">
             <CheckboxField
               name="applyToExistingMembers"
-              label="Also move existing members to the new price"
-              description="Only has an effect if you changed the price. Each member keeps their current price until their first billing date at least 30 days from now, and is told straight away what the new price is, when it starts, and how to cancel before then."
+              label={t("applyToExistingLabel")}
+              description={t("applyToExistingDescription")}
               defaultChecked={false}
             />
           </div>
         )}
-        <CheckboxField name="priorityAccess" label="Priority booking" defaultChecked={Boolean(item.priorityAccess)} />
+        <CheckboxField name="priorityAccess" label={t("priorityBookingLabel")} defaultChecked={Boolean(item.priorityAccess)} />
       </FormSection>
-      <FormSection title="Terms">
-        <TextField label="Minimum term (months)" name="minimumCommitmentMonths" type="number" min={1} defaultValue={str(item.minimumCommitmentMonths)} errors={errors} />
-        <CheckboxField name="pauseAllowed" label="Members may pause" checked={pauseAllowed} onChange={setPauseAllowed} />
-        {pauseAllowed && <TextField label="Longest pause (months)" name="maxPauseMonths" type="number" min={1} max={12} defaultValue={str(item.maxPauseMonths)} errors={errors} />}
-        <TextAreaField label="Cancellation policy" name="cancellationPolicy" defaultValue={str(item.cancellationPolicy)} errors={errors} />
-        <CheckboxField name="active" label="Open to new members" description="Hidden plans keep their current members." defaultChecked={activeDefault(item)} />
+      <FormSection title={t("termsTitle")}>
+        <TextField label={t("minimumTermLabel")} name="minimumCommitmentMonths" type="number" min={1} defaultValue={str(item.minimumCommitmentMonths)} errors={errors} />
+        <CheckboxField name="pauseAllowed" label={t("pauseAllowedLabel")} checked={pauseAllowed} onChange={setPauseAllowed} />
+        {pauseAllowed && <TextField label={t("longestPauseLabel")} name="maxPauseMonths" type="number" min={1} max={12} defaultValue={str(item.maxPauseMonths)} errors={errors} />}
+        <TextAreaField label={t("cancellationPolicyLabel")} name="cancellationPolicy" defaultValue={str(item.cancellationPolicy)} errors={errors} />
+        <CheckboxField name="active" label={t("openToNewLabel")} description={t("openToNewDescription")} defaultChecked={activeDefault(item)} />
       </FormSection>
     </div>
   );
 }
 
 export function RewardForm({ currency, item, options, errors }: ItemFormProps) {
+  const t = useTranslations("portal.appBuilder.itemForms.rewardForm");
   const [type, setType] = React.useState(str(item.rewardType) || "DISCOUNT_PERCENT");
   return (
     <div className="space-y-5">
-      <FormSection title="Reward">
-        <TextField label="Name" name="name" defaultValue={str(item.name)} errors={errors} required />
-        <TextAreaField label="Description" name="description" defaultValue={str(item.description)} errors={errors} />
-        <TextField label="Points needed" name="pointsCost" type="number" min={1} defaultValue={str(item.pointsCost)} errors={errors} required />
+      <FormSection title={t("rewardTitle")}>
+        <TextField label={t("nameLabel")} name="name" defaultValue={str(item.name)} errors={errors} required />
+        <TextAreaField label={t("descriptionLabel")} name="description" defaultValue={str(item.description)} errors={errors} />
+        <TextField label={t("pointsNeededLabel")} name="pointsCost" type="number" min={1} defaultValue={str(item.pointsCost)} errors={errors} required />
       </FormSection>
-      <FormSection title="What the client gets">
+      <FormSection title={t("whatClientGetsTitle")}>
         <SelectField
-          label="Type"
+          label={t("typeLabel")}
           name="rewardType"
           value={type}
           onChange={(e) => setType(e.target.value)}
           options={[
-            { value: "DISCOUNT_PERCENT", label: "Percentage off" },
-            { value: "DISCOUNT_AMOUNT", label: "Amount off" },
-            { value: "FREE_SERVICE", label: "Free treatment" },
-            { value: "FREE_PRODUCT", label: "Free product" },
+            { value: "DISCOUNT_PERCENT", label: t("percentageOff") },
+            { value: "DISCOUNT_AMOUNT", label: t("amountOff") },
+            { value: "FREE_SERVICE", label: t("freeTreatment") },
+            { value: "FREE_PRODUCT", label: t("freeProduct") },
           ]}
           errors={errors}
         />
         {type === "DISCOUNT_PERCENT" && (
-          <TextField label="Percentage" name="discountPercent" type="number" min={1} max={100} defaultValue={str(item.discountPercent)} errors={errors} required />
+          <TextField label={t("percentageLabel")} name="discountPercent" type="number" min={1} max={100} defaultValue={str(item.discountPercent)} errors={errors} required />
         )}
         {type === "DISCOUNT_AMOUNT" && (
-          <MoneyField label="Amount" name="discountAmount" currency={currency} defaultValue={centsToInput(item.discountAmountCents as number)} errors={errors} required />
+          <MoneyField label={t("amountLabel")} name="discountAmount" currency={currency} defaultValue={centsToInput(item.discountAmountCents as number)} errors={errors} required />
         )}
         {type === "FREE_SERVICE" && (
           <SelectField
-            label="Treatment"
+            label={t("treatmentLabel")}
             name="serviceId"
             defaultValue={str(item.serviceId)}
-            options={[{ value: "", label: "Choose a treatment" }, ...options.services.map((s) => ({ value: s.id, label: s.name }))]}
+            options={[{ value: "", label: t("chooseTreatment") }, ...options.services.map((s) => ({ value: s.id, label: s.name }))]}
             errors={errors}
           />
         )}
         {type === "FREE_PRODUCT" && (
           <SelectField
-            label="Product"
+            label={t("productLabel")}
             name="productId"
             defaultValue={str(item.productId)}
-            options={[{ value: "", label: "Choose a product" }, ...options.products.map((p) => ({ value: p.id, label: p.name }))]}
+            options={[{ value: "", label: t("chooseProduct") }, ...options.products.map((p) => ({ value: p.id, label: p.name }))]}
             errors={errors}
           />
         )}
-        <CheckboxField name="active" label="Available to redeem" defaultChecked={activeDefault(item)} />
+        <CheckboxField name="active" label={t("availableToRedeemLabel")} defaultChecked={activeDefault(item)} />
       </FormSection>
     </div>
   );

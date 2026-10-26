@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, Download, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Drawer, Pill } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
@@ -54,7 +55,7 @@ function SettingsForm({
   merchantId,
   save,
   canEdit,
-  lockedReason = "Only the clinic owner can change these settings.",
+  lockedReason,
   children,
 }: {
   merchantId: string;
@@ -63,6 +64,7 @@ function SettingsForm({
   lockedReason?: string;
   children: (errors: FieldErrors) => React.ReactNode;
 }) {
+  const t = useTranslations("portal.appBuilder.settings.sections.form");
   const router = useRouter();
   const [errors, setErrors] = React.useState<FieldErrors>();
   const [pending, setPending] = React.useState(false);
@@ -81,13 +83,13 @@ function SettingsForm({
       return;
     }
     setErrors(undefined);
-    toast.success("Saved");
+    toast.success(t("saved"));
     router.refresh();
   }
 
   return (
     <form ref={ref} onSubmit={onSubmit} noValidate className="space-y-6">
-      {!canEdit && <p className="rounded-[10px] bg-app px-3 py-2 text-[12px] text-ink-muted">{lockedReason}</p>}
+      {!canEdit && <p className="rounded-[10px] bg-app px-3 py-2 text-[12px] text-ink-muted">{lockedReason ?? t("lockedReasonDefault")}</p>}
       <fieldset disabled={!canEdit || pending} className="space-y-6">
         {children(errors)}
       </fieldset>
@@ -95,7 +97,7 @@ function SettingsForm({
         <div className="flex justify-end border-t border-border pt-4">
           <Button type="submit" disabled={pending}>
             {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Save changes
+            {t("saveChanges")}
           </Button>
         </div>
       )}
@@ -113,6 +115,7 @@ function SettingsForm({
  * listed in search.
  */
 function AppLinkCard({ merchantId, url, qrSvg }: { merchantId: string; url: string; qrSvg: string }) {
+  const t = useTranslations("portal.appBuilder.settings.sections.general");
   const [copied, setCopied] = React.useState(false);
   async function copy() {
     try {
@@ -120,28 +123,28 @@ function AppLinkCard({ merchantId, url, qrSvg }: { merchantId: string; url: stri
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      toast.error("Couldn't copy. Select the link and copy it instead.");
+      toast.error(t("copyError"));
     }
   }
   return (
-    <FormSection title="Your app link">
+    <FormSection title={t("appLinkTitle")}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
         {/* Generated on the server from our own URL — not user-supplied markup. */}
         <div className="h-36 w-36 shrink-0 rounded-[10px] border border-border bg-surface p-1" dangerouslySetInnerHTML={{ __html: qrSvg }} />
         <div className="min-w-0 space-y-3">
-          <p className="text-[13px] text-ink-muted">Clients scan this code or open the link to get your app, then add it to their home screen with your icon.</p>
+          <p className="text-[13px] text-ink-muted">{t("appLinkDescription")}</p>
           <p className="truncate rounded-[8px] bg-app px-3 py-2 font-mono text-[12px] text-ink" title={url}>{url}</p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={copy}>
               {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? "Copied" : "Copy link"}
+              {copied ? t("copied") : t("copyLink")}
             </Button>
             <a
               href={`/m/${merchantId}/app-qr`}
               download
               className="inline-flex h-9 items-center justify-center gap-1.5 rounded-pill border border-border bg-surface px-4 text-[13px] font-medium text-ink transition-colors hover:bg-app"
             >
-              <Download className="h-3.5 w-3.5" /> Download QR (PNG)
+              <Download className="h-3.5 w-3.5" /> {t("downloadQr")}
             </a>
           </div>
         </div>
@@ -151,6 +154,7 @@ function AppLinkCard({ merchantId, url, qrSvg }: { merchantId: string; url: stri
 }
 
 export function GeneralSection({ merchantId, data, canEdit }: { merchantId: string; data: Data<"general">; canEdit: boolean }) {
+  const t = useTranslations("portal.appBuilder.settings.sections.general");
   const s = data.settings;
   const b = data.branding;
   return (
@@ -159,62 +163,62 @@ export function GeneralSection({ merchantId, data, canEdit }: { merchantId: stri
     <SettingsForm merchantId={merchantId} save={saveGeneralSettingsAction} canEdit={canEdit}>
       {(errors) => (
         <>
-          <FormSection title="The client app">
+          <FormSection title={t("clientAppTitle")}>
             <CheckboxField
               name="publiclyListed"
-              label="List this clinic in the app's clinic search"
-              description="Clients can find you by name. Anyone with your QR code or link can always open your app."
+              label={t("publiclyListedLabel")}
+              description={t("publiclyListedDescription")}
               defaultChecked={s ? s.publiclyListed : true}
             />
             <CheckboxField
               name="payLaterEnabled"
-              label="Show pay-later"
-              description="Adds the 'Treat today, pay later' row to Home and Shop."
+              label={t("payLaterLabel")}
+              description={t("payLaterDescription")}
               defaultChecked={Boolean(s?.payLaterEnabled)}
             />
           </FormSection>
-          <FormSection title="Shop banner">
-            <TextField label="Headline" name="shopBannerHeadline" defaultValue={str(s?.shopBannerHeadline)} placeholder="Treat today. Pay later. Earn rewards." maxLength={80} errors={errors} />
-            <TextField label="Subtitle" name="shopBannerSubtitle" defaultValue={str(s?.shopBannerSubtitle)} placeholder="Free treatments & exclusive perks." maxLength={120} errors={errors} />
-            <TextField label="Button label" name="shopBannerButtonLabel" defaultValue={str(s?.shopBannerButtonLabel)} placeholder="How does it work?" maxLength={30} errors={errors} hint="Leave any field empty to use the default shown." />
+          <FormSection title={t("shopBannerTitle")}>
+            <TextField label={t("headlineLabel")} name="shopBannerHeadline" defaultValue={str(s?.shopBannerHeadline)} placeholder={t("headlinePlaceholder")} maxLength={80} errors={errors} />
+            <TextField label={t("subtitleLabel")} name="shopBannerSubtitle" defaultValue={str(s?.shopBannerSubtitle)} placeholder={t("subtitlePlaceholder")} maxLength={120} errors={errors} />
+            <TextField label={t("buttonLabelLabel")} name="shopBannerButtonLabel" defaultValue={str(s?.shopBannerButtonLabel)} placeholder={t("buttonLabelPlaceholder")} maxLength={30} errors={errors} hint={t("shopBannerHint")} />
           </FormSection>
-          <FormSection title="Client app language">
+          <FormSection title={t("languageTitle")}>
             <SelectField
-              label="Default language for new clients"
+              label={t("defaultLocaleLabel")}
               name="defaultClientLocale"
               defaultValue={s?.defaultClientLocale ?? "nl"}
               options={[
-                { value: "nl", label: "Dutch" },
-                { value: "en", label: "English" },
+                { value: "nl", label: t("dutch") },
+                { value: "en", label: t("english") },
               ]}
-              hint="A client can always change this themselves in Profile > Account > Language — changing it here only sets what a new client starts with."
+              hint={t("defaultLocaleHint")}
             />
             <SelectField
-              label="Dutch tone of voice"
+              label={t("toneLabel")}
               name="clientFormality"
               defaultValue={s?.clientFormality ?? "INFORMAL"}
               options={[
-                { value: "INFORMAL", label: "Informal — “je”" },
-                { value: "FORMAL", label: "Formal — “u”" },
+                { value: "INFORMAL", label: t("toneInformal") },
+                { value: "FORMAL", label: t("toneFormal") },
               ]}
-              hint="Only changes anything for clients using the Dutch app. Most beauty and wellness clinics use “je”."
+              hint={t("toneHint")}
             />
           </FormSection>
-          <FormSection title="Money">
+          <FormSection title={t("moneyTitle")}>
             <TextField
-              label="VAT rate (%)"
+              label={t("vatRateLabel")}
               name="vatRatePercent"
               inputMode="decimal"
               defaultValue={s ? String(s.vatRateBasisPoints / 100) : "21"}
               errors={errors}
-              hint="The VAT already included in your prices. Nothing is added at checkout — it is shown on receipts as “of which VAT”."
+              hint={t("vatRateHint")}
               className="max-w-[180px]"
             />
           </FormSection>
-          <FormSection title="Policies shown to clients">
-            <TextAreaField label="Terms" name="termsContent" rows={5} defaultValue={str(b?.termsContent)} errors={errors} />
-            <TextAreaField label="Privacy" name="privacyContent" rows={5} defaultValue={str(b?.privacyContent)} errors={errors} />
-            <TextAreaField label="Cancellation policy" name="cancellationPolicy" rows={3} defaultValue={str(b?.cancellationPolicy)} errors={errors} />
+          <FormSection title={t("policiesTitle")}>
+            <TextAreaField label={t("termsLabel")} name="termsContent" rows={5} defaultValue={str(b?.termsContent)} errors={errors} />
+            <TextAreaField label={t("privacyLabel")} name="privacyContent" rows={5} defaultValue={str(b?.privacyContent)} errors={errors} />
+            <TextAreaField label={t("cancellationPolicyLabel")} name="cancellationPolicy" rows={3} defaultValue={str(b?.cancellationPolicy)} errors={errors} />
           </FormSection>
         </>
       )}
@@ -278,6 +282,7 @@ function LaunchScreenPreview({
 }
 
 export function BrandingSection({ merchantId, data, canEdit }: { merchantId: string; data: Data<"branding">; canEdit: boolean }) {
+  const t = useTranslations("portal.appBuilder.settings.sections.branding");
   const b = data.branding;
   const [color, setColor] = React.useState(str(b?.primaryColor) || "#0f766e");
   const [name, setName] = React.useState(str(b?.businessName));
@@ -289,29 +294,29 @@ export function BrandingSection({ merchantId, data, canEdit }: { merchantId: str
     <SettingsForm merchantId={merchantId} save={saveBrandingAction} canEdit={canEdit}>
       {(errors) => (
         <>
-          <FormSection title="Identity">
-            <TextField label="Clinic name" name="businessName" value={name} onChange={(e) => setName(e.target.value)} errors={errors} required maxLength={120} />
+          <FormSection title={t("identityTitle")}>
+            <TextField label={t("clinicNameLabel")} name="businessName" value={name} onChange={(e) => setName(e.target.value)} errors={errors} required maxLength={120} />
             <div className="grid gap-4 sm:grid-cols-2">
-              <ImageField label="Logo" name="logoUrl" merchantId={merchantId} defaultValue={b?.logoUrl} errors={errors} hint="Shown at the top of the app's Home." />
+              <ImageField label={t("logoLabel")} name="logoUrl" merchantId={merchantId} defaultValue={b?.logoUrl} errors={errors} hint={t("logoHint")} />
               <ImageField
-                label="App icon"
+                label={t("appIconLabel")}
                 name="appIconUrl"
                 merchantId={merchantId}
                 purpose="app-icon"
                 defaultValue={b?.appIconUrl}
                 errors={errors}
                 onChange={(urls) => setAppIconUrl(urls[0] ?? null)}
-                hint="At least 512×512. Square fills the icon edge to edge; any other shape is centred on your brand colour. Becomes the icon when clients add your app to their home screen."
+                hint={t("appIconHint")}
               />
             </div>
             <div className="flex items-center gap-3">
               <HomeScreenIconPreview logoUrl={appIconUrl} color={color} name={name} />
-              <p className="max-w-xs text-[12px] text-ink-muted">How this looks as a home-screen icon, rounded the way iOS rounds it.</p>
+              <p className="max-w-xs text-[12px] text-ink-muted">{t("iconPreviewHint")}</p>
             </div>
             <div className="flex flex-wrap items-end gap-4">
               <div>
                 <label htmlFor="primaryColor" className="mb-1.5 block text-[12px] font-medium">
-                  Brand colour
+                  {t("brandColorLabel")}
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -325,7 +330,7 @@ export function BrandingSection({ merchantId, data, canEdit }: { merchantId: str
                     name="primaryColor"
                     value={color}
                     onChange={(e) => setColor(e.target.value)}
-                    aria-label="Brand colour hex"
+                    aria-label={t("brandColorHexAria")}
                     aria-invalid={Boolean(errors?.primaryColor)}
                     className="h-10 w-28 rounded-[10px] border border-border bg-surface px-3 font-mono text-[13px]"
                   />
@@ -342,17 +347,17 @@ export function BrandingSection({ merchantId, data, canEdit }: { merchantId: str
                     {(name || "C").charAt(0)}
                   </span>
                 )}
-                <span className="text-[12px] font-medium">{name || "Clinic name"}</span>
+                <span className="text-[12px] font-medium">{name || t("clinicNameFallback")}</span>
                 <span className="rounded-pill px-3 py-1 text-[11px] font-semibold text-white" style={{ background: color }}>
-                  Book
+                  {t("bookPill")}
                 </span>
               </div>
             </div>
           </FormSection>
-          <FormSection title="Launch screen">
-            <p className="-mt-1 text-[12px] text-ink-muted">What clients see for an instant when they open your installed app — your app icon above, centred on a background you choose.</p>
+          <FormSection title={t("launchScreenTitle")}>
+            <p className="-mt-1 text-[12px] text-ink-muted">{t("launchScreenDescription")}</p>
             <div className="flex flex-wrap items-center gap-6">
-              <div className="flex gap-3" role="radiogroup" aria-label="Launch screen background">
+              <div className="flex gap-3" role="radiogroup" aria-label={t("launchBackgroundAria")}>
                 {(["brand", "white"] as const).map((opt) => (
                   <label
                     key={opt}
@@ -369,43 +374,43 @@ export function BrandingSection({ merchantId, data, canEdit }: { merchantId: str
                       onChange={() => setLaunchBackground(opt)}
                       className="h-3.5 w-3.5"
                     />
-                    {opt === "brand" ? "Brand colour" : "White"}
+                    {opt === "brand" ? t("brandColorOption") : t("whiteOption")}
                   </label>
                 ))}
               </div>
               <LaunchScreenPreview logoUrl={appIconUrl} color={color} name={name} background={launchBackground} />
             </div>
             <p className="rounded-[10px] bg-surface-subtle px-3 py-2 text-[12px] text-ink-muted">
-              Clients need to remove and re-add the app to their home screen to see a new icon.
+              {t("reAddHint")}
             </p>
           </FormSection>
-          <FormSection title="Contact">
+          <FormSection title={t("contactTitle")}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <TextField label="Email" name="contactEmail" type="email" defaultValue={str(b?.contactEmail)} errors={errors} />
-              <TextField label="Phone" name="contactPhone" type="tel" defaultValue={str(b?.contactPhone)} errors={errors} />
+              <TextField label={t("emailLabel")} name="contactEmail" type="email" defaultValue={str(b?.contactEmail)} errors={errors} />
+              <TextField label={t("phoneLabel")} name="contactPhone" type="tel" defaultValue={str(b?.contactPhone)} errors={errors} />
             </div>
-            <TextField label="Website" name="website" type="url" placeholder="https://" defaultValue={str(b?.website)} errors={errors} />
-            <TextField label="Address" name="addressLine1" defaultValue={str(b?.addressLine1)} errors={errors} />
-            <TextField label="Address line 2" name="addressLine2" defaultValue={str(b?.addressLine2)} errors={errors} />
+            <TextField label={t("websiteLabel")} name="website" type="url" placeholder="https://" defaultValue={str(b?.website)} errors={errors} />
+            <TextField label={t("addressLabel")} name="addressLine1" defaultValue={str(b?.addressLine1)} errors={errors} />
+            <TextField label={t("addressLine2Label")} name="addressLine2" defaultValue={str(b?.addressLine2)} errors={errors} />
             <div className="grid gap-3 sm:grid-cols-4">
-              <TextField label="City" name="city" defaultValue={str(b?.city)} errors={errors} className="sm:col-span-2" />
-              <TextField label="Postcode" name="postalCode" defaultValue={str(b?.postalCode)} errors={errors} />
-              <TextField label="Country" name="country" defaultValue={str(b?.country)} errors={errors} />
+              <TextField label={t("cityLabel")} name="city" defaultValue={str(b?.city)} errors={errors} className="sm:col-span-2" />
+              <TextField label={t("postalCodeLabel")} name="postalCode" defaultValue={str(b?.postalCode)} errors={errors} />
+              <TextField label={t("countryLabel")} name="country" defaultValue={str(b?.country)} errors={errors} />
             </div>
           </FormSection>
-          <FormSection title="Region">
+          <FormSection title={t("regionTitle")}>
             <div className="grid gap-3 sm:grid-cols-2">
               <SelectField
-                label="Currency"
+                label={t("currencyLabel")}
                 name="currency"
                 defaultValue={str(b?.currency) || "EUR"}
                 options={currencies.map((c) => ({ value: c, label: c }))}
                 errors={errors}
                 disabled={data.currencyLocked}
-                hint={data.currencyLocked ? "Locked: this clinic has already taken payments." : undefined}
+                hint={data.currencyLocked ? t("currencyLockedHint") : undefined}
               />
               {data.currencyLocked && <input type="hidden" name="currency" value={str(b?.currency)} />}
-              <SelectField label="Time zone" name="timeZone" defaultValue={str(b?.timeZone) || "Europe/Amsterdam"} options={timeZones.map((t) => ({ value: t, label: t.replace(/_/g, " ") }))} errors={errors} />
+              <SelectField label={t("timeZoneLabel")} name="timeZone" defaultValue={str(b?.timeZone) || "Europe/Amsterdam"} options={timeZones.map((tz) => ({ value: tz, label: tz.replace(/_/g, " ") }))} errors={errors} />
             </div>
           </FormSection>
         </>
@@ -419,6 +424,8 @@ export function BrandingSection({ merchantId, data, canEdit }: { merchantId: str
 // ---------------------------------------------------------------------------
 
 export function TeamSection({ merchantId, data, canEdit }: { merchantId: string; data: Data<"team">; canEdit: boolean }) {
+  const t = useTranslations("portal.appBuilder.settings.sections.team");
+  const tc = useTranslations("common");
   const router = useRouter();
   const [inviting, setInviting] = React.useState(false);
   const [inviteLink, setInviteLink] = React.useState<{ link: string; emailed: boolean } | null>(null);
@@ -459,7 +466,7 @@ export function TeamSection({ merchantId, data, canEdit }: { merchantId: string;
     }
     setErrors(undefined);
     setRoleEditor(null);
-    toast.success("Role saved");
+    toast.success(t("roleSavedToast"));
     router.refresh();
   }
 
@@ -467,14 +474,14 @@ export function TeamSection({ merchantId, data, canEdit }: { merchantId: string;
 
   return (
     <div className="space-y-8">
-      {!canEdit && <p className="rounded-[10px] bg-app px-3 py-2 text-[12px] text-ink-muted">Only the clinic owner can manage the team.</p>}
+      {!canEdit && <p className="rounded-[10px] bg-app px-3 py-2 text-[12px] text-ink-muted">{t("ownerOnly")}</p>}
 
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">People</h3>
+          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">{t("peopleTitle")}</h3>
           {canEdit && (
             <Button size="sm" onClick={() => { setInviting(true); setInviteLink(null); setErrors(undefined); }}>
-              <Plus className="h-3.5 w-3.5" /> Invite staff
+              <Plus className="h-3.5 w-3.5" /> {t("inviteStaff")}
             </Button>
           )}
         </div>
@@ -493,20 +500,20 @@ export function TeamSection({ merchantId, data, canEdit }: { merchantId: string;
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {isOwner ? (
-                    <Pill tone="primary">Owner</Pill>
+                    <Pill tone="primary">{t("ownerPill")}</Pill>
                   ) : (
                     <>
-                      {u.status === "INVITED" && <Pill tone="amber">Invited</Pill>}
-                      {p && !p.active && <Pill tone="neutral">Deactivated</Pill>}
+                      {u.status === "INVITED" && <Pill tone="amber">{t("invitedPill")}</Pill>}
+                      {p && !p.active && <Pill tone="neutral">{t("deactivatedPill")}</Pill>}
                       {p && (
                         <select
-                          aria-label={`Role for ${p.firstName}`}
+                          aria-label={t("roleForAria", { name: p.firstName })}
                           defaultValue={p.roleId ?? ""}
                           disabled={!canEdit}
-                          onChange={(e) => run(setStaffRoleAction(merchantId, p.id, e.target.value || null), "Role updated")}
+                          onChange={(e) => run(setStaffRoleAction(merchantId, p.id, e.target.value || null), t("roleUpdatedToast"))}
                           className="h-8 rounded-[10px] border border-border bg-surface px-2 text-[12px]"
                         >
-                          <option value="">No role (no access)</option>
+                          <option value="">{t("noRoleOption")}</option>
                           {data.roles.map((r) => (
                             <option key={r.id} value={r.id}>
                               {r.name}
@@ -525,16 +532,16 @@ export function TeamSection({ merchantId, data, canEdit }: { merchantId: string;
                             setInviting(true);
                           }}
                         >
-                          Resend invite
+                          {t("resendInvite")}
                         </Button>
                       )}
                       {canEdit && p && u.status !== "INVITED" && (
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => run(setStaffActiveAction(merchantId, p.id, !p.active), p.active ? "Access removed" : "Access restored")}
+                          onClick={() => run(setStaffActiveAction(merchantId, p.id, !p.active), p.active ? t("accessRemovedToast") : t("accessRestoredToast"))}
                         >
-                          {p.active ? "Deactivate" : "Reactivate"}
+                          {p.active ? t("deactivate") : t("reactivate")}
                         </Button>
                       )}
                     </>
@@ -548,15 +555,15 @@ export function TeamSection({ merchantId, data, canEdit }: { merchantId: string;
 
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Roles</h3>
+          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">{t("rolesTitle")}</h3>
           {canEdit && (
             <Button size="sm" variant="outline" onClick={() => { setRoleEditor({ id: null, name: "", permissions: [] }); setErrors(undefined); }}>
-              <Plus className="h-3.5 w-3.5" /> New role
+              <Plus className="h-3.5 w-3.5" /> {t("newRole")}
             </Button>
           )}
         </div>
         {data.roles.length === 0 ? (
-          <p className="text-[12px] text-ink-muted">No roles yet. A staff member without a role can sign in but do nothing.</p>
+          <p className="text-[12px] text-ink-muted">{t("noRolesYet")}</p>
         ) : (
           <ul className="divide-y divide-border rounded-card border border-border">
             {data.roles.map((r) => (
@@ -564,17 +571,17 @@ export function TeamSection({ merchantId, data, canEdit }: { merchantId: string;
                 <div className="min-w-0">
                   <p className="text-[13px] font-semibold">{r.name}</p>
                   <p className="truncate text-[11px] text-ink-muted">
-                    {r.permissions.length ? r.permissions.map((k) => data.allPermissions.find((p) => p.key === k)?.label ?? k).join(", ") : "No permissions"} ·{" "}
-                    {r.members} {r.members === 1 ? "person" : "people"}
+                    {r.permissions.length ? r.permissions.map((k) => data.allPermissions.find((p) => p.key === k)?.label ?? k).join(", ") : t("noPermissions")} ·{" "}
+                    {t("membersCount", { count: r.members })}
                   </p>
                 </div>
                 {canEdit && (
                   <div className="flex gap-1">
                     <Button size="sm" variant="ghost" onClick={() => { setRoleEditor({ id: r.id, name: r.name, permissions: r.permissions }); setErrors(undefined); }}>
-                      Edit
+                      {tc("edit")}
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => run(deleteRoleAction(merchantId, r.id), "Role deleted")}>
-                      Delete
+                    <Button size="sm" variant="ghost" onClick={() => run(deleteRoleAction(merchantId, r.id), t("roleDeletedToast"))}>
+                      {tc("delete")}
                     </Button>
                   </div>
                 )}
@@ -584,41 +591,39 @@ export function TeamSection({ merchantId, data, canEdit }: { merchantId: string;
         )}
       </section>
 
-      <Drawer open={inviting} onClose={() => setInviting(false)} title={inviteLink ? "Invitation ready" : "Invite staff"}>
+      <Drawer open={inviting} onClose={() => setInviting(false)} title={inviteLink ? t("invitationReadyTitle") : t("inviteStaff")}>
         {inviteLink ? (
           <div className="space-y-3">
             <p className="text-[13px] text-ink-muted">
-              {inviteLink.emailed
-                ? "We've emailed them a link to set their password. You can also send this link yourself:"
-                : "Email isn't set up yet, so send them this link yourself:"}
+              {inviteLink.emailed ? t("emailedHint") : t("noEmailHint")}
             </p>
             <CopyBox value={inviteLink.link} />
-            <p className="text-[12px] text-ink-muted">It works once and expires in 7 days.</p>
+            <p className="text-[12px] text-ink-muted">{t("linkExpiryHint")}</p>
             <Button onClick={() => setInviting(false)} className="w-full">
-              Done
+              {tc("done")}
             </Button>
           </div>
         ) : (
           <form onSubmit={invite} noValidate className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <TextField label="First name" name="firstName" errors={errors} required />
-              <TextField label="Last name" name="lastName" errors={errors} required />
+              <TextField label={t("firstNameLabel")} name="firstName" errors={errors} required />
+              <TextField label={t("lastNameLabel")} name="lastName" errors={errors} required />
             </div>
-            <TextField label="Email" name="email" type="email" errors={errors} required />
-            <TextField label="Job title" name="title" errors={errors} hint="Optional, e.g. Physiotherapist." />
-            <SelectField label="Role" name="roleId" errors={errors} options={[{ value: "", label: "No role yet" }, ...data.roles.map((r) => ({ value: r.id, label: r.name }))]} />
+            <TextField label={t("emailLabel")} name="email" type="email" errors={errors} required />
+            <TextField label={t("jobTitleLabel")} name="title" errors={errors} hint={t("jobTitleHint")} />
+            <SelectField label={t("roleLabel")} name="roleId" errors={errors} options={[{ value: "", label: t("noRoleYetOption") }, ...data.roles.map((r) => ({ value: r.id, label: r.name }))]} />
             <Button type="submit" disabled={pending} className="w-full">
               {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              Send invitation
+              {t("sendInvitation")}
             </Button>
           </form>
         )}
       </Drawer>
 
-      <Drawer open={roleEditor !== null} onClose={() => setRoleEditor(null)} title={roleEditor?.id ? "Edit role" : "New role"}>
+      <Drawer open={roleEditor !== null} onClose={() => setRoleEditor(null)} title={roleEditor?.id ? t("editRoleTitle") : t("newRole")}>
         {roleEditor && (
           <form onSubmit={saveRole} noValidate className="space-y-4">
-            <TextField label="Role name" name="name" defaultValue={roleEditor.name} errors={errors} required />
+            <TextField label={t("roleNameLabel")} name="name" defaultValue={roleEditor.name} errors={errors} required />
             {categories.map((c) => (
               <FormSection key={c} title={c}>
                 {data.allPermissions
@@ -630,7 +635,7 @@ export function TeamSection({ merchantId, data, canEdit }: { merchantId: string;
             ))}
             <Button type="submit" disabled={pending} className="w-full">
               {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              Save role
+              {t("saveRole")}
             </Button>
           </form>
         )}
@@ -640,6 +645,7 @@ export function TeamSection({ merchantId, data, canEdit }: { merchantId: string;
 }
 
 function CopyBox({ value }: { value: string }) {
+  const t = useTranslations("portal.appBuilder.settings.sections.team");
   const [copied, setCopied] = React.useState(false);
   return (
     <div className="flex items-center gap-2 rounded-[10px] border border-border bg-app p-2">
@@ -654,7 +660,7 @@ function CopyBox({ value }: { value: string }) {
         }}
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-        {copied ? "Copied" : "Copy"}
+        {copied ? t("copyBoxCopied") : t("copyBoxCopy")}
       </Button>
     </div>
   );
@@ -669,6 +675,7 @@ type LocationRow = Data<"locations">["locations"][number];
 const DEFAULT_HOURS: OpeningHours = { mon: { open: "09:00", close: "17:00" }, tue: { open: "09:00", close: "17:00" }, wed: { open: "09:00", close: "17:00" }, thu: { open: "09:00", close: "17:00" }, fri: { open: "09:00", close: "17:00" }, sat: null, sun: null };
 
 export function LocationsSection({ merchantId, data, canEdit }: { merchantId: string; data: Data<"locations">; canEdit: boolean }) {
+  const t = useTranslations("portal.appBuilder.settings.sections.locations");
   const router = useRouter();
   const [editing, setEditing] = React.useState<LocationRow | "new" | null>(null);
   const [errors, setErrors] = React.useState<FieldErrors>();
@@ -687,22 +694,22 @@ export function LocationsSection({ merchantId, data, canEdit }: { merchantId: st
       return toast.error(res.error);
     }
     setEditing(null);
-    toast.success("Location saved");
+    toast.success(t("savedToast"));
     router.refresh();
   }
 
   return (
     <div className="space-y-4">
-      {!canEdit && <p className="rounded-[10px] bg-app px-3 py-2 text-[12px] text-ink-muted">Only the clinic owner can change locations.</p>}
+      {!canEdit && <p className="rounded-[10px] bg-app px-3 py-2 text-[12px] text-ink-muted">{t("ownerOnly")}</p>}
       <div className="flex justify-end">
         {canEdit && (
           <Button size="sm" onClick={() => { setEditing("new"); setErrors(undefined); }}>
-            <Plus className="h-3.5 w-3.5" /> Add location
+            <Plus className="h-3.5 w-3.5" /> {t("addLocation")}
           </Button>
         )}
       </div>
       {data.locations.length === 0 ? (
-        <p className="text-[12px] text-ink-muted">No locations yet. Clients see your address and opening hours from here.</p>
+        <p className="text-[12px] text-ink-muted">{t("noLocationsYet")}</p>
       ) : (
         <ul className="divide-y divide-border rounded-card border border-border">
           {data.locations.map((l) => (
@@ -710,9 +717,9 @@ export function LocationsSection({ merchantId, data, canEdit }: { merchantId: st
               <button type="button" disabled={!canEdit} onClick={() => { setEditing(l); setErrors(undefined); }} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-app disabled:hover:bg-transparent">
                 <span className="min-w-0">
                   <span className="block truncate text-[13px] font-semibold">{l.name}</span>
-                  <span className="block truncate text-[11px] text-ink-muted">{[l.addressLine1, l.city].filter(Boolean).join(", ") || "No address"}</span>
+                  <span className="block truncate text-[11px] text-ink-muted">{[l.addressLine1, l.city].filter(Boolean).join(", ") || t("noAddress")}</span>
                 </span>
-                {l.isPrimary && <Pill tone="primary">Primary</Pill>}
+                {l.isPrimary && <Pill tone="primary">{t("primaryPill")}</Pill>}
               </button>
             </li>
           ))}
@@ -722,7 +729,7 @@ export function LocationsSection({ merchantId, data, canEdit }: { merchantId: st
       <Drawer
         open={editing !== null}
         onClose={() => setEditing(null)}
-        title={current ? current.name : "New location"}
+        title={current ? current.name : t("newLocationTitle")}
         footer={
           <div className="flex w-full items-center justify-between">
             {current ? (
@@ -734,38 +741,38 @@ export function LocationsSection({ merchantId, data, canEdit }: { merchantId: st
                   const res = await archiveLocationAction(merchantId, current.id);
                   if ("error" in res) return toast.error(res.error);
                   setEditing(null);
-                  toast.success("Location removed");
+                  toast.success(t("removedToast"));
                   router.refresh();
                 }}
               >
-                Remove
+                {t("remove")}
               </Button>
             ) : (
               <span />
             )}
             <Button type="submit" form="location-form" size="sm" disabled={pending}>
               {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              Save location
+              {t("saveLocation")}
             </Button>
           </div>
         }
       >
         {editing !== null && (
           <form id="location-form" key={current?.id ?? "new"} onSubmit={save} noValidate className="space-y-5">
-            <FormSection title="Where">
-              <TextField label="Name" name="name" defaultValue={str(current?.name)} errors={errors} required />
-              <TextField label="Address" name="addressLine1" defaultValue={str(current?.addressLine1)} errors={errors} />
-              <TextField label="Address line 2" name="addressLine2" defaultValue={str(current?.addressLine2)} errors={errors} />
+            <FormSection title={t("whereTitle")}>
+              <TextField label={t("nameLabel")} name="name" defaultValue={str(current?.name)} errors={errors} required />
+              <TextField label={t("addressLabel")} name="addressLine1" defaultValue={str(current?.addressLine1)} errors={errors} />
+              <TextField label={t("addressLine2Label")} name="addressLine2" defaultValue={str(current?.addressLine2)} errors={errors} />
               <div className="grid grid-cols-2 gap-3">
-                <TextField label="City" name="city" defaultValue={str(current?.city)} errors={errors} />
-                <TextField label="Postcode" name="postalCode" defaultValue={str(current?.postalCode)} errors={errors} />
-                <TextField label="Region" name="region" defaultValue={str(current?.region)} errors={errors} />
-                <TextField label="Country" name="country" defaultValue={str(current?.country)} errors={errors} />
+                <TextField label={t("cityLabel")} name="city" defaultValue={str(current?.city)} errors={errors} />
+                <TextField label={t("postalCodeLabel")} name="postalCode" defaultValue={str(current?.postalCode)} errors={errors} />
+                <TextField label={t("regionLabel")} name="region" defaultValue={str(current?.region)} errors={errors} />
+                <TextField label={t("countryLabel")} name="country" defaultValue={str(current?.country)} errors={errors} />
               </div>
-              <TextField label="Phone" name="phone" type="tel" defaultValue={str(current?.phone)} errors={errors} hint="The app's 'Call now' button dials this." />
-              <CheckboxField name="isPrimary" label="Primary location" description="Shown first in the client app." defaultChecked={Boolean(current?.isPrimary)} />
+              <TextField label={t("phoneLabel")} name="phone" type="tel" defaultValue={str(current?.phone)} errors={errors} hint={t("phoneHint")} />
+              <CheckboxField name="isPrimary" label={t("isPrimaryLabel")} description={t("isPrimaryDescription")} defaultChecked={Boolean(current?.isPrimary)} />
             </FormSection>
-            <FormSection title="Opening hours">
+            <FormSection title={t("openingHoursTitle")}>
               {WEEKDAYS.map((d) => (
                 <DayHours key={d} day={d} value={hours[d]} error={errors?.[`${d}.open`]} />
               ))}
@@ -778,6 +785,7 @@ export function LocationsSection({ merchantId, data, canEdit }: { merchantId: st
 }
 
 function DayHours({ day, value, error }: { day: (typeof WEEKDAYS)[number]; value: { open: string; close: string } | null; error?: string }) {
+  const t = useTranslations("portal.appBuilder.settings.sections.locations");
   const [closed, setClosed] = React.useState(value === null);
   return (
     <div>
@@ -785,13 +793,13 @@ function DayHours({ day, value, error }: { day: (typeof WEEKDAYS)[number]; value
         <span className="w-24 text-[13px] font-medium">{WEEKDAY_LABEL[day]}</span>
         <label className="flex items-center gap-1.5 text-[12px] text-ink-muted">
           <input type="checkbox" name={`${day}.closed`} checked={closed} onChange={(e) => setClosed(e.target.checked)} className="accent-[var(--primary)]" />
-          Closed
+          {t("closedLabel")}
         </label>
         {!closed && (
           <>
-            <input type="time" name={`${day}.open`} defaultValue={value?.open ?? "09:00"} aria-label={`${WEEKDAY_LABEL[day]} opens`} aria-invalid={Boolean(error)} className="h-9 rounded-[10px] border border-border bg-surface px-2 text-[13px]" />
+            <input type="time" name={`${day}.open`} defaultValue={value?.open ?? "09:00"} aria-label={t("opensAria", { day: WEEKDAY_LABEL[day] })} aria-invalid={Boolean(error)} className="h-9 rounded-[10px] border border-border bg-surface px-2 text-[13px]" />
             <span className="text-ink-faint">–</span>
-            <input type="time" name={`${day}.close`} defaultValue={value?.close ?? "17:00"} aria-label={`${WEEKDAY_LABEL[day]} closes`} className="h-9 rounded-[10px] border border-border bg-surface px-2 text-[13px]" />
+            <input type="time" name={`${day}.close`} defaultValue={value?.close ?? "17:00"} aria-label={t("closesAria", { day: WEEKDAY_LABEL[day] })} className="h-9 rounded-[10px] border border-border bg-surface px-2 text-[13px]" />
           </>
         )}
       </div>
@@ -805,24 +813,25 @@ function DayHours({ day, value, error }: { day: (typeof WEEKDAYS)[number]; value
 // ---------------------------------------------------------------------------
 
 export function LoyaltySection({ merchantId, data, canEdit, currency }: { merchantId: string; data: Data<"loyalty-rules">; canEdit: boolean; currency: string }) {
+  const t = useTranslations("portal.appBuilder.settings.sections.loyalty");
   const p = data.programme;
   return (
-    <SettingsForm merchantId={merchantId} save={saveLoyaltyRulesAction} canEdit={canEdit} lockedReason="You need the 'Adjust loyalty points' permission to change these.">
+    <SettingsForm merchantId={merchantId} save={saveLoyaltyRulesAction} canEdit={canEdit} lockedReason={t("lockedReason")}>
       {(errors) => (
         <>
-          <FormSection title="Programme">
-            <CheckboxField name="active" label="Loyalty programme on" description="Clients earn and redeem points." defaultChecked={p ? p.active : true} />
+          <FormSection title={t("programmeTitle")}>
+            <CheckboxField name="active" label={t("activeLabel")} description={t("activeDescription")} defaultChecked={p ? p.active : true} />
           </FormSection>
-          <FormSection title="How clients earn">
+          <FormSection title={t("howClientsEarnTitle")}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <TextField label={`Points per ${currency} 1 spent`} name="pointsPerUnit" inputMode="decimal" defaultValue={p ? String(Math.round(p.pointsPerCents * 100 * 100) / 100) : "1"} errors={errors} />
-              <TextField label="Points per clinic visit" name="pointsPerVisit" type="number" min={0} defaultValue={str(p?.pointsPerVisit ?? 0)} errors={errors} hint="Awarded when the clinic scans their code." />
-              <TextField label="Points for referring a friend" name="referralPoints" type="number" min={0} defaultValue={str(p?.referralPoints ?? 0)} errors={errors} />
-              <TextField label="Birthday bonus" name="birthdayPoints" type="number" min={0} defaultValue={str(p?.birthdayPoints ?? 0)} errors={errors} />
-              <TextField label="Points for a Google review" name="reviewPoints" type="number" min={0} defaultValue={str(p?.reviewPoints ?? 0)} errors={errors} />
-              <TextField label="Points expire after (days)" name="pointsExpiryDays" type="number" min={1} defaultValue={str(p?.pointsExpiryDays)} errors={errors} hint="Empty = never." />
+              <TextField label={t("pointsPerUnitLabel", { currency })} name="pointsPerUnit" inputMode="decimal" defaultValue={p ? String(Math.round(p.pointsPerCents * 100 * 100) / 100) : "1"} errors={errors} />
+              <TextField label={t("pointsPerVisitLabel")} name="pointsPerVisit" type="number" min={0} defaultValue={str(p?.pointsPerVisit ?? 0)} errors={errors} hint={t("pointsPerVisitHint")} />
+              <TextField label={t("referralPointsLabel")} name="referralPoints" type="number" min={0} defaultValue={str(p?.referralPoints ?? 0)} errors={errors} />
+              <TextField label={t("birthdayBonusLabel")} name="birthdayPoints" type="number" min={0} defaultValue={str(p?.birthdayPoints ?? 0)} errors={errors} />
+              <TextField label={t("reviewPointsLabel")} name="reviewPoints" type="number" min={0} defaultValue={str(p?.reviewPoints ?? 0)} errors={errors} />
+              <TextField label={t("pointsExpiryLabel")} name="pointsExpiryDays" type="number" min={1} defaultValue={str(p?.pointsExpiryDays)} errors={errors} hint={t("pointsExpiryHint")} />
             </div>
-            <TextField label="Google review link" name="googleReviewUrl" type="url" placeholder="https://g.page/r/…/review" defaultValue={str(data.googleReviewUrl)} errors={errors} hint="Rows worth 0 points are hidden from the app." />
+            <TextField label={t("googleReviewUrlLabel")} name="googleReviewUrl" type="url" placeholder="https://g.page/r/…/review" defaultValue={str(data.googleReviewUrl)} errors={errors} hint={t("googleReviewUrlHint")} />
           </FormSection>
         </>
       )}
@@ -835,40 +844,40 @@ export function LoyaltySection({ merchantId, data, canEdit, currency }: { mercha
 // ---------------------------------------------------------------------------
 
 export function BookingSection({ merchantId, data, canEdit, currency }: { merchantId: string; data: Data<"booking">; canEdit: boolean; currency: string }) {
+  const t = useTranslations("portal.appBuilder.settings.sections.booking");
   const s = data.settings;
   const [mode, setMode] = React.useState(str(s?.bookingMode) || "IN_APP");
   return (
-    <SettingsForm merchantId={merchantId} save={saveBookingSettingsAction} canEdit={canEdit} lockedReason="You need the 'Manage appointments' permission to change these.">
+    <SettingsForm merchantId={merchantId} save={saveBookingSettingsAction} canEdit={canEdit} lockedReason={t("lockedReason")}>
       {(errors) => (
         <>
-          <FormSection title="Where clients book">
+          <FormSection title={t("whereTitle")}>
             <SelectField
-              label="Booking"
+              label={t("bookingModeLabel")}
               name="bookingMode"
               value={mode}
               onChange={(e) => setMode(e.target.value)}
               options={[
-                { value: "IN_APP", label: "In the app, from staff availability" },
-                { value: "EXTERNAL", label: "On our own booking website" },
+                { value: "IN_APP", label: t("inAppOption") },
+                { value: "EXTERNAL", label: t("externalOption") },
               ]}
               errors={errors}
             />
-            {mode === "EXTERNAL" && <TextField label="Booking link" name="externalBookingUrl" type="url" placeholder="https://" defaultValue={str(s?.externalBookingUrl)} errors={errors} required />}
+            {mode === "EXTERNAL" && <TextField label={t("externalUrlLabel")} name="externalBookingUrl" type="url" placeholder="https://" defaultValue={str(s?.externalBookingUrl)} errors={errors} required />}
           </FormSection>
-          <FormSection title="Rules">
+          <FormSection title={t("rulesTitle")}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <TextField label="Cancellation notice (hours)" name="appointmentCancellationHours" type="number" min={0} defaultValue={str(s?.appointmentCancellationHours ?? 24)} errors={errors} hint="Clients can't cancel in the app later than this." />
-              <TextField label="Reminder before (hours)" name="appointmentReminderHours" type="number" min={0} defaultValue={str(s?.appointmentReminderHours ?? 24)} errors={errors} />
+              <TextField label={t("cancellationHoursLabel")} name="appointmentCancellationHours" type="number" min={0} defaultValue={str(s?.appointmentCancellationHours ?? 24)} errors={errors} hint={t("cancellationHoursHint")} />
+              <TextField label={t("reminderHoursLabel")} name="appointmentReminderHours" type="number" min={0} defaultValue={str(s?.appointmentReminderHours ?? 24)} errors={errors} />
             </div>
           </FormSection>
-          <FormSection title="Deposit">
+          <FormSection title={t("depositTitle")}>
             <p className="text-[12px] text-ink-muted">
-              Leave both at zero and booking stays free: clients pay at the clinic. With a deposit set, the appointment is held as requested until the client pays
-              it. Deposits need Stripe connected and active.
+              {t("depositDescription")}
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <TextField
-                label="Deposit (% of the treatment price)"
+                label={t("depositPercentLabel")}
                 name="bookingDepositPercent"
                 type="number"
                 min={0}
@@ -877,12 +886,12 @@ export function BookingSection({ merchantId, data, canEdit, currency }: { mercha
                 errors={errors}
               />
               <MoneyField
-                label="Or a fixed deposit"
+                label={t("depositFixedLabel")}
                 name="bookingDeposit"
                 currency={currency}
                 defaultValue={centsToInput(s?.bookingDepositFixedCents ?? 0)}
                 errors={errors}
-                hint="A fixed amount wins over the percentage."
+                hint={t("depositFixedHint")}
               />
             </div>
           </FormSection>
@@ -897,6 +906,7 @@ export function BookingSection({ merchantId, data, canEdit, currency }: { mercha
 // ---------------------------------------------------------------------------
 
 export function NotificationsSection({ merchantId, data, canEdit }: { merchantId: string; data: Data<"notifications">; canEdit: boolean }) {
+  const t = useTranslations("portal.appBuilder.settings.sections.notifications");
   const s = data.settings;
   const on = (v: boolean | undefined) => v ?? true;
   return (
@@ -906,21 +916,20 @@ export function NotificationsSection({ merchantId, data, canEdit }: { merchantId
       )}
       <SettingsForm merchantId={merchantId} save={saveNotificationSettingsAction} canEdit={canEdit}>
         {() => (
-          <FormSection title="Send clients a message when">
-            <p className="text-[12px] text-ink-muted">Each client&apos;s own notification preferences are always respected.</p>
-            <CheckboxField name="notifyBookingConfirmations" label="A booking is confirmed, changed or cancelled" defaultChecked={on(s?.notifyBookingConfirmations)} />
-            <CheckboxField name="notifyAppointmentReminders" label="An appointment is coming up" defaultChecked={on(s?.notifyAppointmentReminders)} />
-            <CheckboxField name="notifyPointsEarned" label="They earn points or unlock a reward" defaultChecked={on(s?.notifyPointsEarned)} />
-            <CheckboxField name="notifyMembershipBilling" label="A membership renews or a payment fails" defaultChecked={on(s?.notifyMembershipBilling)} />
+          <FormSection title={t("sendWhenTitle")}>
+            <p className="text-[12px] text-ink-muted">{t("respectedHint")}</p>
+            <CheckboxField name="notifyBookingConfirmations" label={t("bookingLabel")} defaultChecked={on(s?.notifyBookingConfirmations)} />
+            <CheckboxField name="notifyAppointmentReminders" label={t("reminderLabel")} defaultChecked={on(s?.notifyAppointmentReminders)} />
+            <CheckboxField name="notifyPointsEarned" label={t("pointsLabel")} defaultChecked={on(s?.notifyPointsEarned)} />
+            <CheckboxField name="notifyMembershipBilling" label={t("membershipLabel")} defaultChecked={on(s?.notifyMembershipBilling)} />
           </FormSection>
         )}
       </SettingsForm>
       <SettingsForm merchantId={merchantId} save={saveNotificationSettingsAction} canEdit={canEdit}>
         {(errors) => (
-          <FormSection title="When marketing may be sent">
+          <FormSection title={t("marketingWindowTitle")}>
             <p className="text-[12px] text-ink-muted">
-              Offers, campaigns and birthday messages are only sent inside these hours, in your clinic&apos;s timezone. Order and payment
-              notifications are unaffected — clients are waiting for those.
+              {t("marketingWindowDescription")}
             </p>
             <SendingWindowFields
               startMinutes={s?.marketingWindowStartMinutes ?? DEFAULT_WINDOW_START}
@@ -933,32 +942,32 @@ export function NotificationsSection({ merchantId, data, canEdit }: { merchantId
       </SettingsForm>
       <SettingsForm merchantId={merchantId} save={saveNotificationSettingsAction} canEdit={canEdit}>
         {(errors) => (
-          <FormSection title="Birthdays">
+          <FormSection title={t("birthdaysTitle")}>
             <p className="text-[12px] text-ink-muted">
-              Sent at 09:00 on the day, once a year, to clients who gave a birthday and have offers switched on.
+              {t("birthdaysDescription")}
             </p>
-            <CheckboxField name="birthdayMessageEnabled" label="Wish clients a happy birthday" defaultChecked={s?.birthdayMessageEnabled ?? false} />
+            <CheckboxField name="birthdayMessageEnabled" label={t("birthdayEnabledLabel")} defaultChecked={s?.birthdayMessageEnabled ?? false} />
             <TextAreaField
-              label="Message"
+              label={t("messageLabel")}
               name="birthdayMessage"
               rows={2}
               maxLength={200}
               defaultValue={s?.birthdayMessage ?? ""}
-              placeholder="Happy birthday from all of us at the clinic!"
+              placeholder={t("messagePlaceholder")}
               errors={errors}
             />
             <TextField
-              label="Discount with it (%)"
+              label={t("discountPercentLabel")}
               name="birthdayDiscountPercent"
               type="number"
               min={0}
               max={100}
               defaultValue={String(s?.birthdayDiscountPercent ?? 0)}
-              hint="0 for a message with no discount."
+              hint={t("discountPercentHint")}
               errors={errors}
             />
             <TextField
-              label="Valid for (days)"
+              label={t("validDaysLabel")}
               name="birthdayDiscountDays"
               type="number"
               min={1}
@@ -977,43 +986,44 @@ export function NotificationsSection({ merchantId, data, canEdit }: { merchantId
 // Integrations (read-only until payments are connected per clinic)
 // ---------------------------------------------------------------------------
 
-const STRIPE_NOTICES: Record<string, { tone: "info" | "warn"; text: string }> = {
-  returned: { tone: "info", text: "Welcome back from Stripe. The status below is what Stripe reports right now." },
-  "not-configured": { tone: "warn", text: "Stripe isn't set up on this platform yet, so accounts can't be connected. Contact support." },
-  "owner-only": { tone: "warn", text: "Only the clinic owner can connect or manage Stripe." },
-  "no-country": { tone: "warn", text: "Add your clinic's country to its address (Settings → Branding) before connecting Stripe." },
-  "country-changed": { tone: "warn", text: "Your clinic's country changed since this page loaded. Check it below and confirm again." },
-  "not-confirmed": { tone: "warn", text: "Confirm the country below before continuing to Stripe." },
-  failed: { tone: "warn", text: "Stripe couldn't be reached or refused the request. Try again in a moment." },
-};
+function stripeNotices(t: ReturnType<typeof useTranslations>): Record<string, { tone: "info" | "warn"; text: string }> {
+  return {
+    returned: { tone: "info", text: t("notices.returned") },
+    "not-configured": { tone: "warn", text: t("notices.notConfigured") },
+    "owner-only": { tone: "warn", text: t("notices.ownerOnly") },
+    "no-country": { tone: "warn", text: t("notices.noCountry") },
+    "country-changed": { tone: "warn", text: t("notices.countryChanged") },
+    "not-confirmed": { tone: "warn", text: t("notices.notConfirmed") },
+    failed: { tone: "warn", text: t("notices.failed") },
+  };
+}
 
-const STRIPE_STATUS: Record<
-  Data<"integrations">["stripe"]["status"],
-  { label: string; tone: "green" | "amber" | "neutral" | "red"; detail: string }
-> = {
-  NOT_CONNECTED: { label: "Not connected", tone: "neutral", detail: "Connect your own Stripe account so clients' payments go straight to you." },
-  ONBOARDING: { label: "Setup not finished", tone: "amber", detail: "Your Stripe account exists, but Stripe still needs details from you." },
-  PENDING_VERIFICATION: {
-    label: "Pending verification",
-    tone: "amber",
-    detail: "You've sent your details to Stripe. It is still verifying them, and payments stay off until Stripe approves the account.",
-  },
-  ACTIVE: { label: "Connected", tone: "green", detail: "Stripe has enabled card payments on your account." },
-  RESTRICTED: { label: "Action needed", tone: "red", detail: "Stripe has paused payments on your account until you provide more information." },
-};
+function stripeStatusMap(
+  t: ReturnType<typeof useTranslations>,
+): Record<Data<"integrations">["stripe"]["status"], { label: string; tone: "green" | "amber" | "neutral" | "red"; detail: string }> {
+  return {
+    NOT_CONNECTED: { label: t("status.notConnectedLabel"), tone: "neutral", detail: t("status.notConnectedDetail") },
+    ONBOARDING: { label: t("status.onboardingLabel"), tone: "amber", detail: t("status.onboardingDetail") },
+    PENDING_VERIFICATION: { label: t("status.pendingLabel"), tone: "amber", detail: t("status.pendingDetail") },
+    ACTIVE: { label: t("status.activeLabel"), tone: "green", detail: t("status.activeDetail") },
+    RESTRICTED: { label: t("status.restrictedLabel"), tone: "red", detail: t("status.restrictedDetail") },
+  };
+}
 
 function StripeConnectCard({ merchantId, stripe, isOwner }: { merchantId: string; stripe: Data<"integrations">["stripe"]; isOwner: boolean }) {
+  const t = useTranslations("portal.appBuilder.settings.sections.integrations");
+  const tc = useTranslations("common");
   const [confirming, setConfirming] = React.useState(false);
   const [confirmed, setConfirmed] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
-  const status = STRIPE_STATUS[stripe.status];
+  const status = stripeStatusMap(t)[stripe.status];
   const base = `/m/${encodeURIComponent(merchantId)}/stripe`;
 
   return (
     <div className="rounded-card border border-border p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[13px] font-semibold">Stripe payments</p>
+          <p className="text-[13px] font-semibold">{t("stripeTitle")}</p>
           <p className="mt-0.5 text-[12px] text-ink-muted">{status.detail}</p>
         </div>
         <Pill tone={status.tone}>{status.label}</Pill>
@@ -1022,22 +1032,22 @@ function StripeConnectCard({ merchantId, stripe, isOwner }: { merchantId: string
       {stripe.connected && (
         <dl className="mt-3 grid grid-cols-2 gap-2 text-[12px]">
           <div>
-            <dt className="text-ink-muted">Card payments</dt>
-            <dd className="font-medium">{stripe.chargesEnabled ? "Enabled" : "Not yet"}</dd>
+            <dt className="text-ink-muted">{t("cardPaymentsLabel")}</dt>
+            <dd className="font-medium">{stripe.chargesEnabled ? t("enabled") : t("notYet")}</dd>
           </div>
           <div>
-            <dt className="text-ink-muted">Payouts to your bank</dt>
-            <dd className="font-medium">{stripe.payoutsEnabled ? "Enabled" : "Not yet"}</dd>
+            <dt className="text-ink-muted">{t("payoutsLabel")}</dt>
+            <dd className="font-medium">{stripe.payoutsEnabled ? t("enabled") : t("notYet")}</dd>
           </div>
           {stripe.accountCountry && (
             <div>
-              <dt className="text-ink-muted">Account country</dt>
+              <dt className="text-ink-muted">{t("accountCountryLabel")}</dt>
               <dd className="font-medium">{stripe.accountCountry}</dd>
             </div>
           )}
           {stripe.checkedAt && (
             <div>
-              <dt className="text-ink-muted">Last checked with Stripe</dt>
+              <dt className="text-ink-muted">{t("lastCheckedLabel")}</dt>
               <dd className="font-medium">{new Date(stripe.checkedAt).toLocaleString()}</dd>
             </div>
           )}
@@ -1046,50 +1056,47 @@ function StripeConnectCard({ merchantId, stripe, isOwner }: { merchantId: string
 
       <div className="mt-4 space-y-3">
         {!stripe.configured ? (
-          <p className="rounded-[10px] bg-app px-3 py-2 text-[12px] text-ink-muted">Stripe isn&apos;t set up on this platform yet. Contact support.</p>
+          <p className="rounded-[10px] bg-app px-3 py-2 text-[12px] text-ink-muted">{t("notConfiguredBody")}</p>
         ) : !isOwner ? (
-          <p className="rounded-[10px] bg-app px-3 py-2 text-[12px] text-ink-muted">Only the clinic owner can connect or manage Stripe.</p>
+          <p className="rounded-[10px] bg-app px-3 py-2 text-[12px] text-ink-muted">{t("ownerOnlyBody")}</p>
         ) : stripe.status === "NOT_CONNECTED" ? (
           !stripe.countryCode ? (
             <p className="rounded-[10px] bg-[var(--accent-amber)]/10 px-3 py-2 text-[12px] text-ink">
-              {stripe.addressCountry
-                ? `We can't tell which country "${stripe.addressCountry}" is. `
-                : "Your clinic's address has no country yet. "}
-              Set it under{" "}
+              {stripe.addressCountry ? t("unknownCountry", { country: stripe.addressCountry }) : t("noCountryBody")}{" "}
+              {t("setCountryPrefix")}{" "}
               <a className="font-medium underline" href={`/m/${encodeURIComponent(merchantId)}/app-builder?tab=settings&section=branding`}>
-                Settings → Branding
+                {t("settingsBrandingLink")}
               </a>{" "}
-              first — your Stripe account is created in that country.
+              {t("setCountrySuffix")}
             </p>
           ) : !confirming ? (
             <Button type="button" onClick={() => setConfirming(true)}>
-              Connect Stripe
+              {t("connectStripe")}
             </Button>
           ) : (
             <form method="post" action={`${base}/connect`} onSubmit={() => setSubmitting(true)} className="space-y-3 rounded-[10px] border border-border p-3">
               <input type="hidden" name="country" value={stripe.countryCode} />
               <p className="text-[13px]">
-                Your Stripe account will be created in <strong>{stripe.countryLabel}</strong>, taken from your clinic&apos;s address. Stripe
-                doesn&apos;t allow changing the country afterwards.
+                {t.rich("countryConfirmText", { country: stripe.countryLabel ?? "", strong: (chunks) => <strong>{chunks}</strong> })}
               </p>
               <label className="flex cursor-pointer items-start gap-2 text-[13px]">
                 <input type="checkbox" name="confirmed" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--primary)]" />
-                <span>Yes, my business is based in {stripe.countryLabel}.</span>
+                <span>{t("confirmCountryLabel", { country: stripe.countryLabel ?? "" })}</span>
               </label>
               <p className="text-[12px] text-ink-muted">
-                Wrong country? Correct your address under{" "}
+                {t("wrongCountryPrefix")}{" "}
                 <a className="underline" href={`/m/${encodeURIComponent(merchantId)}/app-builder?tab=settings&section=branding`}>
-                  Settings → Branding
+                  {t("settingsBrandingLink")}
                 </a>{" "}
-                first.
+                {t("wrongCountrySuffix")}
               </p>
               <div className="flex gap-2">
                 <Button type="submit" disabled={!confirmed || submitting}>
                   {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  Continue to Stripe
+                  {t("continueToStripe")}
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => setConfirming(false)} disabled={submitting}>
-                  Cancel
+                  {tc("cancel")}
                 </Button>
               </div>
             </form>
@@ -1098,7 +1105,7 @@ function StripeConnectCard({ merchantId, stripe, isOwner }: { merchantId: string
           <form method="post" action={`${base}/connect`} onSubmit={() => setSubmitting(true)}>
             <Button type="submit" disabled={submitting}>
               {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              Continue setup on Stripe
+              {t("continueSetup")}
             </Button>
           </form>
         ) : (
@@ -1107,7 +1114,7 @@ function StripeConnectCard({ merchantId, stripe, isOwner }: { merchantId: string
               href={`${base}/return`}
               className="inline-flex h-9 items-center rounded-pill border border-border bg-surface px-4 text-[13px] font-medium text-ink hover:bg-app"
             >
-              Check status now
+              {t("checkStatusNow")}
             </a>
             <a
               href="https://dashboard.stripe.com/"
@@ -1115,7 +1122,7 @@ function StripeConnectCard({ merchantId, stripe, isOwner }: { merchantId: string
               rel="noreferrer"
               className="inline-flex h-9 items-center rounded-pill border border-border bg-surface px-4 text-[13px] font-medium text-ink hover:bg-app"
             >
-              Open Stripe Dashboard
+              {t("openDashboard")}
             </a>
           </div>
         )}
@@ -1135,19 +1142,20 @@ export function IntegrationsSection({
   isOwner: boolean;
   notice: string | null;
 }) {
-  const shownNotice = notice ? STRIPE_NOTICES[notice] : undefined;
+  const t = useTranslations("portal.appBuilder.settings.sections.integrations");
+  const shownNotice = notice ? stripeNotices(t)[notice] : undefined;
   const rows = [
     {
-      name: "Email",
-      state: data.email === "resend" ? "Connected" : "Not set up",
+      name: t("emailRowName"),
+      state: data.email === "resend" ? t("connected") : t("notSetUp"),
       tone: data.email === "resend" ? ("green" as const) : ("amber" as const),
-      detail: data.email === "resend" ? "Invitations, resets and receipts are emailed." : "Emails are not delivered. Staff invitation links must be shared by hand.",
+      detail: data.email === "resend" ? t("emailDetailConnected") : t("emailDetailNotConnected"),
     },
     {
-      name: "Push notifications",
-      state: data.push === "webpush" ? "Connected" : "Not set up",
+      name: t("pushRowName"),
+      state: data.push === "webpush" ? t("connected") : t("notSetUp"),
       tone: data.push === "webpush" ? ("green" as const) : ("neutral" as const),
-      detail: "Messages to clients' phones.",
+      detail: t("pushDetail"),
     },
   ];
   return (
@@ -1162,10 +1170,10 @@ export function IntegrationsSection({
       )}
       <StripeConnectCard merchantId={merchantId} stripe={data.stripe} isOwner={isOwner} />
       {data.payments !== "stripe" && (
-        <p className="text-[12px] text-ink-muted">Checkout in the client app still runs in test mode: no real money moves until payments are switched to Stripe.</p>
+        <p className="text-[12px] text-ink-muted">{t("testModeNotice")}</p>
       )}
       <div>
-        <p className="mb-2 text-[12px] text-ink-muted">These are configured by the platform. Contact support to change them.</p>
+        <p className="mb-2 text-[12px] text-ink-muted">{t("platformConfiguredNotice")}</p>
         <ul className="divide-y divide-border rounded-card border border-border">
           {rows.map((r) => (
             <li key={r.name} className="flex items-center justify-between gap-3 px-4 py-3">
@@ -1187,15 +1195,16 @@ export function IntegrationsSection({
 // ---------------------------------------------------------------------------
 
 export function AuditLogSection({ data }: { data: Data<"audit-log"> }) {
-  if (data.rows.length === 0) return <p className="text-[12px] text-ink-muted">Nothing recorded yet.</p>;
+  const t = useTranslations("portal.appBuilder.settings.sections.auditLog");
+  if (data.rows.length === 0) return <p className="text-[12px] text-ink-muted">{t("empty")}</p>;
   return (
     <div className="overflow-x-auto rounded-card border border-border">
       <table className="w-full text-left text-[12px]">
         <thead className="border-b border-border bg-app text-[11px] uppercase tracking-wide text-ink-faint">
           <tr>
-            <th className="px-3 py-2 font-medium">When</th>
-            <th className="px-3 py-2 font-medium">Who</th>
-            <th className="px-3 py-2 font-medium">What</th>
+            <th className="px-3 py-2 font-medium">{t("whenHeader")}</th>
+            <th className="px-3 py-2 font-medium">{t("whoHeader")}</th>
+            <th className="px-3 py-2 font-medium">{t("whatHeader")}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -1203,8 +1212,8 @@ export function AuditLogSection({ data }: { data: Data<"audit-log"> }) {
             <tr key={r.id}>
               <td className="whitespace-nowrap px-3 py-2 text-ink-muted">{new Date(r.createdAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</td>
               <td className="px-3 py-2">
-                {r.actorUser?.email ?? (r.actorType === "SYSTEM" ? "System" : "—")}
-                {r.actorType === "PLATFORM_ADMIN" && <span className="ml-1 text-ink-faint">(agency)</span>}
+                {r.actorUser?.email ?? (r.actorType === "SYSTEM" ? t("systemActor") : "—")}
+                {r.actorType === "PLATFORM_ADMIN" && <span className="ml-1 text-ink-faint">{t("agencySuffix")}</span>}
               </td>
               <td className="px-3 py-2">
                 <span className="font-medium">{r.action.replace(/[._]/g, " ")}</span>

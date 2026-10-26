@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { Panel, Pagination, Pill, Drawer } from "@/components/ui/primitives";
 import { ClientItems } from "./client-items";
 import { PersonalDiscount } from "./personal-discount";
@@ -26,7 +27,6 @@ export interface ClientRow {
 }
 
 const dash = (v: string | null | undefined) => (v && v.length > 0 ? v : "-");
-const date = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-US", { dateStyle: "medium" }) : "-");
 
 export function ClientsTable({
   merchantId,
@@ -58,6 +58,9 @@ export function ClientsTable({
   pageCount: number;
 }) {
   const router = useRouter();
+  const t = useTranslations("portal.clients.clientsTable");
+  const locale = useLocale();
+  const date = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(locale === "nl" ? "nl-NL" : "en-US", { dateStyle: "medium" }) : "-");
   const [selected, setSelected] = React.useState<ClientRow | null>(null);
 
   function navigate(next: Partial<{ q: string; sort: string; status: string; page: number }>) {
@@ -84,7 +87,7 @@ export function ClientsTable({
           <input
             name="q"
             defaultValue={q}
-            placeholder="Search clients..."
+            placeholder={t("searchPlaceholder")}
             className="h-8 w-56 rounded-[10px] border border-border bg-surface pl-8 pr-3 text-[12px] outline-none focus-visible:ring-2 focus-visible:ring-primary"
           />
         </form>
@@ -93,38 +96,38 @@ export function ClientsTable({
           onChange={(e) => navigate({ status: e.target.value, page: 1 })}
           className="h-8 rounded-[10px] border border-border bg-surface px-2 text-[12px] outline-none"
         >
-          <option value="all">All</option>
-          <option value="client">Clients</option>
-          <option value="lead">Leads</option>
+          <option value="all">{t("all")}</option>
+          <option value="client">{t("clients")}</option>
+          <option value="lead">{t("leads")}</option>
         </select>
         <select
           value={sort}
           onChange={(e) => navigate({ sort: e.target.value, page: 1 })}
           className="h-8 rounded-[10px] border border-border bg-surface px-2 text-[12px] outline-none"
         >
-          <option value="alphabetical">Alphabetical</option>
-          <option value="newest">Newest</option>
-          <option value="visits">Most visits</option>
-          <option value="last-visit">Last visit</option>
+          <option value="alphabetical">{t("alphabetical")}</option>
+          <option value="newest">{t("newest")}</option>
+          <option value="visits">{t("mostVisits")}</option>
+          <option value="last-visit">{t("lastVisitSort")}</option>
         </select>
       </div>
 
       <Panel>
         {rows.length === 0 ? (
-          <EmptyState title="No clients yet" />
+          <EmptyState title={t("noClientsYet")} />
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px]">
                 <thead>
                   <tr className="border-b border-border text-left text-[10px] uppercase tracking-wide text-ink-faint">
-                    <th className="px-5 py-2.5 font-medium">Name</th>
-                    <th className="px-5 py-2.5 font-medium">Phone</th>
-                    <th className="px-5 py-2.5 font-medium">Email</th>
-                    <th className="px-5 py-2.5 font-medium">Visits</th>
-                    <th className="px-5 py-2.5 font-medium">Last Visit</th>
-                    <th className="px-5 py-2.5 font-medium">Joined</th>
-                    <th className="px-5 py-2.5 font-medium">Membership Status</th>
+                    <th className="px-5 py-2.5 font-medium">{t("colName")}</th>
+                    <th className="px-5 py-2.5 font-medium">{t("colPhone")}</th>
+                    <th className="px-5 py-2.5 font-medium">{t("colEmail")}</th>
+                    <th className="px-5 py-2.5 font-medium">{t("colVisits")}</th>
+                    <th className="px-5 py-2.5 font-medium">{t("colLastVisit")}</th>
+                    <th className="px-5 py-2.5 font-medium">{t("colJoined")}</th>
+                    <th className="px-5 py-2.5 font-medium">{t("colMembershipStatus")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -141,7 +144,7 @@ export function ClientsTable({
                       <td className="px-5 py-3 text-ink-muted">{date(r.lastVisit)}</td>
                       <td className="px-5 py-3 text-ink-muted">{date(r.joined)}</td>
                       <td className="px-5 py-3">
-                        {r.isMember ? <Pill tone="green">Member</Pill> : <Pill tone="neutral">None</Pill>}
+                        {r.isMember ? <Pill tone="green">{t("member")}</Pill> : <Pill tone="neutral">{t("none")}</Pill>}
                       </td>
                     </tr>
                   ))}
@@ -187,7 +190,19 @@ function ClientDrawer({
   client: ClientRow | null;
   onClose: () => void;
 }) {
+  const t = useTranslations("portal.clients.clientsTable");
+  const locale = useLocale();
+  const date = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(locale === "nl" ? "nl-NL" : "en-US", { dateStyle: "medium" }) : "-");
   const [tab, setTab] = React.useState<"profile" | "account" | "membership" | "orders" | "items" | "messages">("profile");
+
+  const TAB_LABEL: Record<typeof tab, string> = {
+    profile: t("tabProfile"),
+    account: t("tabAccount"),
+    membership: t("tabMembership"),
+    orders: t("tabOrders"),
+    items: t("tabItems"),
+    messages: t("tabMessages"),
+  };
 
   React.useEffect(() => {
     if (client) setTab("profile");
@@ -198,29 +213,29 @@ function ClientDrawer({
       {client && (
         <>
           <div className="mb-4 flex gap-4 border-b border-border">
-            {(["profile", "account", "membership", "orders", "items", "messages"] as const).map((t) => (
+            {(["profile", "account", "membership", "orders", "items", "messages"] as const).map((tabKey) => (
               <button
-                key={t}
+                key={tabKey}
                 type="button"
-                onClick={() => setTab(t)}
-                className={`-mb-px border-b-2 pb-2 text-[13px] capitalize ${
-                  tab === t ? "border-primary font-medium text-primary" : "border-transparent text-ink-muted"
+                onClick={() => setTab(tabKey)}
+                className={`-mb-px border-b-2 pb-2 text-[13px] ${
+                  tab === tabKey ? "border-primary font-medium text-primary" : "border-transparent text-ink-muted"
                 }`}
               >
-                {t}
+                {TAB_LABEL[tabKey]}
               </button>
             ))}
           </div>
 
           {tab === "profile" ? (
             <dl className="space-y-3 text-[13px]">
-              <Row label="Phone" value={dash(client.phone)} />
-              <Row label="Visits" value={String(client.visits)} />
-              <Row label="Last visit" value={date(client.lastVisit)} />
-              <Row label="Joined" value={date(client.joined)} />
-              <Row label="Loyalty points" value={`${client.points} pts`} />
-              <Row label="Credit" value={formatMoney(client.creditCents)} />
-              <Row label="Membership" value={client.isMember ? "Active" : "None"} />
+              <Row label={t("colPhone")} value={dash(client.phone)} />
+              <Row label={t("colVisits")} value={String(client.visits)} />
+              <Row label={t("lastVisit")} value={date(client.lastVisit)} />
+              <Row label={t("colJoined")} value={date(client.joined)} />
+              <Row label={t("loyaltyPoints")} value={t("pointsValue", { points: client.points })} />
+              <Row label={t("credit")} value={formatMoney(client.creditCents)} />
+              <Row label={t("membership")} value={client.isMember ? t("active") : t("none")} />
             </dl>
           ) : tab === "account" ? (
             <ClientAccountPanel
@@ -240,7 +255,7 @@ function ClientDrawer({
               <ClientItems merchantId={merchantId} customerProfileId={client.id} />
             </div>
           ) : (
-            <p className="py-8 text-center text-[12px] text-ink-muted">No messages yet</p>
+            <p className="py-8 text-center text-[12px] text-ink-muted">{t("noMessagesYet")}</p>
           )}
         </>
       )}

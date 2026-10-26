@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { Panel } from "@/components/ui/primitives";
 import { SETTINGS_SECTIONS, type SettingsSection } from "@/lib/nav";
 import { cn } from "@/lib/utils";
@@ -15,23 +16,25 @@ import {
   TeamSection,
 } from "./settings/sections";
 
-const DESCRIPTIONS: Record<SettingsSection, string> = {
-  general: "App listing, shop banner, tax and the policies clients see.",
-  branding: "Name, logo, app icon, brand colour, contact details and region.",
-  team: "Invite staff and decide what each role can do.",
-  locations: "Addresses, phone numbers and opening hours.",
-  "loyalty-rules": "How clients earn points.",
-  booking: "Where clients book, cancellation notice and reminders.",
-  notifications: "Automatic messages sent to clients.",
-  integrations: "Payments, email and push notifications.",
-  "audit-log": "Who changed what, most recent first.",
+// lib/nav.ts's SETTINGS_SECTIONS key → messages/*.json portal.appBuilder.settingsTab key.
+// Same reasoning as components/shell/app-shell.tsx's MERCHANT_NAV_KEYS.
+const SETTINGS_SECTION_KEYS: Record<SettingsSection, string> = {
+  general: "general",
+  branding: "branding",
+  team: "team",
+  locations: "locations",
+  "loyalty-rules": "loyaltyRules",
+  booking: "booking",
+  notifications: "notifications",
+  integrations: "integrations",
+  "audit-log": "auditLog",
 };
 
 /**
  * Every former merchant-level settings page lives here as a section. The
  * sub-nav is vertical and inside the page — it is never a sidebar entry.
  */
-export function SettingsTab({
+export async function SettingsTab({
   merchantId,
   section,
   data,
@@ -51,11 +54,12 @@ export function SettingsTab({
   /** Set when Stripe has just sent the browser back here. */
   stripeNotice: string | null;
 }) {
+  const t = await getTranslations("portal.appBuilder.settingsTab");
   return (
     // Second-level navigation on the left, as the handoff draws it; the
     // section's own header and its one Primary live inside the card.
     <div className="grid grid-cols-1 gap-4 md:grid-cols-[220px_1fr]">
-      <nav className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible" aria-label="Settings sections">
+      <nav className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible" aria-label={t("settingsSections")}>
         {SETTINGS_SECTIONS.map((s) => (
           <Link
             key={s.key}
@@ -66,14 +70,14 @@ export function SettingsTab({
               section === s.key ? "bg-[var(--ink)] font-bold text-white" : "text-ink hover:bg-surface",
             )}
           >
-            {s.label}
+            {t(SETTINGS_SECTION_KEYS[s.key])}
           </Link>
         ))}
       </nav>
 
       <Panel className="p-6">
-        <h3 className="text-[22px] font-extrabold leading-7 text-ink">{SETTINGS_SECTIONS.find((s) => s.key === section)?.label}</h3>
-        <p className="mt-1 text-[15px] text-ink-muted">{DESCRIPTIONS[section]}</p>
+        <h3 className="text-[22px] font-extrabold leading-7 text-ink">{t(SETTINGS_SECTION_KEYS[section])}</h3>
+        <p className="mt-1 text-[15px] text-ink-muted">{t(`${SETTINGS_SECTION_KEYS[section]}Description`)}</p>
         <div className="mt-6">
           {data.section === "general" && <GeneralSection merchantId={merchantId} data={data} canEdit={canEdit} />}
           {data.section === "branding" && <BrandingSection merchantId={merchantId} data={data} canEdit={canEdit} />}

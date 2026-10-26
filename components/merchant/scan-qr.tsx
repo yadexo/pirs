@@ -4,6 +4,7 @@ import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Camera, CheckCircle2, Loader2, QrCode, Search } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Drawer, Pill } from "@/components/ui/primitives";
 import {
@@ -30,6 +31,7 @@ type Stage =
 export function ScanQrButton() {
   const params = useParams<{ merchantId?: string }>();
   const merchantId = params?.merchantId;
+  const t = useTranslations("merchant.scanQr");
   const [open, setOpen] = React.useState(false);
 
   // The header also renders on pages outside a clinic; there is nothing to scan into there.
@@ -38,9 +40,9 @@ export function ScanQrButton() {
   return (
     <>
       <Button size="sm" onClick={() => setOpen(true)}>
-        <QrCode className="h-3.5 w-3.5" /> Scan QR
+        <QrCode className="h-3.5 w-3.5" /> {t("scanQr")}
       </Button>
-      <Drawer open={open} onClose={() => setOpen(false)} title="Check in a client" subtitle="Scan the code in their app.">
+      <Drawer open={open} onClose={() => setOpen(false)} title={t("checkInAClient")} subtitle={t("scanSubtitle")}>
         {open && <CheckInFlow merchantId={merchantId} onClose={() => setOpen(false)} />}
       </Drawer>
     </>
@@ -49,6 +51,7 @@ export function ScanQrButton() {
 
 function CheckInFlow({ merchantId, onClose }: { merchantId: string; onClose: () => void }) {
   const router = useRouter();
+  const t = useTranslations("merchant.scanQr");
   const [stage, setStage] = React.useState<Stage>({ kind: "scanning" });
   const [pending, setPending] = React.useState(false);
 
@@ -77,7 +80,7 @@ function CheckInFlow({ merchantId, onClose }: { merchantId: string; onClose: () 
     setPending(false);
     if ("error" in res) return toast.error(res.error);
     if (res.alreadyToday) {
-      toast("Already checked in today");
+      toast(t("alreadyCheckedInTodayToast"));
       setStage({ kind: "client", client: res.client, target: stage.target });
       return;
     }
@@ -97,17 +100,17 @@ function CheckInFlow({ merchantId, onClose }: { merchantId: string; onClose: () 
     return (
       <div className="flex flex-col items-center gap-3 py-6 text-center">
         <CheckCircle2 className="h-10 w-10 text-[var(--accent-green)]" />
-        <p className="text-[16px] font-semibold">{stage.client.name} is checked in</p>
+        <p className="text-[16px] font-semibold">{t("checkedIn", { name: stage.client.name })}</p>
         <p className="text-[13px] text-ink-muted">
-          {stage.points > 0 ? `+${stage.points} points · ` : ""}
-          {stage.client.points} points · visit {stage.client.visits}
+          {stage.points > 0 ? t("plusPoints", { points: stage.points }) + " · " : ""}
+          {t("pointsVisits", { points: stage.client.points, visits: stage.client.visits })}
         </p>
         <div className="mt-2 flex w-full gap-2">
           <Button variant="outline" className="flex-1" onClick={onClose}>
-            Done
+            {t("done")}
           </Button>
           <Button className="flex-1" onClick={() => setStage({ kind: "scanning" })}>
-            Next client
+            {t("nextClient")}
           </Button>
         </div>
       </div>
@@ -124,29 +127,29 @@ function CheckInFlow({ merchantId, onClose }: { merchantId: string; onClose: () 
               <p className="truncate text-[16px] font-semibold">{c.name}</p>
               {c.email && <p className="truncate text-[12px] text-ink-muted">{c.email}</p>}
             </div>
-            {c.membership ? <Pill tone="green">{c.membership}</Pill> : <Pill>Not a member</Pill>}
+            {c.membership ? <Pill tone="green">{c.membership}</Pill> : <Pill>{t("notAMember")}</Pill>}
           </div>
           <dl className="mt-4 grid grid-cols-2 gap-3 text-[12px]">
             <div>
-              <dt className="text-ink-muted">Points</dt>
+              <dt className="text-ink-muted">{t("points")}</dt>
               <dd className="tabular text-[16px] font-semibold">{c.points}</dd>
             </div>
             <div>
-              <dt className="text-ink-muted">Visits</dt>
+              <dt className="text-ink-muted">{t("visits")}</dt>
               <dd className="tabular text-[16px] font-semibold">{c.visits}</dd>
             </div>
           </dl>
         </div>
         {c.checkedInToday ? (
-          <p className="rounded-[10px] bg-app px-3 py-2 text-center text-[13px] text-ink-muted">Already checked in today.</p>
+          <p className="rounded-[10px] bg-app px-3 py-2 text-center text-[13px] text-ink-muted">{t("alreadyCheckedInToday")}</p>
         ) : (
           <Button className="w-full" onClick={confirm} disabled={pending}>
             {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Check in{c.pointsPerVisit > 0 ? ` · +${c.pointsPerVisit} points` : ""}
+            {c.pointsPerVisit > 0 ? t("checkInWithPoints", { points: c.pointsPerVisit }) : t("checkIn")}
           </Button>
         )}
         <Button variant="ghost" className="w-full" onClick={() => setStage({ kind: "scanning" })}>
-          Scan someone else
+          {t("scanSomeoneElse")}
         </Button>
       </div>
     );
@@ -164,7 +167,7 @@ function CheckInFlow({ merchantId, onClose }: { merchantId: string; onClose: () 
             className={`flex flex-1 items-center justify-center gap-1.5 rounded-[8px] py-1.5 ${stage.kind === k ? "bg-primary-soft font-medium text-primary" : "text-ink-muted"}`}
           >
             {k === "scanning" ? <Camera className="h-3.5 w-3.5" /> : <Search className="h-3.5 w-3.5" />}
-            {k === "scanning" ? "Scan code" : "Find by name"}
+            {k === "scanning" ? t("scanCode") : t("findByName")}
           </button>
         ))}
       </div>
@@ -177,14 +180,14 @@ function CheckInFlow({ merchantId, onClose }: { merchantId: string; onClose: () 
   );
 }
 
-const CAMERA_PROBLEMS: Record<CameraProblem, string> = {
-  unsupported: "This browser can't use a camera here. Find the client by name instead.",
-  denied: "Camera access was blocked. Allow it in the browser's site settings, or find the client by name.",
-  missing: "No camera found. Find the client by name instead.",
-};
-
 /** The front-desk camera. iPhone Safari, the likeliest device, uses the jsQR fallback. */
 function CameraScanner({ onCode, onUnavailable }: { onCode: (value: string) => void; onUnavailable: () => void }) {
+  const t = useTranslations("merchant.scanQr");
+  const CAMERA_PROBLEMS: Record<CameraProblem, string> = {
+    unsupported: t("cameraProblems.unsupported"),
+    denied: t("cameraProblems.denied"),
+    missing: t("cameraProblems.missing"),
+  };
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const { problem: problemKind, starting } = useQrCamera(videoRef, onCode);
   const problem = problemKind ? CAMERA_PROBLEMS[problemKind] : null;
@@ -194,7 +197,7 @@ function CameraScanner({ onCode, onUnavailable }: { onCode: (value: string) => v
       <div className="space-y-3 py-4 text-center">
         <p className="text-[13px] text-ink-muted">{problem}</p>
         <Button variant="outline" onClick={onUnavailable}>
-          <Search className="h-3.5 w-3.5" /> Find by name
+          <Search className="h-3.5 w-3.5" /> {t("findByName")}
         </Button>
       </div>
     );
@@ -212,12 +215,13 @@ function CameraScanner({ onCode, onUnavailable }: { onCode: (value: string) => v
           </div>
         )}
       </div>
-      <p className="text-center text-[12px] text-ink-muted">Ask the client to open the Scan tab and hold up their phone.</p>
+      <p className="text-center text-[12px] text-ink-muted">{t("askClientToOpenScanTab")}</p>
     </div>
   );
 }
 
 function ClientSearch({ merchantId, onPick }: { merchantId: string; onPick: (customerProfileId: string) => void }) {
+  const t = useTranslations("merchant.scanQr");
   const [q, setQ] = React.useState("");
   const [results, setResults] = React.useState<{ customerProfileId: string; name: string; email: string | null }[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -234,13 +238,13 @@ function ClientSearch({ merchantId, onPick }: { merchantId: string; onPick: (cus
     // up before the search has even run.
     setLoading(true);
     const controller = new AbortController();
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       try {
         const res = await fetch(`/m/${encodeURIComponent(merchantId)}/check-in-search?q=${encodeURIComponent(q)}`, { signal: controller.signal, cache: "no-store" });
         const body = (await res.json().catch(() => ({}))) as { results?: typeof results; error?: string };
         if (!res.ok || !body.results) {
           setResults([]);
-          setError(body.error ?? (res.status === 401 || res.redirected ? "Please sign in again." : "Search failed. Try again."));
+          setError(body.error ?? (res.status === 401 || res.redirected ? t("pleaseSignInAgain") : t("searchFailed")));
         } else {
           setError(null);
           setResults(body.results);
@@ -255,9 +259,9 @@ function ClientSearch({ merchantId, onPick }: { merchantId: string; onPick: (cus
     }, 200);
     return () => {
       controller.abort();
-      clearTimeout(t);
+      clearTimeout(timer);
     };
-  }, [q, merchantId]);
+  }, [q, merchantId, t]);
 
   return (
     <div className="space-y-2">
@@ -267,14 +271,14 @@ function ClientSearch({ merchantId, onPick }: { merchantId: string; onPick: (cus
           autoFocus
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Name, email or phone"
-          aria-label="Search clients"
+          placeholder={t("nameEmailPhone")}
+          aria-label={t("searchClients")}
           className="h-10 w-full rounded-[10px] border border-border bg-surface pl-8 pr-3 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-primary"
         />
       </div>
-      {loading && results.length === 0 && <p className="text-[12px] text-ink-muted">Searching…</p>}
+      {loading && results.length === 0 && <p className="text-[12px] text-ink-muted">{t("searching")}</p>}
       {error && <p className="rounded-[10px] bg-[var(--accent-red)]/10 px-3 py-2 text-[12px] text-ink">{error}</p>}
-      {!loading && !error && q.trim().length >= 2 && results.length === 0 && <p className="text-[12px] text-ink-muted">No clients match.</p>}
+      {!loading && !error && q.trim().length >= 2 && results.length === 0 && <p className="text-[12px] text-ink-muted">{t("noClientsMatch")}</p>}
       <ul className="divide-y divide-border rounded-card border border-border empty:hidden">
         {results.map((r) => (
           <li key={r.customerProfileId}>

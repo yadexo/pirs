@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslations } from "next-intl";
 import { SelectField, type FieldErrors } from "@/components/merchant/form";
 import { DAY_MINUTES, DEFAULT_WINDOW_END, DEFAULT_WINDOW_START, includesNight, windowChoices } from "@/lib/marketing-window";
 
@@ -22,6 +23,7 @@ export function SendingWindowFields({
   endMinutes: number;
   errors: FieldErrors;
 }) {
+  const t = useTranslations("portal.appBuilder.settings.sendingWindow");
   const [start, setStart] = React.useState(startMinutes ?? DEFAULT_WINDOW_START);
   const [end, setEnd] = React.useState(endMinutes ?? DEFAULT_WINDOW_END);
   const [allDay, setAllDay] = React.useState(startMinutes === 0 && endMinutes >= DAY_MINUTES);
@@ -35,12 +37,12 @@ export function SendingWindowFields({
     <>
       <label className="flex items-center gap-2 text-[13px]">
         <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} className="h-4 w-4" />
-        Send any time (24/7)
+        {t("sendAnyTime")}
       </label>
 
       <div className="grid grid-cols-2 gap-3">
         <SelectField
-          label="From"
+          label={t("from")}
           name="marketingWindowStartMinutes"
           value={String(effectiveStart)}
           onChange={(e) => setStart(Number(e.target.value))}
@@ -49,7 +51,7 @@ export function SendingWindowFields({
           errors={errors}
         />
         <SelectField
-          label="Until"
+          label={t("until")}
           name="marketingWindowEndMinutes"
           value={String(effectiveEnd)}
           onChange={(e) => setEnd(Number(e.target.value))}
@@ -59,15 +61,9 @@ export function SendingWindowFields({
         />
       </div>
 
-      {night && (
-        <p className="rounded-[10px] bg-[var(--accent-amber)]/10 px-3 py-2 text-[12px] text-ink">
-          Notifications at night can make clients turn them off.
-        </p>
-      )}
+      {night && <p className="rounded-[10px] bg-[var(--accent-amber)]/10 px-3 py-2 text-[12px] text-ink">{t("nightWarning")}</p>}
 
-      <p className="text-[12px] text-ink-muted">
-        Any time of day, in quarter hours, as long as the end is after the start. Anything due outside your window waits until it next opens.
-      </p>
+      <p className="text-[12px] text-ink-muted">{t("quarterHourNote")}</p>
     </>
   );
 }

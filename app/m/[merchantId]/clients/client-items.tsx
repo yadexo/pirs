@@ -4,6 +4,7 @@ import * as React from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/primitives";
 import { describeActionFailure } from "@/lib/action-failure";
@@ -30,6 +31,9 @@ const TONE = { AVAILABLE: "green", REDEEMED: "amber", VOIDED: "red", EXPIRED: "n
 
 export function ClientItems({ merchantId, customerProfileId }: { merchantId: string; customerProfileId: string }) {
   const router = useRouter();
+  const t = useTranslations("portal.clients.clientItems");
+  const tc = useTranslations("common");
+  const locale = useLocale();
   const [items, setItems] = React.useState<ItemView[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [confirming, setConfirming] = React.useState<ItemView | null>(null);
@@ -67,7 +71,7 @@ export function ClientItems({ merchantId, customerProfileId }: { merchantId: str
       toast.error(res.error);
       return;
     }
-    toast.success(`${res.item.name} redeemed`);
+    toast.success(t("toastRedeemed", { name: res.item.name }));
     setConfirming(null);
     setNote("");
     await load();
@@ -95,7 +99,7 @@ export function ClientItems({ merchantId, customerProfileId }: { merchantId: str
       toast.error(res.error);
       return;
     }
-    toast.success(acting.kind === "gift" ? "Item given" : acting.kind === "void" ? "Item taken back" : "New code issued");
+    toast.success(acting.kind === "gift" ? t("toastGiven") : acting.kind === "void" ? t("toastTakenBack") : t("toastNewCode"));
     setActing(null);
     await load();
     router.refresh();
@@ -111,32 +115,32 @@ export function ClientItems({ merchantId, customerProfileId }: { merchantId: str
 
   if (error) return <p className="rounded-[10px] bg-[var(--accent-red)]/10 px-3 py-2 text-[12px] text-ink">{error}</p>;
 
+  const dateFmt = (iso: Date | string) => new Date(iso).toLocaleDateString(locale === "nl" ? "nl-NL" : "en-US");
+
   if (confirming) {
     return (
       <div className="space-y-3">
         <div className="rounded-card border border-border p-4">
           <p className="text-[15px] font-semibold">{confirming.name}</p>
-          <p className="mt-0.5 text-[12px] text-ink-muted">
-            Bought {new Date(confirming.purchasedAt).toLocaleDateString()} · code {confirming.code}
-          </p>
+          <p className="mt-0.5 text-[12px] text-ink-muted">{t("boughtOn", { date: dateFmt(confirming.purchasedAt), code: confirming.code })}</p>
         </div>
         <label className="block text-[12px] text-ink-muted">
-          Why without a code? (optional)
+          {t("whyNoCode")}
           <input
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Client's phone was dead"
+            placeholder={t("whyNoCodePlaceholder")}
             maxLength={200}
             className="mt-1 h-10 w-full rounded-[10px] border border-border bg-surface px-3 text-[13px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-primary"
           />
         </label>
         <div className="flex gap-2">
           <Button variant="outline" className="flex-1" onClick={() => setConfirming(null)} disabled={pending}>
-            Cancel
+            {tc("cancel")}
           </Button>
           <Button className="flex-1" onClick={redeem} disabled={pending}>
             {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Redeem
+            {t("redeem")}
           </Button>
         </div>
       </div>
@@ -145,7 +149,11 @@ export function ClientItems({ merchantId, customerProfileId }: { merchantId: str
 
   if (acting) {
     const title =
-      acting.kind === "gift" ? "Give an item" : acting.kind === "void" ? `Take back ${acting.item.name}` : `Replace the code for ${acting.item.name}`;
+      acting.kind === "gift"
+        ? t("giveAnItem")
+        : acting.kind === "void"
+          ? t("takeBackTitle", { name: acting.item.name })
+          : t("replaceCodeTitle", { name: acting.item.name });
     return (
       <form onSubmit={submitAction} className="space-y-3">
         <p className="text-[13px] font-semibold">{title}</p>
@@ -153,52 +161,54 @@ export function ClientItems({ merchantId, customerProfileId }: { merchantId: str
         {acting.kind === "gift" && (
           <>
             <label className="block text-[12px] text-ink-muted">
-              What are you giving them?
+              {t("whatAreYouGiving")}
               <input
                 value={giftName}
                 onChange={(e) => setGiftName(e.target.value)}
-                placeholder="Facial treatment"
+                placeholder={t("giftNamePlaceholder")}
                 autoFocus
                 className="mt-1 h-10 w-full rounded-[10px] border border-border bg-surface px-3 text-[13px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-primary"
               />
             </label>
             <label className="block text-[12px] text-ink-muted">
-              Kind
+              {t("kind")}
               <select
                 value={giftType}
                 onChange={(e) => setGiftType(e.target.value as typeof giftType)}
                 className="mt-1 h-10 w-full rounded-[10px] border border-border bg-surface px-2 text-[13px] text-ink outline-none"
               >
-                <option value="SERVICE">Treatment</option>
-                <option value="PRODUCT">Product</option>
-                <option value="PACKAGE">Custom plan</option>
+                <option value="SERVICE">{t("kindService")}</option>
+                <option value="PRODUCT">{t("kindProduct")}</option>
+                <option value="PACKAGE">{t("kindPackage")}</option>
               </select>
             </label>
             {/* Said plainly: this is not a sale, and must never look like one. */}
-            <p className="text-[11px] text-ink-faint">Given by the clinic, not paid for. It won&apos;t appear as a purchase.</p>
+            <p className="text-[11px] text-ink-faint">{t("givenNotPaid")}</p>
           </>
         )}
 
         <label className="block text-[12px] text-ink-muted">
-          Reason
+          {t("reason")}
           <input
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder={acting.kind === "void" ? "Issued by mistake" : acting.kind === "reissue" ? "Client lost their code" : "Compensation for a cancelled appointment"}
+            placeholder={
+              acting.kind === "void" ? t("reasonPlaceholderVoid") : acting.kind === "reissue" ? t("reasonPlaceholderReissue") : t("reasonPlaceholderGift")
+            }
             maxLength={200}
             autoFocus={acting.kind !== "gift"}
             className="mt-1 h-10 w-full rounded-[10px] border border-border bg-surface px-3 text-[13px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-primary"
           />
         </label>
-        <p className="text-[11px] text-ink-faint">The client is told, with this reason in your words.</p>
+        <p className="text-[11px] text-ink-faint">{t("clientIsTold")}</p>
 
         <div className="flex gap-2">
           <Button variant="outline" className="flex-1" type="button" onClick={() => setActing(null)} disabled={pending}>
-            Cancel
+            {tc("cancel")}
           </Button>
           <Button className="flex-1" type="submit" variant={acting.kind === "void" ? "danger" : "primary"} disabled={pending}>
             {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {acting.kind === "gift" ? "Give it" : acting.kind === "void" ? "Take it back" : "Issue a new code"}
+            {acting.kind === "gift" ? t("giveIt") : acting.kind === "void" ? t("takeItBack") : t("issueNewCode")}
           </Button>
         </div>
       </form>
@@ -211,7 +221,7 @@ export function ClientItems({ merchantId, customerProfileId }: { merchantId: str
       <ClientPackages merchantId={merchantId} customerProfileId={customerProfileId} onUsed={load} />
 
       {items.length === 0 ? (
-        <p className="py-6 text-center text-[13px] text-ink-muted">Nothing bought in the app yet.</p>
+        <p className="py-6 text-center text-[13px] text-ink-muted">{t("nothingBoughtYet")}</p>
       ) : (
         <ul className="divide-y divide-border rounded-card border border-border">
           {items.map((item) => (
@@ -220,25 +230,29 @@ export function ClientItems({ merchantId, customerProfileId }: { merchantId: str
                 <p className="truncate text-[13px] font-medium">{item.name}</p>
                 <p className="truncate text-[11px] text-ink-muted">
                   {item.status === "REDEEMED" && item.redeemedAt
-                    ? `Redeemed ${new Date(item.redeemedAt).toLocaleDateString()}${item.redeemedByName ? ` by ${item.redeemedByName}` : ""}`
-                    : `${item.source === "GIFT" ? "Given" : "Bought"} ${new Date(item.purchasedAt).toLocaleDateString()} · ${item.code}`}
+                    ? item.redeemedByName
+                      ? t("redeemedOnBy", { date: dateFmt(item.redeemedAt), name: item.redeemedByName })
+                      : t("redeemedOn", { date: dateFmt(item.redeemedAt) })
+                    : item.source === "GIFT"
+                      ? t("givenOn", { date: dateFmt(item.purchasedAt), code: item.code })
+                      : t("boughtOn", { date: dateFmt(item.purchasedAt), code: item.code })}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 {item.status === "AVAILABLE" && (
                   <Button size="sm" variant="outline" onClick={() => setConfirming(item)}>
-                    Redeem
+                    {t("redeem")}
                   </Button>
                 )}
-                {item.status !== "AVAILABLE" && <Pill tone={TONE[item.status]}>{item.status.toLowerCase()}</Pill>}
+                {item.status !== "AVAILABLE" && <Pill tone={TONE[item.status]}>{itemStatusLabel(item.status, t)}</Pill>}
                 {item.status !== "REDEEMED" && (
                   <Button size="sm" variant="ghost" onClick={() => startAction({ kind: "reissue", item })}>
-                    New code
+                    {t("newCode")}
                   </Button>
                 )}
                 {item.status === "AVAILABLE" && (
                   <Button size="sm" variant="ghost" onClick={() => startAction({ kind: "void", item })}>
-                    Take back
+                    {t("takeBack")}
                   </Button>
                 )}
               </div>
@@ -248,8 +262,21 @@ export function ClientItems({ merchantId, customerProfileId }: { merchantId: str
       )}
 
       <Button size="sm" variant="outline" onClick={() => startAction({ kind: "gift" })}>
-        Give an item
+        {t("giveAnItem")}
       </Button>
     </div>
   );
+}
+
+function itemStatusLabel(status: ItemView["status"], t: ReturnType<typeof useTranslations>): string {
+  switch (status) {
+    case "REDEEMED":
+      return t("statusRedeemed");
+    case "VOIDED":
+      return t("statusVoided");
+    case "EXPIRED":
+      return t("statusExpired");
+    default:
+      return status.toLowerCase();
+  }
 }

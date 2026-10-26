@@ -113,8 +113,15 @@ describe("what the restyle had to keep", () => {
   });
 
   it("labels what a clinic types as the price the client pays", () => {
-    for (const file of ["app/m/[merchantId]/app-builder/item-forms.tsx", "app/m/[merchantId]/app-builder/product-form.tsx"]) {
-      expect(readFileSync(file, "utf8"), file).toContain('label="Price incl. VAT"');
-    }
+    // Literal text moved to messages/*.json this session; this checks the
+    // translation-key call sites are still wired, and that both resolve to
+    // "Price incl. VAT" in English (see messages/en.json).
+    const en = JSON.parse(readFileSync("messages/en.json", "utf8"));
+    const itemForms = readFileSync("app/m/[merchantId]/app-builder/item-forms.tsx", "utf8");
+    expect(itemForms.match(/label=\{t\("priceInclVatLabel"\)\}/g)?.length).toBe(2);
+    expect(readFileSync("app/m/[merchantId]/app-builder/product-form.tsx", "utf8")).toMatch(/label=\{t\("priceInclVat"\)\}/);
+    expect(en.portal.appBuilder.itemForms.packageForm.priceInclVatLabel).toBe("Price incl. VAT");
+    expect(en.portal.appBuilder.itemForms.membershipPlanForm.priceInclVatLabel).toBe("Price incl. VAT");
+    expect(en.portal.appBuilder.productForm.priceInclVat).toBe("Price incl. VAT");
   });
 });

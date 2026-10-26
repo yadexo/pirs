@@ -4,6 +4,7 @@ import * as React from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/primitives";
 import { describeActionFailure } from "@/lib/action-failure";
@@ -32,6 +33,8 @@ export function ClientPackages({
   onUsed?: () => void;
 }) {
   const router = useRouter();
+  const t = useTranslations("merchant.clientPackages");
+  const tc = useTranslations("common");
   const [packages, setPackages] = React.useState<StaffPackageView[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [using, setUsing] = React.useState<StaffPackageView | null>(null);
@@ -74,7 +77,7 @@ export function ClientPackages({
       await load();
       return;
     }
-    toast.success(`1 session used · ${res.remainingUses} left`);
+    toast.success(t("sessionUsed", { remaining: res.remainingUses }));
     setUsing(null);
     await load();
     onUsed?.();
@@ -99,19 +102,19 @@ export function ClientPackages({
         <div className="rounded-card bg-app p-4">
           <p className="text-[15px] font-semibold">{using.name}</p>
           <p className="mt-0.5 text-[13px] text-ink-muted">
-            {using.remainingUses} of {using.totalUses} sessions left
-            {using.expiresAt ? ` · valid until ${formatDay(using.expiresAt)}` : ""}
+            {t("sessionsLeftOf", { remaining: using.remainingUses, total: using.totalUses })}
+            {using.expiresAt ? ` · ${t("validUntil", { date: formatDay(using.expiresAt) })}` : ""}
           </p>
         </div>
 
         <label className="block text-[14px] font-semibold text-ink">
-          Which treatment
+          {t("whichTreatment")}
           <select
             value={serviceId}
             onChange={(e) => setServiceId(e.target.value)}
             className="mt-1 h-12 w-full rounded-[14px] bg-surface px-4 text-[16px] text-ink shadow-[inset_0_0_0_1px_var(--line-strong)] outline-none focus-visible:shadow-[inset_0_0_0_1.5px_var(--ink)]"
           >
-            <option value="">Choose a treatment</option>
+            <option value="">{t("chooseATreatment")}</option>
             {using.covers.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -121,29 +124,27 @@ export function ClientPackages({
         </label>
 
         <label className="block text-[14px] font-semibold text-ink">
-          Note (optional)
+          {t("noteOptional")}
           <input
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Second of three"
+            placeholder={t("notePlaceholder")}
             maxLength={200}
             className="mt-1 h-12 w-full rounded-[14px] bg-surface px-4 text-[16px] text-ink shadow-[inset_0_0_0_1px_var(--line-strong)] outline-none focus-visible:shadow-[inset_0_0_0_1.5px_var(--ink)]"
           />
         </label>
 
         <p className="pk-notice pk-notice-info">
-          <span className="txt">
-            After this, {after} session{after === 1 ? "" : "s"} left.
-          </span>
+          <span className="txt">{t("sessionsLeftAfter", { count: after })}</span>
         </p>
 
         <div className="flex gap-2">
           <Button variant="outline" className="flex-1" type="button" onClick={() => setUsing(null)} disabled={pending}>
-            Cancel
+            {tc("cancel")}
           </Button>
           <Button className="flex-1" type="button" onClick={() => void confirm()} disabled={pending || !serviceId}>
             {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Use 1 session
+            {t("useOneSession")}
           </Button>
         </div>
       </div>
@@ -152,7 +153,7 @@ export function ClientPackages({
 
   return (
     <div className="space-y-2">
-      <p className="text-[14px] font-semibold text-ink">Session packages</p>
+      <p className="text-[14px] font-semibold text-ink">{t("sessionPackages")}</p>
       <ul className="divide-y divide-border rounded-card bg-app">
         {packages.map((pkg) => (
           <li key={pkg.id} className="px-3 py-3">
@@ -160,16 +161,18 @@ export function ClientPackages({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[14px] font-semibold">{pkg.name}</p>
                 <p className="truncate text-[13px] text-ink-muted">
-                  {pkg.remainingUses} of {pkg.totalUses} sessions left
-                  {pkg.expiresAt ? ` · ${pkg.expired ? "expired" : "valid until"} ${formatDay(pkg.expiresAt)}` : ""}
+                  {t("sessionsLeftOf", { remaining: pkg.remainingUses, total: pkg.totalUses })}
+                  {pkg.expiresAt
+                    ? ` · ${pkg.expired ? t("expiredOn", { date: formatDay(pkg.expiresAt) }) : t("validUntil", { date: formatDay(pkg.expiresAt) })}`
+                    : ""}
                 </p>
               </div>
               {pkg.usable ? (
                 <Button size="sm" onClick={() => start(pkg)}>
-                  Use a session
+                  {t("useASession")}
                 </Button>
               ) : (
-                <Pill tone={pkg.expired ? "neutral" : "amber"}>{pkg.expired ? "Expired" : "None left"}</Pill>
+                <Pill tone={pkg.expired ? "neutral" : "amber"}>{pkg.expired ? t("expired") : t("noneLeft")}</Pill>
               )}
             </div>
 

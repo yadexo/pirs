@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import { requireMerchantContext } from "@/lib/merchant-context";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
 import type { PermissionKey } from "@/lib/permissions";
@@ -16,6 +17,7 @@ export default async function ClientsPage({
   const { merchantId } = await params;
   const { q = "", sort = "alphabetical", status = "all", page = "1" } = await searchParams;
   const ctx = await requireMerchantContext(merchantId);
+  const t = await getTranslations("portal.clients");
 
   const pageNum = Math.max(1, Number(page) || 1);
   const can = (permission: PermissionKey) => ctx.viewer.permissions === "ALL" || ctx.viewer.permissions.includes(permission);
@@ -62,7 +64,7 @@ export default async function ClientsPage({
 
   return (
     <div className="mx-auto max-w-[1180px]">
-      <MerchantPageHeader title="Clients" description="Everyone who has an account in your app." />
+      <MerchantPageHeader title={t("title")} description={t("description")} />
       <div className="mt-5">
         <ClientsTable
           merchantId={merchantId}

@@ -4,6 +4,7 @@ import * as React from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/primitives";
 import { FormSection, SelectField, TextAreaField, TextField, type FieldErrors } from "@/components/merchant/form";
@@ -39,6 +40,15 @@ const STATUS_TONE: Record<string, "green" | "amber" | "neutral" | "red"> = {
   DRAFT: "neutral",
 };
 
+// CampaignRow.status → messages/*.json portal.appBuilder.settings.broadcast.status key.
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  SENT: "sent",
+  SCHEDULED: "scheduled",
+  SENDING: "sending",
+  CANCELLED: "cancelled",
+  DRAFT: "draft",
+};
+
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "—");
 
 export function BroadcastForm({
@@ -53,6 +63,9 @@ export function BroadcastForm({
   campaigns: CampaignRow[];
 }) {
   const router = useRouter();
+  const t = useTranslations("portal.appBuilder.settings.broadcast");
+  const tStatus = useTranslations("portal.appBuilder.settings.broadcast.status");
+  const statusLabel = (status: string) => tStatus(STATUS_LABEL_KEYS[status] ?? status);
   const [sending, setSending] = React.useState(false);
   const [errors, setErrors] = React.useState<FieldErrors>({});
   const [later, setLater] = React.useState(false);
@@ -82,12 +95,10 @@ export function BroadcastForm({
 
     if (result.scheduledFor) {
       toast.success(
-        result.heldUntil
-          ? `Scheduled for ${when(result.heldUntil)} — your sending hours had closed.`
-          : `Scheduled for ${when(result.scheduledFor)}.`,
+        result.heldUntil ? t("scheduledHeldUntil", { when: when(result.heldUntil) }) : t("scheduledFor", { when: when(result.scheduledFor) }),
       );
     } else {
-      toast.success(result.devices === 1 ? "Sent to 1 device" : `Sent to ${result.devices} devices`);
+      toast.success(t("sentToDevices", { count: result.devices }));
     }
     formRef.current?.reset();
     setLater(false);
@@ -97,53 +108,49 @@ export function BroadcastForm({
   async function cancel(id: string) {
     const result = await cancelCampaignAction(merchantId, id).catch((err) => ({ error: describeActionFailure(err) }) as const);
     if ("error" in result) return toast.error(result.error);
-    toast.success("Cancelled");
+    toast.success(t("cancelledToast"));
     router.refresh();
   }
 
   return (
     <>
       <form ref={formRef} onSubmit={submit}>
-        <FormSection title="Send a notification">
-          <p className="text-[12px] text-ink-muted">
-            {devices === 0
-              ? "None of your clients have turned notifications on yet. They can, from the app's Home screen or Profile → Settings."
-              : `${devices} ${devices === 1 ? "device has" : "devices have"} notifications on. Only clients who left "offers and news" on are sent these.`}
-          </p>
-          <TextField label="Title" name="title" maxLength={60} placeholder="Winter sale" errors={errors} required />
+        <FormSection title={t("sendANotification")}>
+          <p className="text-[12px] text-ink-muted">{devices === 0 ? t("noDevicesYet") : t("devicesOn", { count: devices })}</p>
+          <TextField label={t("titleField")} name="title" maxLength={60} placeholder={t("titlePlaceholder")} errors={errors} required />
           <TextAreaField
-            label="Message"
+            label={t("message")}
             name="body"
             rows={3}
             maxLength={200}
-            placeholder="Everything in the shop is 20% off until Sunday."
+            placeholder={t("messagePlaceholder")}
             errors={errors}
             required
           />
           {products.length > 0 && (
             <SelectField
-              label="Open a product (optional)"
+              label={t("openAProduct")}
               name="productId"
               errors={errors}
-              options={[{ value: "", label: "Just open the shop" }, ...products.map((p) => ({ value: p.id, label: p.name }))]}
+              options={[{ value: "", label: t("justOpenTheShop") }, ...products.map((p) => ({ value: p.id, label: p.name }))]}
             />
           )}
 
           <label className="flex items-center gap-2 text-[13px]">
             <input type="checkbox" name="ignoreDailyLimit" className="h-4 w-4" />
-            Also send to clients who already got a notification today
+            {t("alsoSendToAlreadyNotified")}
           </label>
           <label className="flex items-center gap-2 text-[13px]">
             <input type="checkbox" checked={later} onChange={(e) => setLater(e.target.checked)} className="h-4 w-4" />
-            Send later
+            {t("sendLater")}
           </label>
           {later && (
             <TextField
-              label="When"
+              label={t("when")}
               name="scheduledAt"
               type="datetime-local"
               errors={errors}
-              hint="Outside your sending hours it waits until they next open."
+              hint={t("outsideSendingHours")}
               required
             />
           )}
@@ -151,18 +158,15 @@ export function BroadcastForm({
           <div className="flex items-center gap-3">
             <Button type="submit" disabled={sending || devices === 0}>
               {sending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {sending ? "Working…" : later ? "Schedule" : "Send now"}
+              {sending ? t("working") : later ? t("schedule") : t("sendNow")}
             </Button>
           </div>
-          <p className="text-[12px] text-ink-muted">
-            Up to 5 an hour, and nothing goes out outside your sending hours. Your daily limit per client is set under
-            &ldquo;When marketing may be sent&rdquo;.
-          </p>
+          <p className="text-[12px] text-ink-muted">{t("rateLimitNote")}</p>
         </FormSection>
       </form>
 
       {campaigns.length > 0 && (
-        <FormSection title="Scheduled and sent">
+        <FormSection title={t("scheduledAndSent")}>
           <ul className="divide-y divide-border rounded-card border border-border">
             {campaigns.map((c) => (
               <li key={c.id} className="flex items-start gap-3 px-3 py-2.5">
@@ -170,18 +174,18 @@ export function BroadcastForm({
                   <p className="truncate text-[13px] font-medium">{c.name}</p>
                   <p className="truncate text-[11px] text-ink-muted">
                     {c.status === "SENT"
-                      ? `Sent ${when(c.sentAt)} · ${c.devicesReached} ${c.devicesReached === 1 ? "device" : "devices"}`
+                      ? t("sentDevices", { when: when(c.sentAt), count: c.devicesReached })
                       : c.status === "SCHEDULED"
-                        ? `Goes out ${when(c.scheduledAt)}`
-                        : c.status.toLowerCase()}
-                    {c.clientName ? ` · ${c.clientName} only` : ""}
+                        ? t("goesOut", { when: when(c.scheduledAt) })
+                        : statusLabel(c.status)}
+                    {c.clientName ? t("clientOnly", { name: c.clientName }) : ""}
                   </p>
                   {c.outcomeNote && <p className="mt-0.5 text-[11px] text-ink-muted">{c.outcomeNote}</p>}
                 </div>
-                <Pill tone={STATUS_TONE[c.status] ?? "neutral"}>{c.status.toLowerCase()}</Pill>
+                <Pill tone={STATUS_TONE[c.status] ?? "neutral"}>{statusLabel(c.status)}</Pill>
                 {c.status === "SCHEDULED" && (
                   <Button size="sm" variant="outline" onClick={() => void cancel(c.id)}>
-                    Cancel
+                    {t("cancel")}
                   </Button>
                 )}
               </li>
