@@ -489,6 +489,126 @@
       "close": "Close"
     }
   },
+  "portal": {
+    "nav": {
+      "home": "Home",
+      "appointments": "Appointments",
+      "clients": "Client Profiles",
+      "shop": "Shop Summary",
+      "memberships": "Memberships",
+      "appBuilder": "App Builder",
+      "myApps": "My Apps",
+      "whiteLabel": "White Label",
+      "settings": "Settings"
+    },
+    "helpAndSupport": "Help and support",
+    "language": "Language",
+    "signOut": "Sign out",
+    "viewApp": "View app",
+    "viewingAs": "Viewing as",
+    "exit": "Exit",
+    "searchMerchants": "Search merchants...",
+    "noMerchantsFound": "No merchants found",
+    "home": {
+      "goodMorning": "Good morning",
+      "goodAfternoon": "Good afternoon",
+      "goodEvening": "Good evening",
+      "howIsDoing": "Here's how {name} is doing. All amounts include VAT.",
+      "setupTitle": "{count, plural, one {Setup: # treatment has no booking link} other {Setup: # treatments have no booking link}}",
+      "clientsCanBuy": "Clients can buy {items}{more}, but can't book {pronoun} from the app.",
+      "andMore": " and {count} more",
+      "it": "it",
+      "them": "them",
+      "addBookingLinks": "Add booking links",
+      "dailyProcessing": "Daily processing",
+      "dailyProcessingTooltip": "Payments processed today, against the same point yesterday.",
+      "liveActivityFeed": "Live Activity Feed"
+    },
+    "stats": {
+      "title": "Stats",
+      "ranges": { "today": "Today", "7d": "Last 7 days", "30d": "Last 30 days", "90d": "Last 90 days" },
+      "comparedTo": "Compared to",
+      "noComparison": "No comparison",
+      "previousPeriod": "Previous period",
+      "samePeriodLastYear": "Same period last year",
+      "netRevenue": "Net Revenue",
+      "mrr": "MRR",
+      "mrrTooltip": "Monthly recurring revenue from active memberships.",
+      "revenueSourcesBreakdown": "Revenue Sources Breakdown",
+      "appUserLtv": "App User LTV",
+      "appUserLtvTooltip": "Average lifetime spend per app user.",
+      "clientLtv": "Client LTV",
+      "clientLtvTooltip": "Average lifetime spend per client record.",
+      "topClients": "Top Clients",
+      "seeAll": "See All",
+      "noClientData": "No client data available",
+      "name": "Name",
+      "totalSpend": "Total Spend",
+      "topTeamMembers": "Top Team Members",
+      "noTeamData": "No team member data available",
+      "appUsers": "App Users",
+      "referrals": "Referrals"
+    },
+    "activityFeed": {
+      "empty": "No client activity yet. Bookings, purchases and check-ins appear here."
+    },
+    "appointments": {
+      "title": "Appointments",
+      "description": "What clients have booked, and what they asked for.",
+      "chips": {
+        "upcoming": "Upcoming",
+        "requested": "Requested",
+        "confirmed": "Confirmed",
+        "completed": "Completed",
+        "cancelled": "Cancelled",
+        "no-show": "No-show"
+      },
+      "statusLabel": {
+        "REQUESTED": "Requested",
+        "CONFIRMED": "Confirmed",
+        "COMPLETED": "Completed",
+        "CANCELLED": "Cancelled",
+        "NO_SHOW": "No-show"
+      },
+      "search": "Search...",
+      "listView": "List view",
+      "calendarView": "Calendar view",
+      "noAppointmentsAvailable": "No appointments available",
+      "confirm": "Confirm",
+      "decline": "Decline",
+      "complete": "Complete",
+      "noShow": "No-show",
+      "cancel": "Cancel",
+      "status": "Status",
+      "staff": "Staff",
+      "location": "Location",
+      "ends": "Ends",
+      "notes": "Notes",
+      "markedStatus": "Marked {status}"
+    },
+    "memberships": {
+      "title": "Memberships",
+      "description": "Your plans and the clients on them. All amounts include VAT.",
+      "mrr": "Monthly Recurring Revenue",
+      "totalActiveMembers": "Total active Members",
+      "activeMembersTooltip": "Clients with a membership in the ACTIVE state.",
+      "signUpsOverTime": "Membership Sign Ups over time",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "creditCardDunning": "Credit Card Dunning",
+      "noDunning": "No dunning transactions available",
+      "attempts": "{count} attempts",
+      "plans": "Plans",
+      "noMembershipsAvailable": "No memberships available",
+      "createInAppBuilder": "Create in App Builder →",
+      "perMonthAbbrev": "mo",
+      "perYearAbbrev": "yr",
+      "membersCount": "{count, plural, one {# member} other {# members}}",
+      "active": "Active",
+      "inactive": "Inactive"
+    }
+  },
   "textCheck": {
     "resultPromise": {
       "message": "“{match}” promises a result you can't promise. How a treatment turns out depends on the person.",
@@ -545,5 +665,11 @@
       "reset": "Reset their 2FA",
       "confirmed": "Two-factor authentication was reset for {email}. They'll be asked to set it up again next time they sign in."
     }
+  },
+  "accountLanguage": {
+    "title": "Language",
+    "description": "The language used for your account — this takes priority over the clinic's default.",
+    "dutch": "Nederlands",
+    "english": "English"
   }
 }

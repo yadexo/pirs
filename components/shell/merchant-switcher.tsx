@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ChevronsUpDown, Search } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 
 export interface SwitchableMerchant {
@@ -11,6 +12,7 @@ export interface SwitchableMerchant {
 }
 
 export function MerchantSwitcher({ current, merchants }: { current: string; merchants: SwitchableMerchant[] }) {
+  const t = useTranslations("portal");
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const router = useRouter();
@@ -55,12 +57,12 @@ export function MerchantSwitcher({ current, merchants }: { current: string; merc
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search merchants..."
+              placeholder={t("searchMerchants")}
               className="w-full bg-transparent text-[12px] outline-none placeholder:text-ink-faint"
             />
           </div>
           <ul role="listbox" className="max-h-64 overflow-y-auto py-1">
-            {filtered.length === 0 && <li className="px-3 py-2 text-[12px] text-ink-muted">No merchants found</li>}
+            {filtered.length === 0 && <li className="px-3 py-2 text-[12px] text-ink-muted">{t("noMerchantsFound")}</li>}
             {filtered.map((m) => (
               <li key={m.id}>
                 <button

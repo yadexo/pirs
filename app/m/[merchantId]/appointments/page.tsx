@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import { requireMerchantContext } from "@/lib/merchant-context";
 import { MerchantPageHeader } from "@/components/merchant/page-header";
 import { AppointmentsView } from "./appointments-view";
@@ -22,6 +23,7 @@ export default async function AppointmentsPage({
   const { merchantId } = await params;
   const { status = "upcoming", view = "list", q = "" } = await searchParams;
   const ctx = await requireMerchantContext(merchantId);
+  const t = await getTranslations("portal.appointments");
 
   const statuses = STATUS_FILTERS[status] ?? STATUS_FILTERS.upcoming!;
 
@@ -52,7 +54,7 @@ export default async function AppointmentsPage({
 
   return (
     <div className="mx-auto max-w-[1180px]">
-      <MerchantPageHeader title="Appointments" description="What clients have booked, and what they asked for." />
+      <MerchantPageHeader title={t("title")} description={t("description")} />
       <AppointmentsView
         merchantId={merchantId}
         status={status}

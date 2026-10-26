@@ -3,18 +3,14 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Download, Eye } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { Panel, Chip } from "@/components/ui/primitives";
 import { InsetEmpty } from "@/components/ui/empty-state";
 import { LineChart } from "@/components/ui/line-chart";
 import { formatMoney } from "@/lib/utils";
 import type { HomeMetrics } from "@/lib/home-metrics";
 
-const RANGES = [
-  { key: "today", label: "Today" },
-  { key: "7d", label: "Last 7 days" },
-  { key: "30d", label: "Last 30 days" },
-  { key: "90d", label: "Last 90 days" },
-];
+const RANGE_KEYS = ["today", "7d", "30d", "90d"] as const;
 
 function Widget({
   title,
@@ -55,42 +51,40 @@ export function StatsGrid({
   metrics: HomeMetrics;
 }) {
   const router = useRouter();
-  const money = (c: number) => formatMoney(c, metrics.currency);
+  const t = useTranslations("portal.stats");
+  const locale = useLocale();
+  const money = (c: number) => formatMoney(c, metrics.currency, locale === "nl" ? "nl-NL" : "en-US");
   const sourcesTotal = metrics.revenueSources.reduce((s, r) => s + r.cents, 0);
 
   return (
     <section className="mt-6">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="mr-1 text-[15px] font-semibold">Stats</h2>
-        {RANGES.map((r) => (
-          <Chip
-            key={r.key}
-            active={range === r.key}
-            onClick={() => router.push(`/m/${merchantId}?range=${r.key}`)}
-          >
-            {r.label}
+        <h2 className="mr-1 text-[15px] font-semibold">{t("title")}</h2>
+        {RANGE_KEYS.map((key) => (
+          <Chip key={key} active={range === key} onClick={() => router.push(`/m/${merchantId}?range=${key}`)}>
+            {t(`ranges.${key}`)}
           </Chip>
         ))}
-        <span className="ml-2 text-[12px] text-ink-muted">Compared to</span>
+        <span className="ml-2 text-[12px] text-ink-muted">{t("comparedTo")}</span>
         <select className="h-8 rounded-[10px] border border-border bg-surface px-2 text-[12px] outline-none">
-          <option>No comparison</option>
-          <option>Previous period</option>
-          <option>Same period last year</option>
+          <option>{t("noComparison")}</option>
+          <option>{t("previousPeriod")}</option>
+          <option>{t("samePeriodLastYear")}</option>
         </select>
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <Widget title="Net Revenue">
+        <Widget title={t("netRevenue")}>
           <p className="tabular text-[22px] font-semibold">{money(metrics.netRevenueCents)}</p>
           {metrics.netRevenueCents === 0 ? <InsetEmpty /> : <LineChart points={metrics.netRevenueSeries} height={90} />}
         </Widget>
 
-        <Widget title="MRR" tooltip="Monthly recurring revenue from active memberships.">
+        <Widget title={t("mrr")} tooltip={t("mrrTooltip")}>
           <p className="tabular text-[22px] font-semibold">{money(metrics.mrrCents)}</p>
           {metrics.mrrCents === 0 ? <InsetEmpty /> : <LineChart points={metrics.mrrSeries} height={90} />}
         </Widget>
 
-        <Widget title="Revenue Sources Breakdown">
+        <Widget title={t("revenueSourcesBreakdown")}>
           <div className="mt-1 flex h-2 overflow-hidden rounded-pill bg-app">
             {sourcesTotal > 0 &&
               metrics.revenueSources.map((s) => (
@@ -112,36 +106,36 @@ export function StatsGrid({
           </ul>
         </Widget>
 
-        <Widget title="App User LTV" tooltip="Average lifetime spend per app user.">
+        <Widget title={t("appUserLtv")} tooltip={t("appUserLtvTooltip")}>
           <p className="tabular text-[22px] font-semibold">{money(metrics.appUserLtvCents)}</p>
           {metrics.appUserLtvCents === 0 ? <InsetEmpty /> : <LineChart points={metrics.netRevenueSeries} height={90} />}
         </Widget>
 
-        <Widget title="Client LTV" tooltip="Average lifetime spend per client record.">
+        <Widget title={t("clientLtv")} tooltip={t("clientLtvTooltip")}>
           <p className="tabular text-[22px] font-semibold">{money(metrics.appUserLtvCents)}</p>
           <InsetEmpty />
         </Widget>
 
         <Widget
-          title="Top Clients"
+          title={t("topClients")}
           right={
             <button
               type="button"
               onClick={() => router.push(`/m/${merchantId}/clients`)}
               className="flex items-center gap-1 text-[11px] text-primary"
             >
-              <Eye className="h-3 w-3" /> See All
+              <Eye className="h-3 w-3" /> {t("seeAll")}
             </button>
           }
         >
           {metrics.topClients.length === 0 ? (
-            <InsetEmpty text="No client data available" />
+            <InsetEmpty text={t("noClientData")} />
           ) : (
             <table className="w-full">
               <thead>
                 <tr className="text-left text-[10px] uppercase tracking-wide text-ink-faint">
-                  <th className="pb-1 font-medium">Name</th>
-                  <th className="pb-1 text-right font-medium">Total Spend</th>
+                  <th className="pb-1 font-medium">{t("name")}</th>
+                  <th className="pb-1 text-right font-medium">{t("totalSpend")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -157,18 +151,18 @@ export function StatsGrid({
         </Widget>
 
         <Widget
-          title="Top Team Members"
-          right={<span className="flex items-center gap-1 text-[11px] text-primary"><Eye className="h-3 w-3" /> See All</span>}
+          title={t("topTeamMembers")}
+          right={<span className="flex items-center gap-1 text-[11px] text-primary"><Eye className="h-3 w-3" /> {t("seeAll")}</span>}
         >
-          <InsetEmpty text="No team member data available" />
+          <InsetEmpty text={t("noTeamData")} />
         </Widget>
 
-        <Widget title="App Users">
+        <Widget title={t("appUsers")}>
           <p className="tabular text-[22px] font-semibold">{metrics.appUsers}</p>
           {metrics.appUsers === 0 ? <InsetEmpty /> : <LineChart points={metrics.appUserSeries} height={90} />}
         </Widget>
 
-        <Widget title="Referrals">
+        <Widget title={t("referrals")}>
           <p className="tabular text-[22px] font-semibold">{metrics.referrals}</p>
           <InsetEmpty />
         </Widget>

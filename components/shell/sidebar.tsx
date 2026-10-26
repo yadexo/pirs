@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { LifeBuoy, LogOut } from "lucide-react";
+import { Globe, LifeBuoy, LogOut } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { signOutAction } from "@/lib/actions/session";
 
@@ -43,6 +44,7 @@ export function Sidebar({
   /** Who is signed in, shown at the foot of the bar. */
   user?: { name: string; role: string };
 }) {
+  const t = useTranslations("portal");
   const initials = (value: string) =>
     value
       .split(/\s+/)
@@ -83,20 +85,27 @@ export function Sidebar({
 
       <div className="pk-foot">
         {support ? (
-          <a href={support.url} target="_blank" rel="noreferrer" className="pk-navrow" title="Help and support">
+          <a href={support.url} target="_blank" rel="noreferrer" className="pk-navrow" title={t("helpAndSupport")}>
             <span className="ic" aria-hidden="true">
               <LifeBuoy className="h-5 w-5" />
             </span>
-            <span className="lab">Help and support</span>
+            <span className="lab">{t("helpAndSupport")}</span>
           </a>
         ) : (
-          <Link href="/agency/white-label" className="pk-navrow" title="Help and support">
+          <Link href="/agency/white-label" className="pk-navrow" title={t("helpAndSupport")}>
             <span className="ic" aria-hidden="true">
               <LifeBuoy className="h-5 w-5" />
             </span>
-            <span className="lab">Help and support</span>
+            <span className="lab">{t("helpAndSupport")}</span>
           </Link>
         )}
+
+        <Link href="/account/language" className="pk-navrow" title={t("language")}>
+          <span className="ic" aria-hidden="true">
+            <Globe className="h-5 w-5" />
+          </span>
+          <span className="lab">{t("language")}</span>
+        </Link>
 
         <div className="pk-user">
           <span className="avatar" aria-hidden="true">
@@ -107,7 +116,7 @@ export function Sidebar({
             {user?.role && <span>{user.role}</span>}
           </span>
           <form action={signOutAction}>
-            <button type="submit" className="out" aria-label="Sign out" title="Sign out">
+            <button type="submit" className="out" aria-label={t("signOut")} title={t("signOut")}>
               <LogOut className="h-4 w-4" />
             </button>
           </form>

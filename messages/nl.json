@@ -489,6 +489,126 @@
       "close": "Sluiten"
     }
   },
+  "portal": {
+    "nav": {
+      "home": "Start",
+      "appointments": "Afspraken",
+      "clients": "Klantprofielen",
+      "shop": "Shopoverzicht",
+      "memberships": "Lidmaatschappen",
+      "appBuilder": "App Builder",
+      "myApps": "Mijn apps",
+      "whiteLabel": "White label",
+      "settings": "Instellingen"
+    },
+    "helpAndSupport": "Hulp en ondersteuning",
+    "language": "Taal",
+    "signOut": "Uitloggen",
+    "viewApp": "App bekijken",
+    "viewingAs": "Bekijken als",
+    "exit": "Afsluiten",
+    "searchMerchants": "Klinieken zoeken…",
+    "noMerchantsFound": "Geen klinieken gevonden",
+    "home": {
+      "goodMorning": "Goedemorgen",
+      "goodAfternoon": "Goedemiddag",
+      "goodEvening": "Goedenavond",
+      "howIsDoing": "Zo gaat het met {name}. Alle bedragen zijn inclusief btw.",
+      "setupTitle": "{count, plural, one {Instellen: # behandeling heeft geen boekingslink} other {Instellen: # behandelingen hebben geen boekingslink}}",
+      "clientsCanBuy": "Klanten kunnen {items} kopen{more}, maar kunnen {pronoun} niet boeken vanuit de app.",
+      "andMore": " en nog {count} meer",
+      "it": "deze",
+      "them": "deze",
+      "addBookingLinks": "Boekingslinks toevoegen",
+      "dailyProcessing": "Dagelijkse verwerking",
+      "dailyProcessingTooltip": "Betalingen verwerkt vandaag, tegenover hetzelfde moment gisteren.",
+      "liveActivityFeed": "Live activiteitenfeed"
+    },
+    "stats": {
+      "title": "Statistieken",
+      "ranges": { "today": "Vandaag", "7d": "Laatste 7 dagen", "30d": "Laatste 30 dagen", "90d": "Laatste 90 dagen" },
+      "comparedTo": "Vergeleken met",
+      "noComparison": "Geen vergelijking",
+      "previousPeriod": "Vorige periode",
+      "samePeriodLastYear": "Zelfde periode vorig jaar",
+      "netRevenue": "Netto-omzet",
+      "mrr": "MRR",
+      "mrrTooltip": "Maandelijks terugkerende omzet uit actieve lidmaatschappen.",
+      "revenueSourcesBreakdown": "Omzetbronnen",
+      "appUserLtv": "LTV app-gebruiker",
+      "appUserLtvTooltip": "Gemiddelde levenslange uitgave per app-gebruiker.",
+      "clientLtv": "LTV klant",
+      "clientLtvTooltip": "Gemiddelde levenslange uitgave per klantprofiel.",
+      "topClients": "Topklanten",
+      "seeAll": "Alles bekijken",
+      "noClientData": "Geen klantgegevens beschikbaar",
+      "name": "Naam",
+      "totalSpend": "Totale uitgave",
+      "topTeamMembers": "Topmedewerkers",
+      "noTeamData": "Geen medewerkersgegevens beschikbaar",
+      "appUsers": "App-gebruikers",
+      "referrals": "Verwijzingen"
+    },
+    "activityFeed": {
+      "empty": "Nog geen klantactiviteit. Boekingen, aankopen en check-ins verschijnen hier."
+    },
+    "appointments": {
+      "title": "Afspraken",
+      "description": "Wat klanten hebben geboekt, en waar ze om hebben gevraagd.",
+      "chips": {
+        "upcoming": "Aankomend",
+        "requested": "Aangevraagd",
+        "confirmed": "Bevestigd",
+        "completed": "Afgerond",
+        "cancelled": "Geannuleerd",
+        "no-show": "Niet verschenen"
+      },
+      "statusLabel": {
+        "REQUESTED": "Aangevraagd",
+        "CONFIRMED": "Bevestigd",
+        "COMPLETED": "Afgerond",
+        "CANCELLED": "Geannuleerd",
+        "NO_SHOW": "Niet verschenen"
+      },
+      "search": "Zoeken…",
+      "listView": "Lijstweergave",
+      "calendarView": "Kalenderweergave",
+      "noAppointmentsAvailable": "Geen afspraken beschikbaar",
+      "confirm": "Bevestigen",
+      "decline": "Afwijzen",
+      "complete": "Afronden",
+      "noShow": "Niet verschenen",
+      "cancel": "Annuleren",
+      "status": "Status",
+      "staff": "Medewerker",
+      "location": "Locatie",
+      "ends": "Eindigt",
+      "notes": "Notities",
+      "markedStatus": "Gemarkeerd als {status}"
+    },
+    "memberships": {
+      "title": "Lidmaatschappen",
+      "description": "Jouw abonnementen en de klanten die ze hebben. Alle bedragen zijn inclusief btw.",
+      "mrr": "Maandelijks terugkerende omzet",
+      "totalActiveMembers": "Totaal actieve leden",
+      "activeMembersTooltip": "Klanten met een lidmaatschap in de status ACTIEF.",
+      "signUpsOverTime": "Aanmeldingen voor lidmaatschap in de tijd",
+      "daily": "Dagelijks",
+      "weekly": "Wekelijks",
+      "monthly": "Maandelijks",
+      "creditCardDunning": "Mislukte incasso's",
+      "noDunning": "Geen mislukte incasso's",
+      "attempts": "{count} pogingen",
+      "plans": "Abonnementen",
+      "noMembershipsAvailable": "Geen lidmaatschappen beschikbaar",
+      "createInAppBuilder": "Aanmaken in App Builder →",
+      "perMonthAbbrev": "mnd",
+      "perYearAbbrev": "jr",
+      "membersCount": "{count, plural, one {# lid} other {# leden}}",
+      "active": "Actief",
+      "inactive": "Inactief"
+    }
+  },
   "textCheck": {
     "resultPromise": {
       "message": "“{match}” belooft een resultaat dat je niet kunt beloven. Hoe een behandeling uitpakt, verschilt per persoon.",
@@ -545,5 +665,11 @@
       "reset": "2FA resetten",
       "confirmed": "Tweestapsverificatie is gereset voor {email}. Diegene wordt gevraagd dit opnieuw in te stellen bij de volgende keer inloggen."
     }
+  },
+  "accountLanguage": {
+    "title": "Taal",
+    "description": "De taal voor jouw account — deze gaat voor op de standaardtaal van de kliniek.",
+    "dutch": "Nederlands",
+    "english": "English"
   }
 }

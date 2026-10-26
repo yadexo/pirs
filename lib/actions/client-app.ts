@@ -29,6 +29,7 @@ import {
   ensureStripeCustomer,
   ensureStripePrice,
 } from "@/lib/memberships-billing";
+import { setLocaleCookie, type AppLocale } from "@/lib/locale-cookie";
 
 /**
  * Every mutating action the client app can perform.
@@ -1383,6 +1384,7 @@ export async function clientSaveLocaleAction(slug: string, locale: string): Prom
   if (!(SUPPORTED_CLIENT_LOCALES as readonly string[]).includes(locale)) return { error: "Unsupported language." };
 
   await rawDb.user.update({ where: { id: user.id }, data: { locale } });
+  await setLocaleCookie(locale as AppLocale);
 
   revalidateClient(slug);
   return { ok: true };

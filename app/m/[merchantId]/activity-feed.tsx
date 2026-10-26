@@ -1,13 +1,14 @@
 "use client";
 
 import * as React from "react";
+import { useLocale, useTranslations } from "next-intl";
 import type { ActivityItem } from "@/lib/home-metrics";
 import { getActivityFeedAction } from "@/lib/actions/activity";
 
 const POLL_MS = 20_000;
 
-function formatWhen(iso: string) {
-  return new Date(iso).toLocaleString("en-GB", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+function formatWhen(iso: string, locale: string) {
+  return new Date(iso).toLocaleString(locale === "nl" ? "nl-NL" : "en-GB", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 /**
@@ -16,6 +17,8 @@ function formatWhen(iso: string) {
  * briefly highlighted.
  */
 export function ActivityFeed({ merchantId, initial }: { merchantId: string; initial: ActivityItem[] }) {
+  const t = useTranslations("portal.activityFeed");
+  const locale = useLocale();
   const [items, setItems] = React.useState(initial);
   const [fresh, setFresh] = React.useState<Set<string>>(new Set());
   const known = React.useRef(new Set(initial.map((i) => i.id)));
@@ -52,7 +55,7 @@ export function ActivityFeed({ merchantId, initial }: { merchantId: string; init
   }, [merchantId]);
 
   if (items.length === 0) {
-    return <p className="px-5 py-8 text-center text-[12px] text-ink-muted">No client activity yet. Bookings, purchases and check-ins appear here.</p>;
+    return <p className="px-5 py-8 text-center text-[12px] text-ink-muted">{t("empty")}</p>;
   }
 
   return (
@@ -66,7 +69,7 @@ export function ActivityFeed({ merchantId, initial }: { merchantId: string; init
             <p className="truncate text-[13px] font-medium">{item.actor}</p>
             <p className="truncate text-[11px] text-ink-muted">{item.event}</p>
           </div>
-          <span className="shrink-0 text-[11px] text-ink-faint">{formatWhen(item.at)}</span>
+          <span className="shrink-0 text-[11px] text-ink-faint">{formatWhen(item.at, locale)}</span>
         </li>
       ))}
     </ul>

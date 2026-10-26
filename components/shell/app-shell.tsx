@@ -1,4 +1,5 @@
 import * as React from "react";
+import { getTranslations } from "next-intl/server";
 import { AGENCY_NAV, MERCHANT_NAV, isAgencyNavActive, isMerchantNavActive, merchantHref } from "@/lib/nav";
 import { Sidebar, type SidebarEntry, type SupportLink } from "./sidebar";
 import { ImpersonationBanner } from "./impersonation-banner";
@@ -9,10 +10,25 @@ import { brandCssVars, brandTokens } from "@/lib/brand-tokens";
 /**
  * The single shell used by both levels. Nav entries are derived from
  * lib/nav.ts — never hand-assembled — so the sidebar cannot drift from the
- * invariant enforced in tests/nav.test.ts.
+ * invariant enforced in tests/nav.test.ts. That file's own `label` stays the
+ * stable English string the test checks; the sidebar shown to a person is
+ * translated here, by a key derived from the item's href/segment rather than
+ * from the label text itself.
  */
 
-export function AgencyShell({
+// lib/nav.ts's AGENCY_NAV order — keyed by position, not by matching label text.
+const AGENCY_NAV_KEYS = ["myApps", "whiteLabel", "settings"] as const;
+// lib/nav.ts's MERCHANT_NAV segment → messages/*.json portal.nav key.
+const MERCHANT_NAV_KEYS: Record<string, string> = {
+  "": "home",
+  appointments: "appointments",
+  clients: "clients",
+  shop: "shop",
+  memberships: "memberships",
+  "app-builder": "appBuilder",
+};
+
+export async function AgencyShell({
   agencyName,
   support,
   pathname,
@@ -23,11 +39,12 @@ export function AgencyShell({
   pathname: string;
   children: React.ReactNode;
 }) {
-  const entries: SidebarEntry[] = AGENCY_NAV.map((item) => {
+  const t = await getTranslations("portal.nav");
+  const entries: SidebarEntry[] = AGENCY_NAV.map((item, i) => {
     const Icon = item.icon;
     return {
       href: item.href,
-      label: item.label,
+      label: t(AGENCY_NAV_KEYS[i]!),
       icon: <Icon className="h-5 w-5" />,
       active: isAgencyNavActive(pathname, item.href),
     };
@@ -41,7 +58,7 @@ export function AgencyShell({
   );
 }
 
-export function MerchantShell({
+export async function MerchantShell({
   merchantId,
   merchantName,
   merchantSlug,
@@ -70,11 +87,12 @@ export function MerchantShell({
   viewerRole: string;
   children: React.ReactNode;
 }) {
+  const t = await getTranslations("portal.nav");
   const entries: SidebarEntry[] = MERCHANT_NAV.map((item) => {
     const Icon = item.icon;
     return {
       href: merchantHref(merchantId, item.segment),
-      label: item.label,
+      label: t(MERCHANT_NAV_KEYS[item.segment]!),
       icon: <Icon className="h-5 w-5" />,
       active: isMerchantNavActive(pathname, merchantId, item.segment),
     };

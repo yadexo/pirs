@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { CalendarRange, List, Search } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { Panel, Chip, Pill, Drawer } from "@/components/ui/primitives";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
@@ -22,20 +23,13 @@ export interface AppointmentRow {
   notes: string | null;
 }
 
-const CHIPS = [
-  { key: "upcoming", label: "Upcoming" },
-  { key: "requested", label: "Requested" },
-  { key: "confirmed", label: "Confirmed" },
-  { key: "completed", label: "Completed" },
-  { key: "cancelled", label: "Cancelled" },
-  { key: "no-show", label: "No-show" },
-];
+const CHIP_KEYS = ["upcoming", "requested", "confirmed", "completed", "cancelled", "no-show"] as const;
 
 const tone = (s: string) =>
   s === "CONFIRMED" ? "green" : s === "REQUESTED" ? "amber" : s === "CANCELLED" || s === "NO_SHOW" ? "red" : "neutral";
 
-function when(iso: string) {
-  return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+function when(iso: string, locale: string) {
+  return new Date(iso).toLocaleString(locale === "nl" ? "nl-NL" : "en-US", { dateStyle: "medium", timeStyle: "short" });
 }
 
 export function AppointmentsView({
@@ -52,6 +46,8 @@ export function AppointmentsView({
   appointments: AppointmentRow[];
 }) {
   const router = useRouter();
+  const t = useTranslations("portal.appointments");
+  const locale = useLocale();
   const [selected, setSelected] = React.useState<AppointmentRow | null>(null);
   const [pending, startTransition] = React.useTransition();
 
@@ -67,7 +63,7 @@ export function AppointmentsView({
   function act(id: string, next: "CONFIRMED" | "COMPLETED" | "CANCELLED" | "NO_SHOW") {
     startTransition(async () => {
       await updateAppointmentStatusAction(id, next);
-      toast.success(`Marked ${next.toLowerCase().replace("_", "-")}`);
+      toast.success(t("markedStatus", { status: t(`statusLabel.${next}`) }));
       setSelected(null);
     });
   }
@@ -76,9 +72,9 @@ export function AppointmentsView({
     <>
       <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
         <div className="no-scrollbar flex gap-2 overflow-x-auto">
-          {CHIPS.map((c) => (
-            <Chip key={c.key} active={status === c.key} onClick={() => navigate({ status: c.key })}>
-              {c.label}
+          {CHIP_KEYS.map((key) => (
+            <Chip key={key} active={status === key} onClick={() => navigate({ status: key })}>
+              {t(`chips.${key}`)}
             </Chip>
           ))}
         </div>
@@ -94,14 +90,14 @@ export function AppointmentsView({
             <input
               name="q"
               defaultValue={q}
-              placeholder="Search..."
+              placeholder={t("search")}
               className="h-8 w-44 rounded-[10px] border border-border bg-surface pl-8 pr-3 text-[12px] outline-none focus-visible:ring-2 focus-visible:ring-primary"
             />
           </form>
           <div className="flex overflow-hidden rounded-[10px] border border-border">
             <button
               type="button"
-              aria-label="List view"
+              aria-label={t("listView")}
               onClick={() => navigate({ view: "list" })}
               className={cn("px-2 py-1.5", view === "list" ? "bg-primary-soft text-primary" : "text-ink-faint")}
             >
@@ -109,7 +105,7 @@ export function AppointmentsView({
             </button>
             <button
               type="button"
-              aria-label="Calendar view"
+              aria-label={t("calendarView")}
               onClick={() => navigate({ view: "calendar" })}
               className={cn("px-2 py-1.5", view === "calendar" ? "bg-primary-soft text-primary" : "text-ink-faint")}
             >
@@ -122,7 +118,7 @@ export function AppointmentsView({
       <div className="mt-3">
         {appointments.length === 0 ? (
           <Panel>
-            <EmptyState title="No appointments available" />
+            <EmptyState title={t("noAppointmentsAvailable")} />
           </Panel>
         ) : view === "list" ? (
           <ul className="space-y-2">
@@ -137,31 +133,31 @@ export function AppointmentsView({
                       {a.client} · {a.service}
                     </p>
                     <p className="truncate text-[11px] text-ink-muted">
-                      {when(a.startAt)} · {a.staff} · {a.location}
+                      {when(a.startAt, locale)} · {a.staff} · {a.location}
                     </p>
                   </div>
                   <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                    <Pill tone={tone(a.status)}>{a.status}</Pill>
+                    <Pill tone={tone(a.status)}>{t(`statusLabel.${a.status}`)}</Pill>
                     {a.status === "REQUESTED" && (
                       <>
                         <Button size="sm" loading={pending} onClick={() => act(a.id, "CONFIRMED")}>
-                          Confirm
+                          {t("confirm")}
                         </Button>
                         <Button size="sm" variant="outline" loading={pending} onClick={() => act(a.id, "CANCELLED")}>
-                          Decline
+                          {t("decline")}
                         </Button>
                       </>
                     )}
                     {a.status === "CONFIRMED" && (
                       <>
                         <Button size="sm" loading={pending} onClick={() => act(a.id, "COMPLETED")}>
-                          Complete
+                          {t("complete")}
                         </Button>
                         <Button size="sm" variant="outline" loading={pending} onClick={() => act(a.id, "NO_SHOW")}>
-                          No-show
+                          {t("noShow")}
                         </Button>
                         <Button size="sm" variant="ghost" loading={pending} onClick={() => act(a.id, "CANCELLED")}>
-                          Cancel
+                          {t("cancel")}
                         </Button>
                       </>
                     )}
@@ -171,7 +167,7 @@ export function AppointmentsView({
             ))}
           </ul>
         ) : (
-          <CalendarView appointments={appointments} onSelect={setSelected} />
+          <CalendarView appointments={appointments} onSelect={setSelected} locale={locale} />
         )}
       </div>
 
@@ -179,15 +175,15 @@ export function AppointmentsView({
         open={!!selected}
         onClose={() => setSelected(null)}
         title={selected ? `${selected.client} · ${selected.service}` : ""}
-        subtitle={selected ? when(selected.startAt) : undefined}
+        subtitle={selected ? when(selected.startAt, locale) : undefined}
       >
         {selected && (
           <dl className="space-y-3 text-[13px]">
-            <Row label="Status" value={selected.status} />
-            <Row label="Staff" value={selected.staff} />
-            <Row label="Location" value={selected.location} />
-            <Row label="Ends" value={when(selected.endAt)} />
-            <Row label="Notes" value={selected.notes || "-"} />
+            <Row label={t("status")} value={t(`statusLabel.${selected.status}`)} />
+            <Row label={t("staff")} value={selected.staff} />
+            <Row label={t("location")} value={selected.location} />
+            <Row label={t("ends")} value={when(selected.endAt, locale)} />
+            <Row label={t("notes")} value={selected.notes || "-"} />
           </dl>
         )}
       </Drawer>
@@ -199,13 +195,16 @@ export function AppointmentsView({
 function CalendarView({
   appointments,
   onSelect,
+  locale,
 }: {
   appointments: AppointmentRow[];
   onSelect: (a: AppointmentRow) => void;
+  locale: string;
 }) {
+  const intlLocale = locale === "nl" ? "nl-NL" : "en-US";
   const byDay = new Map<string, AppointmentRow[]>();
   for (const a of appointments) {
-    const key = new Date(a.startAt).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+    const key = new Date(a.startAt).toLocaleDateString(intlLocale, { weekday: "long", month: "short", day: "numeric" });
     byDay.set(key, [...(byDay.get(key) ?? []), a]);
   }
 
@@ -223,7 +222,7 @@ function CalendarView({
                   className="w-full rounded-[10px] border border-border px-3 py-2 text-left hover:bg-app"
                 >
                   <p className="text-[12px] font-medium">
-                    {new Date(a.startAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} · {a.client}
+                    {new Date(a.startAt).toLocaleTimeString(intlLocale, locale === "nl" ? { hour: "2-digit", minute: "2-digit" } : { hour: "numeric", minute: "2-digit" })} · {a.client}
                   </p>
                   <p className="text-[11px] text-ink-muted">{a.service}</p>
                 </button>

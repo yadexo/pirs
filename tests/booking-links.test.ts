@@ -34,8 +34,8 @@ describe("the portal asks for the link", () => {
 describe("the portal says which treatments are missing one", () => {
   it("counts them on the dashboard, with somewhere to go", () => {
     expect(DASH).toMatch(/schedulingUrl: null.*schedulingUrl: ""/s);
-    expect(DASH).toMatch(/no booking link/);
-    expect(DASH).toMatch(/Add booking links/);
+    expect(DASH).toMatch(/t\("setupTitle", \{ count: unbookable\.length \}\)/);
+    expect(DASH).toMatch(/t\("addBookingLinks"\)/);
   });
 
   it("badges the row in the products list", () => {

@@ -1,17 +1,12 @@
 import "server-only";
-import { headers } from "next/headers";
+import { headers, cookies } from "next/headers";
 import { auth } from "@/auth";
 import { clientAuth } from "@/client-auth";
 import { rawDb } from "@/lib/db";
 import { slugFromAppPath } from "@/lib/clinic-link";
+import { DEFAULT_LOCALE, LOCALE_COOKIE, asLocale, type AppLocale } from "@/lib/locale-cookie";
 
-export const SUPPORTED_LOCALES = ["nl", "en"] as const;
-export type AppLocale = (typeof SUPPORTED_LOCALES)[number];
-export const DEFAULT_LOCALE: AppLocale = "nl";
-
-function asLocale(value: string | null | undefined): AppLocale | null {
-  return value && (SUPPORTED_LOCALES as readonly string[]).includes(value) ? (value as AppLocale) : null;
-}
+export { SUPPORTED_LOCALES, DEFAULT_LOCALE, LOCALE_COOKIE, setLocaleCookie, type AppLocale } from "@/lib/locale-cookie";
 
 /**
  * Explicit, server-only locale resolution — never Accept-Language, never
@@ -22,14 +17,18 @@ function asLocale(value: string | null | undefined): AppLocale | null {
  * lib/client-format.ts's APP_LOCALE already guards against for dates and
  * numbers (see the comment at the top of that file, and its #418 reference).
  *
- * Order: a signed-in account's own `User.locale` (staff in the portal and
- * agency, clients in the client app) always wins — it is a choice someone
- * made. An anonymous visitor to a specific clinic's client app gets that
- * clinic's `TenantSettings.defaultClientLocale`. Anyone else — anonymous,
- * no clinic in the URL — gets the platform default.
+ * Order, strictly: a signed-in account's own `User.locale` (staff in the
+ * portal and agency, clients in the client app) always wins over everything
+ * else — it is a choice someone made, re-read fresh from the database every
+ * time rather than trusted from the session, the same reasoning
+ * loadLiveAccount() uses for role and permissions. Only once nobody is
+ * signed in does anything else get a say: the LOCALE_COOKIE from this
+ * browser's last known choice, then (client app only) the clinic's own
+ * TenantSettings.defaultClientLocale, then the platform default.
  */
 export async function resolveLocale(): Promise<AppLocale> {
   const pathname = (await headers()).get("x-pathname") ?? "";
+  const cookieLocale = asLocale((await cookies()).get(LOCALE_COOKIE)?.value);
 
   if (pathname.startsWith("/app/")) {
     const clientSession = await clientAuth();
@@ -37,6 +36,7 @@ export async function resolveLocale(): Promise<AppLocale> {
       const locale = await userLocale(clientSession.user.id);
       if (locale) return locale;
     }
+    if (cookieLocale) return cookieLocale;
     const slug = slugFromAppPath(pathname);
     if (slug) {
       const tenant = await rawDb.tenant.findUnique({ where: { slug }, select: { settings: { select: { defaultClientLocale: true } } } });
@@ -52,7 +52,7 @@ export async function resolveLocale(): Promise<AppLocale> {
     if (locale) return locale;
   }
 
-  return DEFAULT_LOCALE;
+  return cookieLocale ?? DEFAULT_LOCALE;
 }
 
 async function userLocale(userId: string): Promise<AppLocale | null> {
