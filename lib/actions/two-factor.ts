@@ -4,7 +4,7 @@ import { requireSession, requireRole } from "@/lib/rbac";
 import { rawDb } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
 import { generateTotpSecret, totpUri, verifyTotp } from "@/lib/totp";
-import { getTwoFactorStatus, issueBackupCodes, disableTwoFactor } from "@/lib/two-factor";
+import { getTwoFactorStatus, issueBackupCodes, disableTwoFactor, twoFactorRequiredForRole } from "@/lib/two-factor";
 import { qrSvg } from "@/lib/qr";
 import { writeAuditLog } from "@/lib/audit";
 
@@ -53,9 +53,21 @@ export async function confirmTwoFactorSetupAction(code: string): Promise<{ backu
   return { backupCodes };
 }
 
-/** Self-service off switch. Requires the password again — a hijacked, already-open session shouldn't be able to turn this off silently. */
+/**
+ * Self-service off switch. Requires the password again — a hijacked,
+ * already-open session shouldn't be able to turn this off silently.
+ *
+ * Refused outright for a role that requires 2FA (platform admin, clinic
+ * owner): turning it off there doesn't actually get them anywhere — every
+ * portal page re-demands it on the very next request — it just destroys a
+ * working setup and backup codes for nothing. The only way back in for one
+ * of these accounts is a platform admin's reset (resetTwoFactorForUserAction).
+ */
 export async function disableTwoFactorAction(password: string): Promise<{ ok: true } | { error: string }> {
   const user = await requireSession("staff");
+  if (twoFactorRequiredForRole(user.role)) {
+    return { error: "Two-factor authentication is required for your role. Ask a platform admin to reset it if you've lost access." };
+  }
   const row = await rawDb.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
   if (!row || !(await verifyPassword(password, row.passwordHash))) return { error: "Wrong password." };
 

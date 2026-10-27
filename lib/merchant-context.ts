@@ -1,5 +1,6 @@
 import "server-only";
 import { notFound, redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { auth } from "@/auth";
 import { rawDb } from "@/lib/db";
 import { getTenantDb, type TenantDb } from "@/lib/tenant-db";
@@ -49,7 +50,7 @@ export async function requireMerchantContext(merchantId: string): Promise<Mercha
   // itself. Not optional in the sense of "ask once and remember": an account
   // that had it and lost it (lib/two-factor.ts's disable path) is caught
   // the same way a deactivated account already is.
-  if (twoFactorRequiredForRole(user.role) && !user.twoFactorConfirmed) redirect("/account/two-factor?required=1");
+  if (twoFactorRequiredForRole(user.role) && !user.twoFactorConfirmed) await redirectToTwoFactorSetup();
 
   const isAgencyAdmin = user.role === "PLATFORM_ADMIN";
 
@@ -105,7 +106,7 @@ export async function requireAgencyContext() {
   if (!live) redirect("/login?reason=access-changed");
   const user = { ...sessionUser, ...live };
   if (user.role !== "PLATFORM_ADMIN") notFound();
-  if (!user.twoFactorConfirmed) redirect("/account/two-factor?required=1");
+  if (!user.twoFactorConfirmed) await redirectToTwoFactorSetup();
 
   return { user, support: await getSupportLink() };
 }
@@ -118,6 +119,17 @@ export async function getSupportLink(): Promise<SupportLink | null> {
   const agency = await rawDb.agencySettings.findFirst();
   if (!agency?.supportUrl) return null;
   return { label: agency.supportLabel ?? "Contact support", url: agency.supportUrl };
+}
+
+/**
+ * Sends an account that still needs 2FA to set it up, carrying the page it
+ * was actually trying to reach so the setup flow's "Continue" button can
+ * send it straight back there instead of guessing a landing page.
+ */
+async function redirectToTwoFactorSetup(): Promise<never> {
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  const next = pathname && pathname !== "/account/two-factor" ? `&next=${encodeURIComponent(pathname)}` : "";
+  redirect(`/account/two-factor?required=1${next}`);
 }
 
 export type { SidebarEntry };

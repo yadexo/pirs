@@ -13,7 +13,19 @@ import { Button } from "@/components/ui/button";
 
 type Step = "idle" | "setup" | "backup-codes" | "disable";
 
-export function TwoFactorManager({ enabled, remainingBackupCodes }: { enabled: boolean; remainingBackupCodes: number }) {
+export function TwoFactorManager({
+  enabled,
+  remainingBackupCodes,
+  requiredForRole,
+  continueUrl,
+}: {
+  enabled: boolean;
+  remainingBackupCodes: number;
+  /** Platform admin / clinic owner: turning this off is refused server-side too (lib/actions/two-factor.ts), this just keeps the dead-end button from showing. */
+  requiredForRole: boolean;
+  /** Where "done" goes — the page the gate originally sent this account here from, or its own landing page. */
+  continueUrl: string;
+}) {
   const router = useRouter();
   const t = useTranslations("twoFactor");
   const tc = useTranslations("common");
@@ -58,6 +70,7 @@ export function TwoFactorManager({ enabled, remainingBackupCodes }: { enabled: b
   }
 
   async function disable() {
+    if (requiredForRole) return; // belt and suspenders — the button isn't shown, and the action itself refuses this too
     setError(null);
     setPending(true);
     const res = await disableTwoFactorAction(password);
@@ -69,10 +82,9 @@ export function TwoFactorManager({ enabled, remainingBackupCodes }: { enabled: b
   }
 
   function finishSetup() {
-    setStep("idle");
-    setSetupData(null);
-    setBackupCodes(null);
-    router.refresh();
+    // Straight to where they were headed — not a refresh that strands them
+    // on this same page with nothing left to click.
+    router.push(continueUrl);
   }
 
   if (step === "backup-codes" && backupCodes) {
@@ -86,7 +98,7 @@ export function TwoFactorManager({ enabled, remainingBackupCodes }: { enabled: b
           ))}
         </div>
         <Button onClick={finishSetup} className="w-full">
-          {t("savedThese")}
+          {t("continueToDashboard")}
         </Button>
       </div>
     );
@@ -156,9 +168,13 @@ export function TwoFactorManager({ enabled, remainingBackupCodes }: { enabled: b
         <Button variant="outline" className="w-full" onClick={regenerateBackupCodes} loading={pending}>
           {t("generateNewBackupCodes")}
         </Button>
-        <Button variant="outline" className="w-full" onClick={() => setStep("disable")}>
-          {t("turnOff")}
-        </Button>
+        {requiredForRole ? (
+          <p className="text-[12px] text-ink-faint">{t("requiredCantTurnOff")}</p>
+        ) : (
+          <Button variant="outline" className="w-full" onClick={() => setStep("disable")}>
+            {t("turnOff")}
+          </Button>
+        )}
       </div>
     );
   }
