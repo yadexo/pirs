@@ -5,6 +5,76 @@ import type { EmailBranding } from "@/lib/emails/layout";
 import type { EmailTemplate } from "@/lib/emails/templates";
 import { senderFor } from "@/lib/emails/sender";
 import { formatDay } from "@/lib/client-format";
+import type { AppLocale } from "@/lib/locale-cookie";
+
+function localeOf(value: string | null | undefined): AppLocale {
+  return value === "en" ? "en" : "nl";
+}
+
+const PUSH_COPY = {
+  orderPaid: {
+    nl: (orderNumber: string, amount: string) => `Betaling ontvangen voor ${orderNumber} — ${amount}. Bedankt!`,
+    en: (orderNumber: string, amount: string) => `Payment received for ${orderNumber} — ${amount}. Thank you!`,
+  },
+  itemRedeemed: {
+    nl: (itemName: string) => `${itemName} is ingewisseld. Geniet ervan!`,
+    en: (itemName: string) => `${itemName} has been redeemed. Enjoy!`,
+  },
+  refundProcessed: {
+    nl: (fully: boolean, amount: string, orderNumber: string) =>
+      `${fully ? "Terugbetaald" : "Deels terugbetaald"}: ${amount} voor ${orderNumber}. Dit kan een paar dagen duren voordat het op je bank staat.`,
+    en: (fully: boolean, amount: string, orderNumber: string) =>
+      `${fully ? "Refunded" : "Partly refunded"}: ${amount} for ${orderNumber}. It can take a few days to reach your bank.`,
+  },
+  creditChanged: {
+    nl: (added: boolean, amount: string, reason: string) => `${added ? "Tegoed toegevoegd" : "Tegoed verwijderd"}: ${amount} — ${reason}`,
+    en: (added: boolean, amount: string, reason: string) => `${added ? "Credit added" : "Credit removed"}: ${amount} — ${reason}`,
+  },
+  pointsChanged: {
+    nl: (added: boolean, points: number, reason: string) => `${added ? "Punten toegevoegd" : "Punten verwijderd"}: ${points} — ${reason}`,
+    en: (added: boolean, points: number, reason: string) => `${added ? "Points added" : "Points removed"}: ${points} — ${reason}`,
+  },
+  itemIssued: {
+    nl: (headline: string, itemName: string, reason: string) => `${headline}: ${itemName} — ${reason}`,
+    en: (headline: string, itemName: string, reason: string) => `${headline}: ${itemName} — ${reason}`,
+  },
+  itemVoided: {
+    nl: (itemName: string, reason: string) => `${itemName} is niet meer beschikbaar — ${reason}`,
+    en: (itemName: string, reason: string) => `${itemName} is no longer available — ${reason}`,
+  },
+  priceChange: {
+    nl: (planName: string, price: string, when: string) => `${planName} wordt ${price} vanaf ${when}. Je kunt tot die tijd altijd nog opzeggen.`,
+    en: (planName: string, price: string, when: string) => `${planName} becomes ${price} from ${when}. You can cancel any time before then.`,
+  },
+  membershipPaymentFailed: {
+    nl: (planName: string, deadline: string) => `We konden de betaling voor je ${planName} niet verwerken. Werk je kaartgegevens bij om het te behouden.${deadline}`,
+    en: (planName: string, deadline: string) => `We couldn't take the payment for your ${planName}. Update your card to keep it.${deadline}`,
+  },
+  membershipPaymentFailedDeadline: {
+    nl: (endDay: string) => ` Je voordelen blijven actief tot ${endDay}.`,
+    en: (endDay: string) => ` Your benefits continue until ${endDay}.`,
+  },
+  membershipSuspended: {
+    nl: (planName: string) => `Je ${planName} staat on hold omdat de betaling niet is gelukt. Het gaat automatisch weer verder zodra een betaling slaagt.`,
+    en: (planName: string) => `Your ${planName} is on hold because the payment didn't go through. It restarts as soon as a payment succeeds.`,
+  },
+  membershipActive: {
+    nl: (planName: string) => `Je ${planName} is actief. Geniet van je voordelen!`,
+    en: (planName: string) => `Your ${planName} is active. Enjoy your benefits!`,
+  },
+  sessionsReceived: {
+    nl: (sessions: number, packageName: string) => `Je hebt ${sessions} ${packageName}${sessions === 1 ? " sessie" : " sessies"} gekregen. Te vinden bij Mijn items.`,
+    en: (sessions: number, packageName: string) => `You've been given ${sessions} ${packageName} session${sessions === 1 ? "" : "s"}. They're in My items.`,
+  },
+  sessionsExpiring: {
+    nl: (sessions: number, packageName: string, endsOn: string) => `Nog ${sessions} ${packageName}${sessions === 1 ? " sessie" : " sessies"} over — ze verlopen op ${endsOn}.`,
+    en: (sessions: number, packageName: string, endsOn: string) => `${sessions} ${packageName} session${sessions === 1 ? "" : "s"} left — they run out on ${endsOn}.`,
+  },
+  sessionUsed: {
+    nl: (packageName: string, serviceName: string, remaining: number) => `${packageName}: 1 sessie gebruikt voor ${serviceName}, nog ${remaining} over`,
+    en: (packageName: string, serviceName: string, remaining: number) => `${packageName}: 1 session used for ${serviceName}, ${remaining} left`,
+  },
+} as const;
 
 /**
  * The notifications the app sends by itself, off the back of something that
@@ -24,6 +94,7 @@ interface OrderRecipient {
   slug: string;
   orderNumber: string;
   currency: string;
+  locale: AppLocale;
 }
 
 /** Who to tell about an order, and how to address them. Null when unreachable. */
@@ -33,7 +104,7 @@ async function recipientForOrder(orderId: string): Promise<OrderRecipient | null
     select: {
       orderNumber: true,
       currency: true,
-      customerProfile: { select: { userId: true, firstName: true, user: { select: { email: true } } } },
+      customerProfile: { select: { userId: true, firstName: true, user: { select: { email: true, locale: true } } } },
       tenant: {
         select: { name: true, slug: true, branding: { select: { businessName: true, logoUrl: true, primaryColor: true } } },
       },
@@ -50,6 +121,7 @@ async function recipientForOrder(orderId: string): Promise<OrderRecipient | null
     slug: order.tenant.slug,
     orderNumber: order.orderNumber,
     currency: order.currency,
+    locale: localeOf(order.customerProfile.user?.locale),
   };
 }
 
@@ -118,7 +190,7 @@ export async function notifyOrderPaid(orderId: string, amountCents: number): Pro
   if (!to) return;
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
-    body: `Payment received for ${to.orderNumber} — ${amount(amountCents, to.currency)}. Thank you!`,
+    body: PUSH_COPY.orderPaid[to.locale](to.orderNumber, amount(amountCents, to.currency)),
     url: clinicPath(to.slug, "/profile?tab=settings"),
     icon: clinicPath(to.slug, "/app-icon/192.png"),
     tag: `order-paid-${orderId}`,
@@ -150,15 +222,17 @@ export async function notifyOrderConfirmation(orderId: string): Promise<void> {
     vatCents: order.taxCents,
     currency: to.currency,
     myItemsUrl: absoluteClientUrl(clinicPath(to.slug, "/profile?tab=items")),
+    locale: to.locale,
   });
   await sendBrandedEmail(to.email, to.clinicName, template);
 }
 
 /** One of the client's items has just been collected at the clinic. */
 export async function notifyItemRedeemed(customerUserId: string, clinicName: string, slug: string, itemName: string): Promise<void> {
+  const user = await rawDb.user.findUnique({ where: { id: customerUserId }, select: { locale: true } });
   await notifyClientQuietly(customerUserId, {
     title: clinicName,
-    body: `${itemName} has been redeemed. Enjoy!`,
+    body: PUSH_COPY.itemRedeemed[localeOf(user?.locale)](itemName),
     url: clinicPath(slug, "/profile?tab=items"),
     icon: clinicPath(slug, "/app-icon/192.png"),
   });
@@ -170,7 +244,7 @@ export async function notifyRefundProcessed(orderId: string, amountCents: number
   if (!to) return;
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
-    body: `${fully ? "Refunded" : "Partly refunded"}: ${amount(amountCents, to.currency)} for ${to.orderNumber}. It can take a few days to reach your bank.`,
+    body: PUSH_COPY.refundProcessed[to.locale](fully, amount(amountCents, to.currency), to.orderNumber),
     url: clinicPath(to.slug, "/profile?tab=settings"),
     icon: clinicPath(to.slug, "/app-icon/192.png"),
     tag: `order-refund-${orderId}`,
@@ -180,7 +254,7 @@ export async function notifyRefundProcessed(orderId: string, amountCents: number
   await sendBrandedEmail(
     to.email,
     to.clinicName,
-    refundConfirmationEmail({ branding: to.branding, firstName: to.firstName, orderNumber: to.orderNumber, amountCents, currency: to.currency, fully }),
+    refundConfirmationEmail({ branding: to.branding, firstName: to.firstName, orderNumber: to.orderNumber, amountCents, currency: to.currency, fully, locale: to.locale }),
   );
 }
 
@@ -191,7 +265,7 @@ async function recipientForClient(customerProfileId: string) {
     select: {
       userId: true,
       firstName: true,
-      user: { select: { email: true } },
+      user: { select: { email: true, locale: true } },
       tenant: {
         select: { name: true, slug: true, branding: { select: { businessName: true, currency: true, logoUrl: true, primaryColor: true } } },
       },
@@ -207,6 +281,7 @@ async function recipientForClient(customerProfileId: string) {
     branding: { name: clinicName, logoUrl: profile.tenant.branding?.logoUrl ?? null, color: profile.tenant.branding?.primaryColor ?? null } as EmailBranding,
     slug: profile.tenant.slug,
     currency: profile.tenant.branding?.currency ?? "EUR",
+    locale: localeOf(profile.user?.locale),
   };
 }
 
@@ -224,7 +299,7 @@ export async function notifyCreditChanged(customerProfileId: string, amountCents
   const added = amountCents > 0;
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
-    body: `${added ? "Credit added" : "Credit removed"}: ${amount(Math.abs(amountCents), to.currency)} — ${reason}`,
+    body: PUSH_COPY.creditChanged[to.locale](added, amount(Math.abs(amountCents), to.currency), reason),
     url: clinicPath(to.slug, "/profile?tab=settings"),
     icon: clinicPath(to.slug, "/app-icon/192.png"),
     tag: `credit-${customerProfileId}-${Date.now()}`,
@@ -243,7 +318,7 @@ export async function notifyPointsChanged(customerProfileId: string, points: num
   const added = points > 0;
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
-    body: `${added ? "Points added" : "Points removed"}: ${Math.abs(points)} — ${reason}`,
+    body: PUSH_COPY.pointsChanged[to.locale](added, Math.abs(points), reason),
     url: clinicPath(to.slug, "/rewards"),
     icon: clinicPath(to.slug, "/app-icon/192.png"),
     tag: `points-${customerProfileId}-${Date.now()}`,
@@ -261,7 +336,7 @@ export async function notifyItemIssued(customerProfileId: string, itemName: stri
   if (!to) return;
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
-    body: `${headline}: ${itemName} — ${reason}`,
+    body: PUSH_COPY.itemIssued[to.locale](headline, itemName, reason),
     url: clinicPath(to.slug, "/profile?tab=items"),
     icon: clinicPath(to.slug, "/app-icon/192.png"),
     tag: `item-issued-${customerProfileId}-${Date.now()}`,
@@ -277,7 +352,7 @@ export async function notifyItemVoided(customerProfileId: string, itemName: stri
   if (!to) return;
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
-    body: `${itemName} is no longer available — ${reason}`,
+    body: PUSH_COPY.itemVoided[to.locale](itemName, reason),
     url: clinicPath(to.slug, "/profile?tab=items"),
     icon: clinicPath(to.slug, "/app-icon/192.png"),
     tag: `item-voided-${customerProfileId}-${Date.now()}`,
@@ -303,7 +378,7 @@ export async function notifyPriceChange(
   const when = formatDay(change.effectiveAt, null);
   const price = amount(change.newPriceCents, change.currency);
   const manage = clinicPath(to.slug, "/profile?tab=membership");
-  const line = `${change.planName} becomes ${price} from ${when}. You can cancel any time before then.`;
+  const line = PUSH_COPY.priceChange[to.locale](change.planName, price, when);
 
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
@@ -325,6 +400,7 @@ export async function notifyPriceChange(
       currency: change.currency,
       effectiveDate: when,
       manageUrl: absoluteClientUrl(manage),
+      locale: to.locale,
     }),
   );
 }
@@ -334,7 +410,7 @@ async function recipientForMembership(membershipId: string) {
   const membership = await rawDb.customerMembership.findUnique({
     where: { id: membershipId },
     select: {
-      customerProfile: { select: { userId: true, firstName: true, user: { select: { email: true } } } },
+      customerProfile: { select: { userId: true, firstName: true, user: { select: { email: true, locale: true } } } },
       membershipPlan: { select: { name: true } },
       tenant: {
         select: { name: true, slug: true, branding: { select: { businessName: true, logoUrl: true, primaryColor: true } } },
@@ -351,6 +427,7 @@ async function recipientForMembership(membershipId: string) {
     branding: { name: clinicName, logoUrl: membership.tenant.branding?.logoUrl ?? null, color: membership.tenant.branding?.primaryColor ?? null } as EmailBranding,
     slug: membership.tenant.slug,
     planName: membership.membershipPlan?.name ?? "Membership",
+    locale: localeOf(membership.customerProfile.user?.locale),
   };
 }
 
@@ -363,11 +440,11 @@ export async function notifyMembershipPaymentFailed(membershipId: string, benefi
   const to = await recipientForMembership(membershipId);
   if (!to) return;
   const endDay = benefitsEndAt ? formatDay(benefitsEndAt, null) : null;
-  const deadline = endDay ? ` Your benefits continue until ${endDay}.` : "";
+  const deadline = endDay ? PUSH_COPY.membershipPaymentFailedDeadline[to.locale](endDay) : "";
   const updateUrl = clinicPath(to.slug, "/profile?tab=membership");
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
-    body: `We couldn't take the payment for your ${to.planName}. Update your card to keep it.${deadline}`,
+    body: PUSH_COPY.membershipPaymentFailed[to.locale](to.planName, deadline),
     url: updateUrl,
     icon: clinicPath(to.slug, "/app-icon/192.png"),
     tag: `membership-failed-${membershipId}`,
@@ -383,6 +460,7 @@ export async function notifyMembershipPaymentFailed(membershipId: string, benefi
       planName: to.planName,
       updatePaymentUrl: absoluteClientUrl(updateUrl),
       benefitsEndAt: endDay,
+      locale: to.locale,
     }),
   );
 }
@@ -412,7 +490,7 @@ export async function notifyMembershipSuspended(membershipId: string): Promise<v
   if (!to) return;
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
-    body: `Your ${to.planName} is on hold because the payment didn't go through. It restarts as soon as a payment succeeds.`,
+    body: PUSH_COPY.membershipSuspended[to.locale](to.planName),
     url: clinicPath(to.slug, "/profile?tab=settings"),
     icon: clinicPath(to.slug, "/app-icon/192.png"),
     tag: `membership-suspended-${membershipId}`,
@@ -425,7 +503,7 @@ export async function notifyMembershipActive(membershipId: string, paidCents?: n
   if (!to) return;
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
-    body: `Your ${to.planName} is active. Enjoy your benefits!`,
+    body: PUSH_COPY.membershipActive[to.locale](to.planName),
     url: clinicPath(to.slug, "/profile?tab=settings"),
     icon: clinicPath(to.slug, "/app-icon/192.png"),
     tag: `membership-active-${membershipId}`,
@@ -439,7 +517,7 @@ export async function notifyMembershipActive(membershipId: string, paidCents?: n
     await sendBrandedEmail(
       to.email,
       to.clinicName,
-      membershipPaymentReceivedEmail({ branding: to.branding, firstName: to.firstName, planName: to.planName, amountCents: paidCents, currency }),
+      membershipPaymentReceivedEmail({ branding: to.branding, firstName: to.firstName, planName: to.planName, amountCents: paidCents, currency, locale: to.locale }),
     );
   }
 }
@@ -455,7 +533,7 @@ export async function notifySessionsReceived(customerProfileId: string, packageN
   if (!to) return;
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
-    body: `You've been given ${sessions} ${packageName} session${sessions === 1 ? "" : "s"}. They're in My items.`,
+    body: PUSH_COPY.sessionsReceived[to.locale](sessions, packageName),
     url: clinicPath(to.slug, "/profile"),
     icon: clinicPath(to.slug, "/app-icon/192.png"),
     tag: `sessions-${customerProfileId}-${Date.now()}`,
@@ -474,7 +552,7 @@ export async function notifySessionsExpiring(customerProfileId: string, packageN
   const myItems = clinicPath(to.slug, "/profile");
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
-    body: `${sessions} ${packageName} session${sessions === 1 ? "" : "s"} left — they run out on ${endsOn}.`,
+    body: PUSH_COPY.sessionsExpiring[to.locale](sessions, packageName, endsOn),
     url: myItems,
     icon: clinicPath(to.slug, "/app-icon/192.png"),
     tag: `sessions-expiring-${customerProfileId}`,
@@ -484,7 +562,7 @@ export async function notifySessionsExpiring(customerProfileId: string, packageN
   await sendBrandedEmail(
     to.email,
     to.clinicName,
-    sessionsExpiringEmail({ branding: to.branding, firstName: to.firstName, packageName, sessions, endsOn, myItemsUrl: absoluteClientUrl(myItems) }),
+    sessionsExpiringEmail({ branding: to.branding, firstName: to.firstName, packageName, sessions, endsOn, myItemsUrl: absoluteClientUrl(myItems), locale: to.locale }),
   );
 }
 
@@ -499,7 +577,7 @@ export async function notifySessionUsed(customerProfileId: string, packageName: 
   if (!to) return;
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
-    body: `${packageName}: 1 session used for ${serviceName}, ${remaining} left`,
+    body: PUSH_COPY.sessionUsed[to.locale](packageName, serviceName, remaining),
     url: clinicPath(to.slug, "/profile"),
     icon: clinicPath(to.slug, "/app-icon/192.png"),
     tag: `session-used-${customerProfileId}-${Date.now()}`,

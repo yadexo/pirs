@@ -1,4 +1,5 @@
 import "server-only";
+import { getTranslations } from "next-intl/server";
 import { rawDb } from "@/lib/db";
 
 /**
@@ -18,6 +19,8 @@ export function safeNext(next: string | undefined): string | null {
 }
 
 export interface PortalDescription {
+  /** Stable, locale-independent key — for keying UI (e.g. the "wrong account" sentence), never rendered directly. */
+  kind: "admin" | "clinic" | "client";
   section: string;
   title: string;
   hint: string;
@@ -26,11 +29,14 @@ export interface PortalDescription {
 
 /** Human wording for the login screen, so you can see which door you opened. */
 export async function describeDestination(target: string): Promise<PortalDescription | null> {
+  const t = await getTranslations("auth.destinations");
+
   if (target === "/agency" || target.startsWith("/agency/")) {
     return {
-      section: "Admin",
-      title: "Sign in to the agency console",
-      hint: "For whoever runs the platform.",
+      kind: "admin",
+      section: t("admin.section"),
+      title: t("admin.title"),
+      hint: t("admin.hint"),
       accent: "var(--accent-purple)",
     };
   }
@@ -43,9 +49,10 @@ export async function describeDestination(target: string): Promise<PortalDescrip
     });
     const name = tenant?.branding?.businessName ?? tenant?.name;
     return {
-      section: "Clinic",
-      title: name ? `Sign in to ${name}` : "Sign in to the clinic portal",
-      hint: "For clinic owners and their staff.",
+      kind: "clinic",
+      section: t("clinic.section"),
+      title: name ? t("clinic.titleNamed", { name }) : t("clinic.titleGeneric"),
+      hint: t("clinic.hint"),
       accent: "var(--primary)",
     };
   }
@@ -58,9 +65,10 @@ export async function describeDestination(target: string): Promise<PortalDescrip
     });
     const name = tenant?.branding?.businessName ?? tenant?.name;
     return {
-      section: "Client",
-      title: name ? `Sign in to ${name}` : "Sign in to the client app",
-      hint: "For the clinic's own clients.",
+      kind: "client",
+      section: t("client.section"),
+      title: name ? t("client.titleNamed", { name }) : t("client.titleGeneric"),
+      hint: t("client.hint"),
       accent: "var(--accent-pink)",
     };
   }
@@ -82,12 +90,6 @@ export function landingFor({ role, tenantId, tenantSlug }: Actor): string {
   return "/login";
 }
 
-/** Roles that can open each section, for the "wrong account" explanation. */
-export const SECTION_REQUIREMENT: Record<string, string> = {
-  Admin: "a platform admin account",
-  Clinic: "a clinic owner or staff account",
-  Client: "a client account at that clinic",
-};
 
 /**
  * Can this role actually open that path? Used to tell a signed-in user their

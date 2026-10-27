@@ -1645,9 +1645,12 @@
     "confirmAndTurnOn": "Bevestigen en inschakelen",
     "saveBackupCodes": "Bewaar deze back-upcodes op een veilige plek.",
     "backupCodesHint": "Elke code werkt één keer, mocht je ooit geen toegang meer hebben tot je authenticator-app. Dit is de enige keer dat ze getoond worden — schrijf ze nu op.",
-    "savedThese": "Ik heb ze bewaard — klaar",
+    "continueToDashboard": "Ik heb ze bewaard — doorgaan",
     "enterPasswordToTurnOff": "Vul je wachtwoord in om tweestapsverificatie uit te schakelen.",
     "generateNewBackupCodes": "Nieuwe back-upcodes genereren",
+    "requiredCantTurnOff": "Tweestapsverificatie is verplicht voor jouw rol. Ben je de toegang kwijt, vraag dan een platformbeheerder om het te resetten.",
+    "back": "Terug",
+    "signOut": "Uitloggen",
     "resetByEmail": {
       "title": "Tweestapsverificatie resetten",
       "description": "Verplicht voor kliniekeigenaren en platformbeheerders — als iemand zijn authenticator kwijtraakt, reset dit zodat diegene het opnieuw kan instellen. Elke reset wordt vastgelegd in het auditlog.",

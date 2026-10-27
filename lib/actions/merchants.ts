@@ -13,6 +13,7 @@ import { appUrl } from "@/lib/app-url";
 import { getEmailProvider } from "@/lib/providers/notifications";
 import { senderFor } from "@/lib/emails/sender";
 import { welcomeClinicOwnerEmail } from "@/lib/emails/templates";
+import { DEFAULT_LOCALE } from "@/lib/locale-cookie";
 
 const createSchema = z.object({
   name: z.string().min(2, "Business name is required").max(120),
@@ -124,6 +125,10 @@ export async function createMerchantAction(_prevState: unknown, formData: FormDa
     ownerName: ownerFirstName || parsed.data.name,
     clinicName: parsed.data.name,
     loginUrl,
+    // The owner hasn't been invited yet, let alone signed in or chosen a
+    // language — there's no signal to go on, so this matches the platform
+    // default the same way their first page load would.
+    locale: DEFAULT_LOCALE,
   });
   const result = await getEmailProvider().send({
     to: parsed.data.contactEmail,

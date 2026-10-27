@@ -54,7 +54,7 @@ describe("a client's account credit", () => {
     staffUserId = su.id;
     staffProfileId = (await rawDb.staffProfile.create({ data: { tenantId: clinic, userId: su.id, firstName: "Sam", lastName: "Staff" } })).id;
 
-    const cu = await rawDb.user.create({ data: { tenantId: clinic, email: `c-${stamp}@x.com`, passwordHash: "x", role: "CUSTOMER" } });
+    const cu = await rawDb.user.create({ data: { tenantId: clinic, email: `c-${stamp}@x.com`, passwordHash: "x", role: "CUSTOMER", locale: "en" } });
     clientUserId = cu.id;
     clientProfileId = (await rawDb.customerProfile.create({ data: { tenantId: clinic, userId: cu.id, firstName: "Cara", lastName: "Client" } })).id;
   });
@@ -231,7 +231,7 @@ describe("a client's loyalty points", () => {
     staffUserId = su.id;
     staffProfileId = (await rawDb.staffProfile.create({ data: { tenantId: clinic, userId: su.id, firstName: "Pat", lastName: "Points" } })).id;
 
-    const cu = await rawDb.user.create({ data: { tenantId: clinic, email: `cp-${stamp}@x.com`, passwordHash: "x", role: "CUSTOMER" } });
+    const cu = await rawDb.user.create({ data: { tenantId: clinic, email: `cp-${stamp}@x.com`, passwordHash: "x", role: "CUSTOMER", locale: "en" } });
     clientUserId = cu.id;
     clientProfileId = (await rawDb.customerProfile.create({ data: { tenantId: clinic, userId: cu.id, firstName: "Pia", lastName: "Client" } })).id;
   });

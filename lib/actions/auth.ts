@@ -17,6 +17,7 @@ import { absoluteClientAppUrl } from "@/lib/client-app-url";
 import { getEmailProvider } from "@/lib/providers/notifications";
 import { senderFor } from "@/lib/emails/sender";
 import { welcomeClientEmail } from "@/lib/emails/templates";
+import { resolveLocale } from "@/lib/locale";
 
 export type ActionResult = { error: string } | never;
 
@@ -184,10 +185,15 @@ export async function customerRegisterAction(tenantSlug: string, _prevState: unk
   });
 
   const clinicName = tenant.branding?.businessName ?? tenant.name;
+  // No User.locale yet (the account was just created) — resolveLocale() falls
+  // through to the same cookie/clinic-default the sign-up page itself just
+  // rendered with, so the welcome email matches what they were looking at.
+  const locale = await resolveLocale();
   const template = welcomeClientEmail({
     branding: { name: clinicName, logoUrl: tenant.branding?.logoUrl ?? null, color: tenant.branding?.primaryColor ?? null },
     firstName,
     openAppUrl: absoluteClientAppUrl(tenantSlug),
+    locale,
   });
   await getEmailProvider()
     .send({ to: email, subject: template.subject, body: template.text, html: template.html, from: senderFor(clinicName) })

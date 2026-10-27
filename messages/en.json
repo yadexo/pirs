@@ -1645,9 +1645,12 @@
     "confirmAndTurnOn": "Confirm and turn on",
     "saveBackupCodes": "Save these backup codes somewhere safe.",
     "backupCodesHint": "Each works once, if you ever lose access to your authenticator app. This is the only time they're shown — write them down now.",
-    "savedThese": "I've saved these — done",
+    "continueToDashboard": "I've saved these — continue",
     "enterPasswordToTurnOff": "Enter your password to turn off two-factor authentication.",
     "generateNewBackupCodes": "Generate new backup codes",
+    "requiredCantTurnOff": "Two-factor authentication is required for your role. If you've lost access, ask a platform admin to reset it.",
+    "back": "Back",
+    "signOut": "Sign out",
     "resetByEmail": {
       "title": "Two-factor reset",
       "description": "Required for clinic owners and platform admins — if someone loses their authenticator, this clears it so they can set it up again. Every reset is written to the audit log against their account.",

@@ -15,41 +15,56 @@ import type { EmailBranding } from "@/lib/emails/layout";
 
 const branding: EmailBranding = { name: "Riverside Wellness Clinic", logoUrl: "https://example.com/logo.png", color: "#0f766e" };
 
-const ALL_TEMPLATES = [
-  () => orderReceiptEmail({ branding, firstName: "Emma", orderNumber: "ORD-1", lines: [{ name: "Massage", quantity: 1, totalCents: 9500 }], totalCents: 9500, vatCents: 1650, currency: "EUR", myItemsUrl: "https://example.com/items" }),
-  () => refundConfirmationEmail({ branding, firstName: "Emma", orderNumber: "ORD-1", amountCents: 9500, currency: "EUR", fully: true }),
-  () => passwordResetEmail({ branding, resetUrl: "https://example.com/reset" }),
-  () => welcomeClientEmail({ branding, firstName: "Emma", openAppUrl: "https://example.com/app" }),
-  () => welcomeClinicOwnerEmail({ branding, ownerName: "Jordan", clinicName: "Riverside Wellness Clinic", loginUrl: "https://example.com/set-password" }),
-  () => membershipPaymentReceivedEmail({ branding, firstName: "Emma", planName: "Essentials", amountCents: 4900, currency: "EUR" }),
-  () => membershipPaymentFailedEmail({ branding, firstName: "Emma", planName: "Essentials", updatePaymentUrl: "https://example.com/pay", benefitsEndAt: "1 January 2027" }),
-  () => membershipPriceChangeEmail({ branding, firstName: "Emma", planName: "Essentials", newPriceCents: 5900, currency: "EUR", effectiveDate: "1 January 2027", manageUrl: "https://example.com/manage" }),
-  () => sessionsExpiringEmail({ branding, firstName: "Emma", packageName: "Acupuncture Pack", sessions: 2, endsOn: "1 January 2027", myItemsUrl: "https://example.com/items" }),
-];
+const LOCALES = ["en", "nl"] as const;
+
+function allTemplates(locale: (typeof LOCALES)[number]) {
+  return [
+    () => orderReceiptEmail({ branding, firstName: "Emma", orderNumber: "ORD-1", lines: [{ name: "Massage", quantity: 1, totalCents: 9500 }], totalCents: 9500, vatCents: 1650, currency: "EUR", myItemsUrl: "https://example.com/items", locale }),
+    () => refundConfirmationEmail({ branding, firstName: "Emma", orderNumber: "ORD-1", amountCents: 9500, currency: "EUR", fully: true, locale }),
+    () => passwordResetEmail({ branding, resetUrl: "https://example.com/reset", locale }),
+    () => welcomeClientEmail({ branding, firstName: "Emma", openAppUrl: "https://example.com/app", locale }),
+    () => welcomeClinicOwnerEmail({ branding, ownerName: "Jordan", clinicName: "Riverside Wellness Clinic", loginUrl: "https://example.com/set-password", locale }),
+    () => membershipPaymentReceivedEmail({ branding, firstName: "Emma", planName: "Essentials", amountCents: 4900, currency: "EUR", locale }),
+    () => membershipPaymentFailedEmail({ branding, firstName: "Emma", planName: "Essentials", updatePaymentUrl: "https://example.com/pay", benefitsEndAt: "1 January 2027", locale }),
+    () => membershipPriceChangeEmail({ branding, firstName: "Emma", planName: "Essentials", newPriceCents: 5900, currency: "EUR", effectiveDate: "1 January 2027", manageUrl: "https://example.com/manage", locale }),
+    () => sessionsExpiringEmail({ branding, firstName: "Emma", packageName: "Acupuncture Pack", sessions: 2, endsOn: "1 January 2027", myItemsUrl: "https://example.com/items", locale }),
+  ];
+}
 
 describe("transactional email templates", () => {
-  it("every one has a non-empty subject, html and text, and brands with the clinic's logo and colour", () => {
-    for (const build of ALL_TEMPLATES) {
-      const t = build();
-      expect(t.subject.length).toBeGreaterThan(0);
-      expect(t.html).toContain("<!doctype html>");
-      expect(t.html).toContain(branding.logoUrl!);
-      expect(t.html).toContain(branding.color!);
-      expect(t.text.length).toBeGreaterThan(0);
-      // The HTML shell's own chrome shouldn't leak into the plain-text copy.
-      expect(t.text).not.toContain("<");
-    }
-  });
+  for (const locale of LOCALES) {
+    it(`every one has a non-empty subject, html and text, and brands with the clinic's logo and colour (${locale})`, () => {
+      for (const build of allTemplates(locale)) {
+        const t = build();
+        expect(t.subject.length).toBeGreaterThan(0);
+        expect(t.html).toContain("<!doctype html>");
+        expect(t.html).toContain(branding.logoUrl!);
+        expect(t.html).toContain(branding.color!);
+        expect(t.text.length).toBeGreaterThan(0);
+        // The HTML shell's own chrome shouldn't leak into the plain-text copy.
+        expect(t.text).not.toContain("<");
+      }
+    });
 
-  it("never carries an unsubscribe link — every one of these is service mail, not an offer", () => {
-    for (const build of ALL_TEMPLATES) {
-      expect(build().html.toLowerCase()).not.toContain("unsubscribe");
-    }
+    it(`never carries an unsubscribe link — every one of these is service mail, not an offer (${locale})`, () => {
+      for (const build of allTemplates(locale)) {
+        expect(build().html.toLowerCase()).not.toContain("unsubscribe");
+      }
+    });
+  }
+
+  it("switches the whole template, not just a label, between locales", () => {
+    const en = orderReceiptEmail({ branding, firstName: "Emma", orderNumber: "ORD-1", lines: [{ name: "Massage", quantity: 1, totalCents: 9500 }], totalCents: 9500, vatCents: 1650, currency: "EUR", myItemsUrl: "https://example.com/items", locale: "en" });
+    const nl = orderReceiptEmail({ branding, firstName: "Emma", orderNumber: "ORD-1", lines: [{ name: "Massage", quantity: 1, totalCents: 9500 }], totalCents: 9500, vatCents: 1650, currency: "EUR", myItemsUrl: "https://example.com/items", locale: "nl" });
+    expect(en.subject).toContain("Your receipt");
+    expect(nl.subject).toContain("Je bon");
+    expect(en.text).toContain("Total incl. VAT");
+    expect(nl.text).toContain("Totaal incl. btw");
   });
 
   it("escapes a clinic name or client name that contains HTML", () => {
     const hostile: EmailBranding = { name: "<script>alert(1)</script>", logoUrl: null, color: "#0f766e" };
-    const t = welcomeClientEmail({ branding: hostile, firstName: "<b>Emma</b>", openAppUrl: "https://example.com" });
+    const t = welcomeClientEmail({ branding: hostile, firstName: "<b>Emma</b>", openAppUrl: "https://example.com", locale: "en" });
     expect(t.html).not.toContain("<script>");
     expect(t.html).not.toContain("<b>Emma</b>");
   });
@@ -64,6 +79,7 @@ describe("transactional email templates", () => {
       vatCents: 1736,
       currency: "EUR",
       myItemsUrl: "https://example.com/items",
+      locale: "en",
     });
     expect(t.html).toMatch(/Total incl\. VAT/);
     expect(t.html).toContain("of which VAT");

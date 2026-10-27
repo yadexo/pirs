@@ -7,14 +7,9 @@ import { LoginForm } from "./login-form";
 import { loadLiveAccount } from "@/lib/live-account";
 import { Button } from "@/components/ui/button";
 import { switchAccountAction } from "@/lib/actions/session";
-import { safeNext, describeDestination, resolveDestination, canReach, SECTION_REQUIREMENT } from "@/lib/login-destination";
-
-const ROLE_LABEL: Record<string, string> = {
-  PLATFORM_ADMIN: "Platform admin",
-  TENANT_ADMIN: "Clinic admin",
-  STAFF: "Clinic staff",
-  CUSTOMER: "Client",
-};
+import { safeNext, describeDestination, resolveDestination, canReach } from "@/lib/login-destination";
+import { resolveLocale } from "@/lib/locale";
+import { GuestLocaleSwitcher } from "@/components/auth/guest-locale-switcher";
 
 /**
  * The one login screen, for all three surfaces. Where a user lands afterwards
@@ -26,6 +21,14 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const { next, reason } = await searchParams;
   const target = safeNext(next);
   const t = await getTranslations("auth");
+  const locale = await resolveLocale();
+  const path = `/login${next ? `?next=${encodeURIComponent(next)}` : ""}`;
+  const ROLE_LABEL: Record<string, string> = {
+    PLATFORM_ADMIN: t("roleLabel.PLATFORM_ADMIN"),
+    TENANT_ADMIN: t("roleLabel.TENANT_ADMIN"),
+    STAFF: t("roleLabel.STAFF"),
+    CUSTOMER: t("roleLabel.CUSTOMER"),
+  };
 
   const session = await auth();
   const agency = await rawDb.agencySettings.findFirst();
@@ -66,7 +69,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             <p className="mt-2 text-[13px] leading-relaxed text-ink-muted">
               {t("signedInAs")} <span className="font-medium text-ink">{session.user.email}</span>
               {ROLE_LABEL[role] ? <span className="text-ink-faint"> — {ROLE_LABEL[role]}</span> : null}.{" "}
-              {portal ? `${portal.section} needs ${SECTION_REQUIREMENT[portal.section] ?? "a different account"}.` : null}
+              {portal ? t(`destinations.${portal.kind}.wrongAccountRequirement`) : null}
             </p>
 
             <form action={switchAccountAction} className="mt-5">
@@ -89,6 +92,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               {t("allPortals")}
             </Link>
           </p>
+          <GuestLocaleSwitcher locale={locale} path={path} />
         </div>
       </main>
     );
@@ -139,6 +143,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             {t("allPortals")}
           </Link>
         </p>
+        <GuestLocaleSwitcher locale={locale} path={path} />
       </div>
     </main>
   );

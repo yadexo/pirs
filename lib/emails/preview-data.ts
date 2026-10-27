@@ -42,27 +42,34 @@ export function buildPreviewTemplates(branding: EmailBranding, slug: string): Re
         vatCents: 2431,
         currency: "EUR",
         myItemsUrl: `${base}/profile?tab=items`,
+        locale: "en",
       }),
     },
     "refund-confirmation": {
       label: "Refund confirmation",
-      template: refundConfirmationEmail({ branding, firstName, orderNumber: "ORD-PREV1234", amountCents: 4500, currency: "EUR", fully: false }),
+      template: refundConfirmationEmail({ branding, firstName, orderNumber: "ORD-PREV1234", amountCents: 4500, currency: "EUR", fully: false, locale: "en" }),
     },
     "password-reset": {
       label: "Password reset",
-      template: passwordResetEmail({ branding, resetUrl: `https://example.com/set-password?token=preview` }),
+      template: passwordResetEmail({ branding, resetUrl: `https://example.com/set-password?token=preview`, locale: "en" }),
     },
     "welcome-client": {
       label: "Welcome — new client",
-      template: welcomeClientEmail({ branding, firstName, openAppUrl: base }),
+      template: welcomeClientEmail({ branding, firstName, openAppUrl: base, locale: "en" }),
     },
     "welcome-owner": {
       label: "Welcome — new clinic owner",
-      template: welcomeClinicOwnerEmail({ branding, ownerName: firstName, clinicName: branding.name, loginUrl: `https://example.com/set-password?token=preview` }),
+      template: welcomeClinicOwnerEmail({
+        branding,
+        ownerName: firstName,
+        clinicName: branding.name,
+        loginUrl: `https://example.com/set-password?token=preview`,
+        locale: "en",
+      }),
     },
     "membership-received": {
       label: "Membership: payment received",
-      template: membershipPaymentReceivedEmail({ branding, firstName, planName: "Wellness Essentials", amountCents: 4900, currency: "EUR" }),
+      template: membershipPaymentReceivedEmail({ branding, firstName, planName: "Wellness Essentials", amountCents: 4900, currency: "EUR", locale: "en" }),
     },
     "membership-failed": {
       label: "Membership: payment failed",
@@ -72,6 +79,7 @@ export function buildPreviewTemplates(branding: EmailBranding, slug: string): Re
         planName: "Wellness Essentials",
         updatePaymentUrl: `${base}/profile?tab=membership`,
         benefitsEndAt: "14 November 2026",
+        locale: "en",
       }),
     },
     "membership-price-change": {
@@ -84,11 +92,20 @@ export function buildPreviewTemplates(branding: EmailBranding, slug: string): Re
         currency: "EUR",
         effectiveDate: "1 December 2026",
         manageUrl: `${base}/profile?tab=membership`,
+        locale: "en",
       }),
     },
     "sessions-expiring": {
       label: "Session package expiry reminder",
-      template: sessionsExpiringEmail({ branding, firstName, packageName: "10-Session Acupuncture Pack", sessions: 2, endsOn: "20 November 2026", myItemsUrl: `${base}/profile` }),
+      template: sessionsExpiringEmail({
+        branding,
+        firstName,
+        packageName: "10-Session Acupuncture Pack",
+        sessions: 2,
+        endsOn: "20 November 2026",
+        myItemsUrl: `${base}/profile`,
+        locale: "en",
+      }),
     },
   };
 }

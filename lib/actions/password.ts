@@ -44,6 +44,7 @@ export async function requestPasswordResetAction(_prev: FormState, fd: FormData)
       : { email, role: { in: ["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF"] }, status: "ACTIVE" },
     select: {
       id: true,
+      locale: true,
       tenant: { select: { name: true, branding: { select: { businessName: true, logoUrl: true, primaryColor: true } } } },
     },
   });
@@ -67,7 +68,7 @@ export async function requestPasswordResetAction(_prev: FormState, fd: FormData)
 
     const { passwordResetEmail } = await import("@/lib/emails/templates");
     const { senderFor } = await import("@/lib/emails/sender");
-    const template = passwordResetEmail({ branding, resetUrl });
+    const template = passwordResetEmail({ branding, resetUrl, locale: account.locale === "en" ? "en" : "nl" });
     await getEmailProvider().send({ to: email, subject: template.subject, body: template.text, html: template.html, from: senderFor(place) });
   }
   return { sent: true };

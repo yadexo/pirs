@@ -68,7 +68,7 @@ describe("moving existing members to a new price", () => {
 
   /** A member of the plan, billed on the day given. */
   async function member(nextBillingInDays: number, suffix: string) {
-    const user = await rawDb.user.create({ data: { tenantId: clinic, email: `m-${suffix}-${stamp}@x.com`, passwordHash: "x", role: "CUSTOMER" } });
+    const user = await rawDb.user.create({ data: { tenantId: clinic, email: `m-${suffix}-${stamp}@x.com`, passwordHash: "x", role: "CUSTOMER", locale: "en" } });
     const profile = await rawDb.customerProfile.create({
       data: { tenantId: clinic, userId: user.id, firstName: "Mem", lastName: suffix },
     });

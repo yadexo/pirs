@@ -12,6 +12,8 @@
  * send should ever pass `unsubscribeUrl`.
  */
 
+import type { AppLocale } from "@/lib/locale-cookie";
+
 export interface EmailBranding {
   name: string;
   logoUrl: string | null;
@@ -35,8 +37,14 @@ export function emailButton(label: string, href: string, color: string | null): 
   </td></tr></table>`;
 }
 
-export function emailLayout(params: { branding: EmailBranding; preheader: string; bodyHtml: string; unsubscribeUrl?: string }): string {
-  const { branding, preheader, bodyHtml, unsubscribeUrl } = params;
+export function emailLayout(params: {
+  branding: EmailBranding;
+  preheader: string;
+  bodyHtml: string;
+  unsubscribeUrl?: string;
+  locale: AppLocale;
+}): string {
+  const { branding, preheader, bodyHtml, unsubscribeUrl, locale } = params;
   const color = brandColor(branding.color);
   const name = escapeHtml(branding.name);
   const header = branding.logoUrl
@@ -65,7 +73,7 @@ export function emailLayout(params: { branding: EmailBranding; preheader: string
             ${
               unsubscribeUrl
                 ? `<tr><td style="padding:16px 24px;text-align:center;font-size:12px;color:#8a8d94;border-top:1px solid #ececec;">
-                     <a href="${escapeHtml(unsubscribeUrl)}" style="color:#8a8d94;">Unsubscribe from offers</a>
+                     <a href="${escapeHtml(unsubscribeUrl)}" style="color:#8a8d94;">${locale === "nl" ? "Uitschrijven voor aanbiedingen" : "Unsubscribe from offers"}</a>
                    </td></tr>`
                 : ""
             }
