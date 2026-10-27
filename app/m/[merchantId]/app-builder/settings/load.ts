@@ -6,6 +6,7 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { clinicJoinUrl } from "@/lib/app-url";
 import { qrSvg } from "@/lib/qr";
 import { countryCodeFrom, countryName, isStripeConfigured } from "@/lib/stripe-connect";
+import { SUPPORTED_CURRENCIES } from "@/lib/currency";
 
 /**
  * Loads only what the open Settings section needs. Everything crossing to the
@@ -27,10 +28,9 @@ export async function loadSettingsSection(db: TenantDb, merchantId: string, sect
     case "branding": {
       const branding = await db.tenantBranding.findFirst({ where: {} });
       const hasPayments = (await db.order.count({ where: { status: { in: ["PAID", "REFUNDED", "PARTIALLY_REFUNDED"] } } })) + (await db.customerMembership.count({ where: {} })) > 0;
-      // Built here, from the same Intl data the server validates against, so the
-      // browser can't offer a value the save would reject (and SSR and client agree).
-      const common = ["EUR", "USD", "GBP", "CHF", "SEK", "NOK", "DKK", "PLN", "CAD", "AUD"];
-      const currencies = [...common, ...Intl.supportedValuesOf("currency").filter((c) => !common.includes(c))];
+      // Same set the server validates against, so the browser can't offer a
+      // value the save would reject (and SSR and client agree).
+      const currencies = SUPPORTED_CURRENCIES;
       const timeZones = Intl.supportedValuesOf("timeZone");
       return plain({ section, branding, currencyLocked: hasPayments, currencies, timeZones });
     }

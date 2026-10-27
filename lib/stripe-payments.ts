@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { rawDb } from "@/lib/db";
 import { applicationFeeCents } from "@/lib/platform-fee";
 import { isStripeConfigured, StripeNotConfiguredError } from "@/lib/stripe-connect";
+import type { Currency } from "@/lib/currency";
 
 /**
  * Client payments as *direct charges* on the clinic's own connected account:
@@ -63,6 +64,27 @@ export interface DirectChargeResult {
 }
 
 /**
+ * Which payment methods a PaymentIntent may offer, by currency.
+ *
+ * EUR is left to Stripe's own dynamic selection — automatic_payment_methods
+ * is what offers iDEAL, Wero, Bancontact, Klarna, card and the wallets
+ * together, and none of those bank-redirect methods settle in anything but
+ * EUR anyway, so Stripe would never offer them for another currency even
+ * without this function.
+ *
+ * The one case Stripe doesn't rule out by itself: Klarna also works in USD
+ * and GBP, but this clinic chose not to price in EUR, so it's kept off
+ * explicitly. Card (and the wallets that ride on it, Apple Pay/Google Pay)
+ * still work for every currency.
+ */
+export function paymentIntentMethodParams(
+  currency: Currency,
+): Pick<Stripe.PaymentIntentCreateParams, "automatic_payment_methods" | "payment_method_types"> {
+  if (currency === "EUR") return { automatic_payment_methods: { enabled: true } };
+  return { payment_method_types: ["card"] };
+}
+
+/**
  * A PaymentIntent on the clinic's account. `idempotencyKey` (the order id)
  * means a double-submitted checkout reuses the same intent instead of charging
  * twice.
@@ -71,7 +93,7 @@ export async function createDirectCharge(params: {
   stripeAccountId: string;
   amountCents: number;
   subtotalCents: number;
-  currency: string;
+  currency: Currency;
   description: string;
   metadata: Record<string, string>;
   idempotencyKey: string;
@@ -81,7 +103,7 @@ export async function createDirectCharge(params: {
     {
       amount: params.amountCents,
       currency: params.currency.toLowerCase(),
-      automatic_payment_methods: { enabled: true },
+      ...paymentIntentMethodParams(params.currency),
       description: params.description,
       metadata: params.metadata,
       ...(fee > 0 ? { application_fee_amount: fee } : {}),

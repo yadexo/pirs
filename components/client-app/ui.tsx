@@ -73,7 +73,7 @@ export function Scribble() {
  * updated to pass the client's actual resolved locale (useLocale() from
  * next-intl) — not yet done everywhere money() is called.
  */
-export const money = (cents: number, currency = DEFAULT_CURRENCY, locale: "en" | "nl" = "en") =>
+export const money = (cents: number, currency: string = DEFAULT_CURRENCY, locale: "en" | "nl" = "en") =>
   new Intl.NumberFormat(locale === "nl" ? "nl-NL" : "en", {
     style: "currency",
     currency,

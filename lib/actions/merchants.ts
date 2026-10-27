@@ -14,13 +14,14 @@ import { getEmailProvider } from "@/lib/providers/notifications";
 import { senderFor } from "@/lib/emails/sender";
 import { welcomeClinicOwnerEmail } from "@/lib/emails/templates";
 import { DEFAULT_LOCALE } from "@/lib/locale-cookie";
+import { SUPPORTED_CURRENCIES } from "@/lib/currency";
 
 const createSchema = z.object({
   name: z.string().min(2, "Business name is required").max(120),
   contactEmail: z.string().email("Enter a valid email"),
   phone: z.string().max(40).optional(),
   country: z.string().max(80).optional(),
-  currency: z.string().length(3).default("EUR"),
+  currency: z.enum(SUPPORTED_CURRENCIES).default("EUR"),
   timezone: z.string().min(1).default("Europe/Amsterdam"),
 });
 

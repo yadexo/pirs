@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatMoney(cents: number, currency = DEFAULT_CURRENCY, locale = "en-US") {
+export function formatMoney(cents: number, currency: string = DEFAULT_CURRENCY, locale = "en-US") {
   return new Intl.NumberFormat(locale, { style: "currency", currency }).format(cents / 100);
 }
 

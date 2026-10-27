@@ -70,7 +70,7 @@ async function main() {
           postalCode: "62701",
           country: "USA",
           website: "https://example.com",
-          currency: "USD",
+          currency: "EUR",
           timeZone: "America/Chicago",
           termsContent: "Demo terms & conditions for Riverside Wellness Clinic.",
           privacyContent: "Demo privacy policy for Riverside Wellness Clinic.",

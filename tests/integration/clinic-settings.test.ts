@@ -93,6 +93,11 @@ describe("clinic settings", () => {
       expect(Object.keys(errs).sort()).toEqual(["currency", "primaryColor", "timeZone", "website"]);
     });
 
+    it("only accepts EUR, USD or GBP, even though it's a real ISO currency otherwise", async () => {
+      asOwner();
+      expect(errorsOf(await S.saveBrandingAction(clinic, branding({ currency: "CHF" }))).currency).toMatch(/choose a currency/i);
+    });
+
     it("locks the currency once money has been taken", async () => {
       asOwner();
       expect(await S.saveBrandingAction(clinic, branding({ currency: "GBP" }))).toMatchObject({ ok: true });

@@ -10,6 +10,7 @@ import { isPermissionKey } from "@/lib/permissions";
 import { WEEKDAYS, type OpeningHours } from "@/lib/opening-hours";
 import { appUrl } from "@/lib/app-url";
 import { checkWindow, DEFAULT_WINDOW_END, DEFAULT_WINDOW_START } from "@/lib/marketing-window";
+import { SUPPORTED_CURRENCIES } from "@/lib/currency";
 
 /**
  * App Builder → Settings. Each section saves through one action here, named
@@ -140,7 +141,7 @@ async function ensureBranding(merchantId: string) {
 // Branding
 // ---------------------------------------------------------------------------
 
-const CURRENCIES = new Set(Intl.supportedValuesOf("currency"));
+const CURRENCIES = new Set<string>(SUPPORTED_CURRENCIES);
 const TIME_ZONES = new Set(Intl.supportedValuesOf("timeZone"));
 
 const brandingSchema = z.object({

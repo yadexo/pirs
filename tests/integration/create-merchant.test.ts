@@ -59,4 +59,33 @@ describe("createMerchantAction", () => {
     expect(tokenRow).toBeTruthy();
     expect(tokenRow!.usedAt).toBeNull();
   });
+
+  it("defaults a new clinic to EUR when no currency is given", async () => {
+    await asPlatformAdmin();
+    const result = (await createMerchantAction(
+      undefined,
+      fd({ name: `No Currency Clinic ${Date.now()}`, contactEmail: `nc-${Date.now()}@example.com`, timezone: "Europe/Amsterdam" }),
+    )) as { success: true; merchantId: string };
+    expect(result.success).toBe(true);
+    createdTenantIds.push(result.merchantId);
+    const branding = await rawDb.tenantBranding.findUnique({ where: { tenantId: result.merchantId } });
+    expect(branding?.currency).toBe("EUR");
+  });
+
+  it("accepts USD and GBP, and refuses anything outside EUR/USD/GBP", async () => {
+    await asPlatformAdmin();
+    const usd = (await createMerchantAction(
+      undefined,
+      fd({ name: `USD Clinic ${Date.now()}`, contactEmail: `usd-${Date.now()}@example.com`, currency: "USD", timezone: "Europe/Amsterdam" }),
+    )) as { success: true; merchantId: string };
+    expect(usd.success).toBe(true);
+    createdTenantIds.push(usd.merchantId);
+    expect((await rawDb.tenantBranding.findUnique({ where: { tenantId: usd.merchantId } }))?.currency).toBe("USD");
+
+    const rejected = (await createMerchantAction(
+      undefined,
+      fd({ name: `Bad Currency Clinic ${Date.now()}`, contactEmail: `bad-${Date.now()}@example.com`, currency: "CHF", timezone: "Europe/Amsterdam" }),
+    )) as { error?: string };
+    expect(rejected.error).toBeTruthy();
+  });
 });
