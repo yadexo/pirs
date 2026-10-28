@@ -1,5 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { MockPaymentProvider, mockDeclineRequested } from "@/lib/providers/payments/mock";
+import { StripePaymentProvider } from "@/lib/providers/payments/stripe";
+import { getPaymentProvider } from "@/lib/providers/payments";
 
 /**
  * Who gets to say a payment failed. Not the client: checkout is a live
@@ -20,6 +22,45 @@ describe("asking for a simulated decline", () => {
 
   it("is ignored in production, whatever is set", () => {
     expect(mockDeclineRequested({ MOCK_PAYMENTS_DECLINE: "1", NODE_ENV: "production" })).toBe(false);
+  });
+});
+
+/**
+ * Which provider a deployment actually gets. PAYMENT_PROVIDER alone used to be
+ * enough to hand back a real StripePaymentProvider — including with no key at
+ * all, which doesn't fail until the first call tries to use it. A deployment
+ * mid-setup (PAYMENT_PROVIDER=stripe landed before STRIPE_SECRET_KEY did) is a
+ * real state, not a hypothetical one: this is what checkout and membership
+ * sign-up both fell into.
+ */
+describe("getPaymentProvider", () => {
+  const original = { PAYMENT_PROVIDER: process.env.PAYMENT_PROVIDER, STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY };
+
+  afterEach(() => {
+    for (const [key, value] of Object.entries(original)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  it("is the mock provider when PAYMENT_PROVIDER isn't set", () => {
+    delete process.env.PAYMENT_PROVIDER;
+    process.env.STRIPE_SECRET_KEY = "sk_test_whatever";
+    expect(getPaymentProvider()).toBeInstanceOf(MockPaymentProvider);
+  });
+
+  it("is the real Stripe provider once both PAYMENT_PROVIDER and a key are set", () => {
+    process.env.PAYMENT_PROVIDER = "stripe";
+    process.env.STRIPE_SECRET_KEY = "sk_test_whatever";
+    expect(getPaymentProvider()).toBeInstanceOf(StripePaymentProvider);
+  });
+
+  it("falls back to mock when PAYMENT_PROVIDER=stripe but no key has landed yet", () => {
+    process.env.PAYMENT_PROVIDER = "stripe";
+    process.env.STRIPE_SECRET_KEY = "";
+    expect(getPaymentProvider()).toBeInstanceOf(MockPaymentProvider);
+    delete process.env.STRIPE_SECRET_KEY;
+    expect(getPaymentProvider()).toBeInstanceOf(MockPaymentProvider);
   });
 });
 
