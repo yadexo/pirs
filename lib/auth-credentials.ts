@@ -5,7 +5,7 @@ import "server-only";
 import { CredentialsSignin } from "@auth/core/errors";
 import { rawDb } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
-import { rateLimit, retryAfterLabel } from "@/lib/rate-limit";
+import { rateLimit } from "@/lib/rate-limit";
 import { permissionsFor } from "@/lib/live-account";
 import { getTwoFactorStatus, verifyTwoFactorCode } from "@/lib/two-factor";
 import type { SessionPermissions, SessionUserShape } from "@/types/next-auth";
@@ -18,10 +18,19 @@ import type { SessionPermissions, SessionUserShape } from "@/types/next-auth";
  * specific text instead of the generic "wrong password" one — the only
  * message worth being specific about, since it is not "wrong password",
  * it is "slow down".
+ *
+ * Next bundles the NextAuth route handler (where authorize() runs, and
+ * where this file executes) separately from the server action that catches
+ * the error — a different bundle than the one Next.js scopes its i18n
+ * request config to, so calling next-intl's getTranslations() here isn't
+ * reliable. The message carries the retry duration in milliseconds instead
+ * of translated text; signInOrError (lib/actions/auth.ts), which does run in
+ * a normal server-action context, is where this actually gets translated.
  */
+export const RATE_LIMITED_MESSAGE_PREFIX = "__rate_limited__:";
 class RateLimitedSignIn extends CredentialsSignin {
-  constructor(message: string) {
-    super(message);
+  constructor(retryAfterMs: number) {
+    super(`${RATE_LIMITED_MESSAGE_PREFIX}${retryAfterMs}`);
   }
 }
 
@@ -43,10 +52,13 @@ export class TwoFactorRequiredSignIn extends CredentialsSignin {
   }
 }
 
+/** Same bundle-split reasoning as RateLimitedSignIn above — a sentinel, translated on the other side. */
+export const INVALID_TWO_FACTOR_CODE_MESSAGE = "__2fa_invalid_code__";
+
 /** Password was right, a code was given, and it matched neither the TOTP nor any unused backup code. */
 class InvalidTwoFactorCodeSignIn extends CredentialsSignin {
   constructor() {
-    super("That code didn't work. Check the time on your phone, or use a backup code.");
+    super(INVALID_TWO_FACTOR_CODE_MESSAGE);
   }
 }
 
@@ -97,7 +109,7 @@ export async function authorizeCredentials(
     rateLimit(`login:ip:${ip}`, 30, 10 * 60 * 1000),
   ]);
   const limited = !byAccount.ok ? byAccount : !byIp.ok ? byIp : null;
-  if (limited) throw new RateLimitedSignIn(`Too many sign-in attempts. Try again in ${retryAfterLabel(limited.retryAfterMs)}.`);
+  if (limited) throw new RateLimitedSignIn(limited.retryAfterMs);
 
   const roles = audience === "client" ? (["CUSTOMER"] as const) : (["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF"] as const);
   let user;

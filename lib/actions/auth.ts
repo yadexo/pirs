@@ -2,12 +2,13 @@
 
 import { z } from "zod";
 import { AuthError } from "next-auth";
+import { getTranslations } from "next-intl/server";
 import { signIn } from "@/auth";
 import { clientSignIn } from "@/client-auth";
 import { rawDb } from "@/lib/db";
-import { TWO_FACTOR_REQUIRED_MESSAGE } from "@/lib/auth-credentials";
+import { TWO_FACTOR_REQUIRED_MESSAGE, INVALID_TWO_FACTOR_CODE_MESSAGE, RATE_LIMITED_MESSAGE_PREFIX } from "@/lib/auth-credentials";
 import { hashPassword } from "@/lib/password";
-import { rateLimit, retryAfterLabel } from "@/lib/rate-limit";
+import { rateLimit, retryAfterParts } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request-ip";
 import { resolveDestination, canReach, safeNext } from "@/lib/login-destination";
 import { recordActivity } from "@/lib/activity";
@@ -48,11 +49,19 @@ async function signInOrError(params: Record<string, string>, redirectTo: string,
       // check because it's imported from the shared "next-auth" package.
       const message = cleanAuthErrorMessage(err.message);
       if (message === TWO_FACTOR_REQUIRED_MESSAGE) return { needsTwoFactor: true };
-      // Rate-limit and wrong-code failures carry their own message (see
-      // RateLimitedSignIn and the 2FA errors, lib/auth-credentials.ts); a
-      // wrong password never does, and stays generic on purpose — a
-      // different message would say which part was wrong.
-      return { error: message || "Invalid email or password." };
+      const t = await getTranslations("auth");
+      // Rate-limit and wrong-code failures carry their own signal (sentinels
+      // from lib/auth-credentials.ts, translated here rather than there —
+      // see that file's comment on why); a wrong password never does, and
+      // stays generic on purpose — a different message would say which part
+      // was wrong.
+      if (message === INVALID_TWO_FACTOR_CODE_MESSAGE) return { error: t("twoFactor.wrongCode") };
+      if (message.startsWith(RATE_LIMITED_MESSAGE_PREFIX)) {
+        const { unit, count } = retryAfterParts(Number(message.slice(RATE_LIMITED_MESSAGE_PREFIX.length)));
+        const time = unit === "minute" ? t("retryAfter.minutes", { count }) : t("retryAfter.seconds", { count });
+        return { error: t("tooManySignInAttempts", { time }) };
+      }
+      return { error: message || t("invalidCredentials") };
     }
     throw err; // NEXT_REDIRECT on success — must propagate uncaught
   }
@@ -143,7 +152,12 @@ export async function customerRegisterAction(tenantSlug: string, _prevState: unk
     rateLimit(`register:ip:${ip}`, 20, 15 * 60 * 1000),
   ]);
   const limited = !byAccount.ok ? byAccount : !byIp.ok ? byIp : null;
-  if (limited) return { error: `Too many attempts. Try again in ${retryAfterLabel(limited.retryAfterMs)}.` };
+  if (limited) {
+    const t = await getTranslations("auth");
+    const { unit, count } = retryAfterParts(limited.retryAfterMs);
+    const time = unit === "minute" ? t("retryAfter.minutes", { count }) : t("retryAfter.seconds", { count });
+    return { error: t("tooManyAttempts", { time }) };
+  }
 
   const tenant = await rawDb.tenant.findUnique({
     where: { slug: tenantSlug },

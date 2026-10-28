@@ -29,6 +29,17 @@
     "signOutAndSwitch": "Uitloggen en van account wisselen",
     "stayInMyPortal": "In mijn eigen portaal blijven",
     "allPortals": "Alle portalen",
+    "enterValidEmail": "Vul een geldig e-mailadres in.",
+    "passwordsDontMatch": "De twee wachtwoorden komen niet overeen.",
+    "useAtLeastChars": "Gebruik minstens {min} tekens.",
+    "linkExpiredOrUsed": "Deze link is verlopen of al gebruikt. Vraag een nieuwe aan.",
+    "tooManyAttemptsWaitMinutes": "Te veel pogingen. Wacht een paar minuten en probeer het opnieuw.",
+    "tooManySignInAttempts": "Te veel inlogpogingen. Probeer het over {time} opnieuw.",
+    "tooManyAttempts": "Te veel pogingen. Probeer het over {time} opnieuw.",
+    "retryAfter": {
+      "minutes": "{count, plural, one {# minuut} other {# minuten}}",
+      "seconds": "{count, plural, one {# seconde} other {# seconden}}"
+    },
     "twoFactor": {
       "prompt": "Vul de 6-cijferige code van je authenticator-app in, of een van je back-upcodes.",
       "codeLabel": "Code",
@@ -1658,6 +1669,17 @@
       "accountEmail": "E-mailadres account",
       "reset": "2FA resetten",
       "confirmed": "Tweestapsverificatie is gereset voor {email}. Diegene wordt gevraagd dit opnieuw in te stellen bij de volgende keer inloggen."
+    },
+    "errors": {
+      "notAvailableForAccount": "Niet beschikbaar voor dit account.",
+      "alreadyOn": "Tweestapsverificatie is al ingeschakeld voor dit account.",
+      "startSetupFirst": "Start eerst de installatie.",
+      "codeDidNotMatch": "Die code klopt niet. Controleer je authenticator-app en probeer het opnieuw.",
+      "wrongPassword": "Verkeerd wachtwoord.",
+      "turnOnFirst": "Schakel eerst tweestapsverificatie in.",
+      "noAccountForEmail": "Geen medewerkers- of beheerdersaccount met dat e-mailadres.",
+      "emailUsedAtMultipleClinics": "Dit e-mailadres wordt bij meer dan één kliniek gebruikt — reset het vanuit de teaminstellingen van die kliniek.",
+      "noSuchAccount": "Geen account gevonden."
     }
   },
   "accountLanguage": {

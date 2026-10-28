@@ -30,12 +30,15 @@ export async function rateLimit(
   return { ok: count <= limit, remaining: Math.max(0, limit - count), retryAfterMs: Math.max(0, resetAt.getTime() - Date.now()) };
 }
 
-/** "5 minutes" / "40 seconds" — for a "try again in …" message. */
-export function retryAfterLabel(ms: number): string {
+/**
+ * The pieces of a "try again in …" message — not the message itself, so the
+ * caller can translate it. Rounds up: 1ms left is still "1 minute" or
+ * "1 second" away, never "0".
+ */
+export function retryAfterParts(ms: number): { unit: "minute" | "second"; count: number } {
   const minutes = Math.ceil(ms / 60_000);
-  if (minutes >= 1) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
-  const seconds = Math.max(1, Math.ceil(ms / 1000));
-  return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  if (minutes >= 1) return { unit: "minute", count: minutes };
+  return { unit: "second", count: Math.max(1, Math.ceil(ms / 1000)) };
 }
 
 /**

@@ -29,6 +29,17 @@
     "signOutAndSwitch": "Sign out and switch account",
     "stayInMyPortal": "Stay in my own portal",
     "allPortals": "All portals",
+    "enterValidEmail": "Enter a valid email address.",
+    "passwordsDontMatch": "The two passwords don't match.",
+    "useAtLeastChars": "Use at least {min} characters.",
+    "linkExpiredOrUsed": "This link has expired or was already used. Ask for a new one.",
+    "tooManyAttemptsWaitMinutes": "Too many attempts. Wait a few minutes and try again.",
+    "tooManySignInAttempts": "Too many sign-in attempts. Try again in {time}.",
+    "tooManyAttempts": "Too many attempts. Try again in {time}.",
+    "retryAfter": {
+      "minutes": "{count, plural, one {# minute} other {# minutes}}",
+      "seconds": "{count, plural, one {# second} other {# seconds}}"
+    },
     "twoFactor": {
       "prompt": "Enter the 6-digit code from your authenticator app, or one of your backup codes.",
       "codeLabel": "Code",
@@ -1658,6 +1669,17 @@
       "accountEmail": "Account email",
       "reset": "Reset their 2FA",
       "confirmed": "Two-factor authentication was reset for {email}. They'll be asked to set it up again next time they sign in."
+    },
+    "errors": {
+      "notAvailableForAccount": "Not available for this account.",
+      "alreadyOn": "Two-factor authentication is already on for this account.",
+      "startSetupFirst": "Start setup first.",
+      "codeDidNotMatch": "That code didn't match. Check your authenticator app and try again.",
+      "wrongPassword": "Wrong password.",
+      "turnOnFirst": "Turn on two-factor authentication first.",
+      "noAccountForEmail": "No staff or admin account uses that email.",
+      "emailUsedAtMultipleClinics": "That email is used at more than one clinic — reset it from that clinic's own Team settings instead.",
+      "noSuchAccount": "No such account."
     }
   },
   "accountLanguage": {

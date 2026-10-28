@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { getTranslations } from "next-intl/server";
 import { rawDb } from "@/lib/db";
 import { rateLimit } from "@/lib/rate-limit";
 import { getEmailProvider } from "@/lib/providers/notifications";
@@ -25,7 +26,7 @@ async function clientIp() {
  */
 export async function requestPasswordResetAction(_prev: FormState, fd: FormData): Promise<FormState> {
   const parsed = z.string().trim().toLowerCase().email().max(254).safeParse(fd.get("email"));
-  if (!parsed.success) return { error: "Enter a valid email address." };
+  if (!parsed.success) return { error: (await getTranslations("auth"))("enterValidEmail") };
   const email = parsed.data;
   const rawClinic = fd.get("clinic");
   const clinicSlug = typeof rawClinic === "string" && rawClinic ? rawClinic : null;
@@ -79,20 +80,18 @@ export async function setPasswordAction(_prev: FormState, fd: FormData): Promise
   const token = String(fd.get("token") ?? "");
   const password = String(fd.get("password") ?? "");
   const confirm = String(fd.get("confirm") ?? "");
+  const t = await getTranslations("auth");
 
-  if (password.length < MIN_PASSWORD_LENGTH) return { error: `Use at least ${MIN_PASSWORD_LENGTH} characters.` };
-  if (password !== confirm) return { error: "The two passwords don't match." };
+  if (password.length < MIN_PASSWORD_LENGTH) return { error: t("useAtLeastChars", { min: MIN_PASSWORD_LENGTH }) };
+  if (password !== confirm) return { error: t("passwordsDontMatch") };
 
   const { ok } = await rateLimit(`set-password:${await clientIp()}`, 20, 15 * 60 * 1000);
-  if (!ok) return { error: "Too many attempts. Wait a few minutes and try again." };
+  if (!ok) return { error: t("tooManyAttemptsWaitMinutes") };
 
   const result = await consumePasswordToken(token, password);
   if (!result.ok) {
     return {
-      error:
-        result.reason === "weak"
-          ? `Use at least ${MIN_PASSWORD_LENGTH} characters.`
-          : "This link has expired or was already used. Ask for a new one.",
+      error: result.reason === "weak" ? t("useAtLeastChars", { min: MIN_PASSWORD_LENGTH }) : t("linkExpiredOrUsed"),
     };
   }
 

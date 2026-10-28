@@ -64,8 +64,10 @@ describe("sign-in with two-factor authentication", () => {
     const secret = generateTotpSecret();
     await rawDb.twoFactorSecret.create({ data: { userId: u.id, secret, confirmedAt: new Date() } });
 
+    // authorizeCredentials throws a sentinel here, not the English text —
+    // translation happens one level up (lib/actions/auth.ts's signInOrError).
     await expect(authorizeCredentials({ portal: "unified", email, password, totpCode: "000000" }, "staff", "203.0.113.4")).rejects.toThrow(
-      /didn't work/i,
+      /__2fa_invalid_code__/,
     );
 
     const result = await authorizeCredentials({ portal: "unified", email, password, totpCode: totpCode(secret) }, "staff", "203.0.113.4");
@@ -83,7 +85,9 @@ describe("sign-in with two-factor authentication", () => {
     const result = await authorizeCredentials({ portal: "unified", email, password, totpCode: code }, "staff", "203.0.113.5");
     expect(result?.email).toBe(email);
 
-    await expect(authorizeCredentials({ portal: "unified", email, password, totpCode: code }, "staff", "203.0.113.5")).rejects.toThrow(/didn't work/i);
+    await expect(authorizeCredentials({ portal: "unified", email, password, totpCode: code }, "staff", "203.0.113.5")).rejects.toThrow(
+      /__2fa_invalid_code__/,
+    );
   });
 
   it("the last backup code goes to exactly one of two people asking at once", async () => {

@@ -29,10 +29,16 @@ describe("sign-in rate limiting", () => {
       }
     }
     expect(limited).toBeTruthy();
-    expect(limited!.message).toMatch(/too many sign-in attempts.*try again in/i);
+    // authorizeCredentials itself throws a sentinel, not the English text —
+    // translating it happens one level up, in signInOrError (lib/actions/auth.ts),
+    // which runs in a real server-action context; see lib/auth-credentials.ts's
+    // comment on why this one can't call next-intl directly.
+    expect(limited!.message).toMatch(/^__rate_limited__:\d+/);
 
     // The right password doesn't lift the lock early.
-    await expect(authorizeCredentials({ portal: "unified", email, password: "correct-horse-1" }, "staff", "203.0.113.99")).rejects.toThrow(/too many/i);
+    await expect(authorizeCredentials({ portal: "unified", email, password: "correct-horse-1" }, "staff", "203.0.113.99")).rejects.toThrow(
+      /__rate_limited__:/,
+    );
   }, 60000);
 
   it("locks the IP after enough attempts spread across different accounts", async () => {
@@ -51,7 +57,7 @@ describe("sign-in rate limiting", () => {
       }
     }
     expect(limited).toBeTruthy();
-    expect(limited!.message).toMatch(/too many sign-in attempts.*try again in/i);
+    expect(limited!.message).toMatch(/^__rate_limited__:\d+/);
   });
 
   it("never throws for a null credentials object (Auth.js's own CredentialsSignin handles that)", async () => {

@@ -1,5 +1,6 @@
 "use server";
 
+import { getTranslations } from "next-intl/server";
 import { requireSession, requireRole } from "@/lib/rbac";
 import { rawDb } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
@@ -22,10 +23,11 @@ function actorTypeFor(role: string): "PLATFORM_ADMIN" | "STAFF" {
  */
 export async function startTwoFactorSetupAction(): Promise<{ secret: string; otpauthUri: string; qrSvg: string } | { error: string }> {
   const user = await requireSession("staff");
-  if (user.role === "CUSTOMER") return { error: "Not available for this account." };
+  const t = await getTranslations("twoFactor.errors");
+  if (user.role === "CUSTOMER") return { error: t("notAvailableForAccount") };
 
   const existing = await getTwoFactorStatus(user.id);
-  if (existing?.confirmedAt) return { error: "Two-factor authentication is already on for this account." };
+  if (existing?.confirmedAt) return { error: t("alreadyOn") };
 
   const secret = existing?.secret ?? generateTotpSecret();
   if (!existing) await rawDb.twoFactorSecret.create({ data: { userId: user.id, secret } });
@@ -41,10 +43,11 @@ export async function startTwoFactorSetupAction(): Promise<{ secret: string; otp
  */
 export async function confirmTwoFactorSetupAction(code: string): Promise<{ backupCodes: string[] } | { error: string }> {
   const user = await requireSession("staff");
+  const t = await getTranslations("twoFactor.errors");
   const row = await rawDb.twoFactorSecret.findUnique({ where: { userId: user.id } });
-  if (!row) return { error: "Start setup first." };
-  if (row.confirmedAt) return { error: "Two-factor authentication is already on for this account." };
-  if (!verifyTotp(row.secret, code)) return { error: "That code didn't match. Check your authenticator app and try again." };
+  if (!row) return { error: t("startSetupFirst") };
+  if (row.confirmedAt) return { error: t("alreadyOn") };
+  if (!verifyTotp(row.secret, code)) return { error: t("codeDidNotMatch") };
 
   await rawDb.twoFactorSecret.update({ where: { userId: user.id }, data: { confirmedAt: new Date() } });
   const backupCodes = await issueBackupCodes(user.id);
@@ -65,11 +68,12 @@ export async function confirmTwoFactorSetupAction(code: string): Promise<{ backu
  */
 export async function disableTwoFactorAction(password: string): Promise<{ ok: true } | { error: string }> {
   const user = await requireSession("staff");
+  const t = await getTranslations("twoFactor");
   if (twoFactorRequiredForRole(user.role)) {
-    return { error: "Two-factor authentication is required for your role. Ask a platform admin to reset it if you've lost access." };
+    return { error: t("requiredCantTurnOff") };
   }
   const row = await rawDb.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
-  if (!row || !(await verifyPassword(password, row.passwordHash))) return { error: "Wrong password." };
+  if (!row || !(await verifyPassword(password, row.passwordHash))) return { error: t("errors.wrongPassword") };
 
   await disableTwoFactor(user.id);
   await writeAuditLog({ tenantId: user.tenantId, actorUserId: user.id, actorType: actorTypeFor(user.role), action: "two_factor.disabled", entityType: "User", entityId: user.id });
@@ -80,7 +84,7 @@ export async function disableTwoFactorAction(password: string): Promise<{ ok: tr
 export async function regenerateBackupCodesAction(): Promise<{ backupCodes: string[] } | { error: string }> {
   const user = await requireSession("staff");
   const status = await getTwoFactorStatus(user.id);
-  if (!status?.confirmedAt) return { error: "Turn on two-factor authentication first." };
+  if (!status?.confirmedAt) return { error: (await getTranslations("twoFactor.errors"))("turnOnFirst") };
 
   const backupCodes = await issueBackupCodes(user.id);
   await writeAuditLog({ tenantId: user.tenantId, actorUserId: user.id, actorType: actorTypeFor(user.role), action: "two_factor.backup_codes_regenerated", entityType: "User", entityId: user.id });
@@ -90,10 +94,11 @@ export async function regenerateBackupCodesAction(): Promise<{ backupCodes: stri
 /** Same as resetTwoFactorForUserAction, looked up by email — what the agency settings tool actually has to work with. */
 export async function resetTwoFactorByEmailAction(email: string): Promise<{ ok: true; email: string } | { error: string }> {
   await requireRole("PLATFORM_ADMIN");
+  const t = await getTranslations("twoFactor.errors");
   const normalized = email.trim().toLowerCase();
   const matches = await rawDb.user.findMany({ where: { email: normalized, role: { in: ["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF"] } }, select: { id: true } });
-  if (matches.length === 0) return { error: "No staff or admin account uses that email." };
-  if (matches.length > 1) return { error: "That email is used at more than one clinic — reset it from that clinic's own Team settings instead." };
+  if (matches.length === 0) return { error: t("noAccountForEmail") };
+  if (matches.length > 1) return { error: t("emailUsedAtMultipleClinics") };
   return resetTwoFactorForUserAction(matches[0]!.id);
 }
 
@@ -107,7 +112,7 @@ export async function resetTwoFactorByEmailAction(email: string): Promise<{ ok: 
 export async function resetTwoFactorForUserAction(userId: string): Promise<{ ok: true; email: string } | { error: string }> {
   const admin = await requireRole("PLATFORM_ADMIN");
   const target = await rawDb.user.findUnique({ where: { id: userId }, select: { id: true, email: true, tenantId: true } });
-  if (!target) return { error: "No such account." };
+  if (!target) return { error: (await getTranslations("twoFactor.errors"))("noSuchAccount") };
 
   await disableTwoFactor(target.id);
   await writeAuditLog({
