@@ -11,7 +11,8 @@
     "delete": "Delete",
     "confirm": "Confirm",
     "retry": "Try again",
-    "optional": "optional"
+    "optional": "optional",
+    "search": "Search"
   },
   "auth": {
     "signIn": "Sign in",

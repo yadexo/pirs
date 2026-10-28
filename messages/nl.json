@@ -11,7 +11,8 @@
     "delete": "Verwijderen",
     "confirm": "Bevestigen",
     "retry": "Opnieuw proberen",
-    "optional": "optioneel"
+    "optional": "optioneel",
+    "search": "Zoeken"
   },
   "auth": {
     "signIn": "Inloggen",

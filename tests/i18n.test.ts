@@ -85,6 +85,8 @@ const TRACKED_FILES = [
   "app/set-password/page.tsx",
   "app/set-password/set-password-form.tsx",
   "components/auth/guest-locale-switcher.tsx",
+  "app/account/language/page.tsx",
+  "app/account/language/language-manager.tsx",
   "app/m/[merchantId]/clients/client-account.tsx",
   "app/m/[merchantId]/clients/client-items.tsx",
   "app/m/[merchantId]/clients/client-membership.tsx",
