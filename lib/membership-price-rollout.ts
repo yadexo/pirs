@@ -1,6 +1,7 @@
 import "server-only";
 import { rawDb } from "@/lib/db";
 import { getTenantDb } from "@/lib/tenant-db";
+import { tenantCurrency } from "@/lib/currency";
 import { planPriceChange } from "@/lib/membership-price-change";
 import { MEMBERSHIP_HOLDS_SLOT } from "@/lib/membership-status";
 import { ensureStripePrice, switchSubscriptionPrice } from "@/lib/memberships-billing";
@@ -56,7 +57,7 @@ export async function rolloutPlanPrice(params: {
   ]);
   if (!plan) return { members: 0, appliedNow: 0, deferred: 0, notified: 0, failed: 0 };
 
-  const currency = (await db.tenantBranding.findFirst({ where: {}, select: { currency: true } }))?.currency ?? "EUR";
+  const currency = await tenantCurrency(db);
   const result: RolloutResult = { members: members.length, appliedNow: 0, deferred: 0, notified: 0, failed: 0 };
 
   // One price object for the whole rollout rather than one per member.
@@ -166,8 +167,7 @@ export async function applyDuePriceChanges(now = new Date()): Promise<{ applied:
 
       const subscriptionId = change.customerMembership?.stripeSubscriptionId;
       if (clinic?.stripeAccountId && plan && subscriptionId?.startsWith("sub_")) {
-        const currency =
-          (await rawDb.tenantBranding.findFirst({ where: { tenantId: change.tenantId }, select: { currency: true } }))?.currency ?? "EUR";
+        const currency = await tenantCurrency(getTenantDb(change.tenantId));
         const priceId = await ensureStripePrice(
           { id: clinic.id, stripeAccountId: clinic.stripeAccountId, membershipFeePercent: clinic.membershipFeePercent },
           plan,

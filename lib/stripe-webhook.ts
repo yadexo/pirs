@@ -343,7 +343,9 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
         await createPackagesForOrder(payment.orderId);
         // After the order is settled, and unable to affect it: a failed
         // notification must not make Stripe retry a payment already applied.
-        await notifyOrderPaid(payment.orderId, payment.amountCents);
+        await notifyOrderPaid(payment.orderId, payment.amountCents).catch((err) =>
+          console.error("[stripe-webhook] order-paid notice not sent:", err instanceof Error ? err.message : err),
+        );
       }
       return;
     }

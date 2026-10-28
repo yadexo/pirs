@@ -76,10 +76,12 @@ booking stage needs both.
 
 ## Session packages
 
-The handoff's shop shows single treatments only. The app sells session packages
-(several sessions of a treatment, with expiry, transfer and redemption rules),
-and those need their own card, their own detail state and their own place on the
-client record. Later stage.
+Shipped since this note was written — the shop, My items and the client record
+all have their own session-package states (several sessions of a treatment,
+with expiry, transfer and redemption rules; see the `package_transfers` and
+`package_session_uses` migrations and `tests/integration/session-packages.test.ts`).
+The handoff's shop screens still show single treatments only; reconciling the
+two is a visual gap now, not a missing feature.
 
 ## The portal's sidebar is six items, not the handoff's four
 

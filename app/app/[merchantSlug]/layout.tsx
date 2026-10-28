@@ -36,6 +36,11 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
       apple: [{ url: `${base}/app-icon/180.png${v}`, sizes: "180x180", type: "image/png" }],
     },
     appleWebApp: { capable: true, title: shortAppName(clinic.name), statusBarStyle: "default" },
+    // Next only emits the modern, unprefixed `mobile-web-app-capable` for
+    // appleWebApp.capable. Older iOS/Safari versions only ever honoured the
+    // apple-prefixed one for full-screen "Add to Home Screen" — added
+    // explicitly here so an older iPhone still gets it.
+    other: { "apple-mobile-web-app-capable": "yes" },
     formatDetection: { telephone: false },
   };
 }

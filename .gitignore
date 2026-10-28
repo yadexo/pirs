@@ -45,3 +45,6 @@ next-env.d.ts
 
 # deployment
 .vercel
+
+# this tool's own per-session lock, not part of the app
+.claude/scheduled_tasks.lock

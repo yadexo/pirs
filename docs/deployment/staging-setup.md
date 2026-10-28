@@ -81,7 +81,7 @@ New**, paste the value, tick only **Preview**, save.
 | `STRIPE_PUBLISHABLE_KEY` | same test publishable key | |
 | `STRIPE_WEBHOOK_SECRET` | **new** secret from a webhook endpoint you add in step 4 | must *not* reuse production's — a signing secret is per-endpoint |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | **new** secret from step 4 | same reason |
-| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `WEB_PUSH_PUBLIC_KEY` / `WEB_PUSH_PRIVATE_KEY` | a fresh pair — run `node -e "console.log(require('web-push').generateVAPIDKeys())"` locally | keeps a staging push subscription from ever being deliverable with production's identity |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | a fresh pair — run `node -e "console.log(require('web-push').generateVAPIDKeys())"` locally | keeps a staging push subscription from ever being deliverable with production's identity. `WEB_PUSH_PUBLIC_KEY`/`WEB_PUSH_PRIVATE_KEY` are a separate, unimplemented integration point (see `.env.example`) — don't confuse them with these |
 | `VAPID_SUBJECT` | `mailto:you@example.com` (anything reachable) | |
 | `RESEND_API_KEY` | reuse Production's | one Resend account is fine |
 | `EMAIL_FROM` | something that reads as staging, e.g. `staging@pirs.io` | so a test email is never mistaken for a real one |
