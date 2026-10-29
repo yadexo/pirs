@@ -158,6 +158,23 @@ export function welcomeClinicOwnerEmail(params: {
   return { subject, html: emailLayout({ branding, preheader, bodyHtml: html, locale }), text };
 }
 
+export function platformAdminInviteEmail(params: { branding: EmailBranding; firstName: string; loginUrl: string; locale: AppLocale }): EmailTemplate {
+  const { branding, firstName, loginUrl, locale } = params;
+  const nl = locale === "nl";
+  const intro = nl
+    ? `${greeting(locale, firstName)} je bent uitgenodigd als platformbeheerder bij ${branding.name}.`
+    : `${greeting(locale, firstName)} you've been invited as a platform admin at ${branding.name}.`;
+  const body = nl
+    ? "Stel hieronder je wachtwoord in. De link werkt eenmalig, gedurende 24 uur. Daarna richt je meteen tweestapsverificatie in, verplicht voor dit account."
+    : "Set your password with the link below. It works once, for 24 hours. You'll be asked to set up two-factor authentication right after — required for this account.";
+  const buttonLabel = nl ? "Wachtwoord instellen" : "Set your password";
+  const html = emailParagraph(intro) + emailParagraph(body) + emailButton(buttonLabel, loginUrl, branding.color);
+  const text = [intro, "", body, "", `${buttonLabel}: ${loginUrl}`].join("\n");
+  const subject = nl ? `Uitnodiging als platformbeheerder bij ${branding.name}` : `Invitation to be a platform admin at ${branding.name}`;
+  const preheader = nl ? "Je bent uitgenodigd als platformbeheerder" : "You've been invited as a platform admin";
+  return { subject, html: emailLayout({ branding, preheader, bodyHtml: html, locale }), text };
+}
+
 // ----------------------------------------------------------- memberships
 
 export function membershipPaymentReceivedEmail(params: {

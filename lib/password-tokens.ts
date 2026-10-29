@@ -6,6 +6,8 @@ import { hashPassword } from "@/lib/password";
 /** A reset link is short-lived; an invitation gives the person a few days. */
 export const RESET_TTL_MS = 60 * 60 * 1000;
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/** A platform admin is a higher-privilege account than a clinic invite, so this window is shorter. */
+export const ADMIN_INVITE_TTL_MS = 24 * 60 * 60 * 1000;
 
 export const MIN_PASSWORD_LENGTH = 8;
 
