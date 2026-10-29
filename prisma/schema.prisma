@@ -304,6 +304,11 @@ model User {
   passwordHash       String
   role               UserRole
   status             UserStatus @default(ACTIVE)
+  /// A platform admin's own name. No equivalent for staff/clients — they have
+  /// one via StaffProfile/CustomerProfile, which a platform admin (tenantId
+  /// null) can't use.
+  firstName          String?
+  lastName           String?
   emailVerifiedAt    DateTime?
   lastLoginAt        DateTime?
   /// Sessions created before this moment are refused. Set on password reset
