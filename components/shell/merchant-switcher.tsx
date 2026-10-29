@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ChevronsUpDown, Search } from "lucide-react";
+import { ChevronsUpDown, Plus, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
+import { AddMerchantDrawer } from "@/app/agency/add-merchant";
 
 export interface SwitchableMerchant {
   id: string;
@@ -15,6 +16,7 @@ export function MerchantSwitcher({ current, merchants }: { current: string; merc
   const t = useTranslations("portal");
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
+  const [addOpen, setAddOpen] = React.useState(false);
   const router = useRouter();
   const ref = React.useRef<HTMLDivElement>(null);
 
@@ -81,8 +83,27 @@ export function MerchantSwitcher({ current, merchants }: { current: string; merc
               </li>
             ))}
           </ul>
+          {/* This component is only ever rendered for a platform admin (see
+              requireMerchantContext()'s switchableMerchants), so no extra
+              permission check is needed here — createMerchantAction still
+              checks it server-side regardless. */}
+          <ul className="border-t border-border py-1">
+            <li>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setAddOpen(true);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] font-medium text-primary hover:bg-app"
+              >
+                <Plus className="h-3.5 w-3.5" /> {t("newClinic")}
+              </button>
+            </li>
+          </ul>
         </div>
       )}
+      <AddMerchantDrawer open={addOpen} onClose={() => setAddOpen(false)} />
     </div>
   );
 }

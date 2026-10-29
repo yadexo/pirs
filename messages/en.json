@@ -593,6 +593,7 @@
     "exit": "Exit",
     "searchMerchants": "Search merchants...",
     "noMerchantsFound": "No merchants found",
+    "newClinic": "+ New clinic",
     "home": {
       "goodMorning": "Good morning",
       "goodAfternoon": "Good afternoon",

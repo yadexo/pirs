@@ -14,22 +14,28 @@ const label = "mb-1.5 block text-[12px] font-medium";
 
 export function AddMerchantButton() {
   const [open, setOpen] = React.useState(false);
-  const [state, formAction, pending] = useActionState(createMerchantAction, undefined);
-
-  const created = state && "success" in state ? state : null;
-
   return (
     <>
       <Button onClick={() => setOpen(true)}>
         <Plus className="h-4 w-4" /> Add Merchant
       </Button>
+      <AddMerchantDrawer open={open} onClose={() => setOpen(false)} />
+    </>
+  );
+}
 
-      <Drawer
-        open={open}
-        onClose={() => setOpen(false)}
-        title={created ? "Merchant created" : "Add merchant"}
-        subtitle={created ? undefined : "Creates the sub-account and its first owner login."}
-      >
+export function AddMerchantDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [state, formAction, pending] = useActionState(createMerchantAction, undefined);
+
+  const created = state && "success" in state ? state : null;
+
+  return (
+    <Drawer
+      open={open}
+      onClose={onClose}
+      title={created ? "Merchant created" : "Add merchant"}
+      subtitle={created ? undefined : "Creates the sub-account and its first owner login."}
+    >
         {created ? (
           <div className="space-y-4">
             <p className="text-[13px] text-ink-muted">
@@ -105,7 +111,6 @@ export function AddMerchantButton() {
             </Button>
           </form>
         )}
-      </Drawer>
-    </>
+    </Drawer>
   );
 }
