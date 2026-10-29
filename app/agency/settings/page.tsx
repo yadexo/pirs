@@ -3,6 +3,7 @@ import { rawDb } from "@/lib/db";
 import { requireAgencyContext } from "@/lib/merchant-context";
 import { Panel } from "@/components/ui/primitives";
 import { TwoFactorReset } from "./two-factor-reset";
+import { AdminsSection } from "./admins-section";
 
 /**
  * Every platform-wide setting that used to be scattered across the old admin
@@ -13,7 +14,11 @@ export default async function AgencySettingsPage() {
   const t = await getTranslations("twoFactor.resetByEmail");
 
   const [admins, merchantCount] = await Promise.all([
-    rawDb.user.findMany({ where: { role: "PLATFORM_ADMIN" }, select: { id: true, email: true, lastLoginAt: true } }),
+    rawDb.user.findMany({
+      where: { role: "PLATFORM_ADMIN" },
+      select: { id: true, email: true, firstName: true, lastName: true, status: true, lastLoginAt: true, twoFactor: { select: { confirmedAt: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
     rawDb.tenant.count(),
   ]);
 
@@ -33,18 +38,22 @@ export default async function AgencySettingsPage() {
       </Panel>
 
       <Panel className="p-5">
-        <h2 className="text-[14px] font-medium">Team members</h2>
-        <p className="mt-1 text-[12px] text-ink-muted">Agency administrators with full access to every merchant.</p>
-        <ul className="mt-3 divide-y divide-border">
-          {admins.map((a) => (
-            <li key={a.id} className="flex items-center justify-between py-2 text-[13px]">
-              <span>{a.email}</span>
-              <span className="text-[11px] text-ink-faint">
-                {a.lastLoginAt ? `Last seen ${a.lastLoginAt.toLocaleDateString("en-US", { dateStyle: "medium" })}` : "Never signed in"}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <h2 className="text-[14px] font-medium">Admins</h2>
+        <p className="mt-1 text-[12px] text-ink-muted">Platform administrators with full access to every merchant.</p>
+        <div className="mt-3">
+          <AdminsSection
+            admins={admins.map((a) => ({
+              id: a.id,
+              email: a.email,
+              firstName: a.firstName,
+              lastName: a.lastName,
+              status: a.status,
+              lastLoginAt: a.lastLoginAt ? a.lastLoginAt.toISOString() : null,
+              twoFactorConfirmed: !!a.twoFactor?.confirmedAt,
+            }))}
+            currentUserId={user.id}
+          />
+        </div>
       </Panel>
 
       <Panel className="p-5">
