@@ -12,6 +12,26 @@
  * server log and for anything reading the response without a translator.
  */
 
+/**
+ * Every refusal, and the message key the browser shows for it. Kept here
+ * rather than only in the component so a new code cannot be added without a
+ * sentence for it in both locales — tests/upload-error-messages.test.ts ties
+ * the three together.
+ */
+export const UPLOAD_ERROR_KEYS = {
+  imageTooLarge: "errUploadTooLarge",
+  heicUnsupported: "errUploadHeic",
+  unsupportedType: "errUploadUnsupported",
+  corrupt: "errUploadCorrupt",
+  tooSmall: "errUploadTooSmall",
+  tooComplex: "errUploadTooComplex",
+  rateLimited: "errUploadRateLimited",
+  notAllowed: "errUploadNotAllowed",
+  storageMisconfigured: "errUploadStorage",
+  network: "errUploadNetwork",
+  unknown: "errUploadUnknown",
+} as const satisfies Record<UploadErrorCode, string>;
+
 export type UploadErrorCode =
   /** Bigger than we accept, before or after the browser's own downscale. */
   | "imageTooLarge"

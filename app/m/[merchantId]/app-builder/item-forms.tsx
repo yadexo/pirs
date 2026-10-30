@@ -129,7 +129,7 @@ export function PackageForm({ merchantId, currency, item, options, errors }: Ite
           </div>
         )}
         <TextField label={t("expiryLabel")} name="expiryDays" type="number" min={1} defaultValue={str(item.expiryDays)} errors={errors} hint={t("expiryHint")} />
-        <ImageField label={t("imageLabel")} name="imageUrl" merchantId={merchantId} defaultValue={item.imageUrl as string} errors={errors} />
+        <ImageField label={t("imageLabel")} name="imageUrl" merchantId={merchantId} purpose="package-image" defaultValue={item.imageUrl as string} errors={errors} />
       </FormSection>
       <FormSection title={t("treatmentsTitle")}>
         {options.services.length === 0 ? (
@@ -266,7 +266,7 @@ export function PromotionForm({ merchantId, currency, item, options, errors }: I
           <TextAreaField label={t("descriptionLabel")} name="description" value={description} onChange={(e) => setDescription(e.target.value)} errors={errors} />
           <FieldIssues issues={check.byField.description} />
         </div>
-        <ImageField label={t("imageLabel")} name="imageUrl" merchantId={merchantId} defaultValue={item.imageUrl as string} errors={errors} />
+        <ImageField label={t("imageLabel")} name="imageUrl" merchantId={merchantId} purpose="offer-image" defaultValue={item.imageUrl as string} errors={errors} />
         <TextCheckPanel issues={check.issues} blocking={check.blocking} />
         {/* The drawer's Save reads this: an offer with an open issue can be
             kept as a draft but not published. */}

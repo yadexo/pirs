@@ -297,7 +297,7 @@ export function BrandingSection({ merchantId, data, canEdit }: { merchantId: str
           <FormSection title={t("identityTitle")}>
             <TextField label={t("clinicNameLabel")} name="businessName" value={name} onChange={(e) => setName(e.target.value)} errors={errors} required maxLength={120} />
             <div className="grid gap-4 sm:grid-cols-2">
-              <ImageField label={t("logoLabel")} name="logoUrl" merchantId={merchantId} defaultValue={b?.logoUrl} errors={errors} hint={t("logoHint")} />
+              <ImageField label={t("logoLabel")} name="logoUrl" merchantId={merchantId} purpose="logo" defaultValue={b?.logoUrl} errors={errors} hint={t("logoHint")} />
               <ImageField
                 label={t("appIconLabel")}
                 name="appIconUrl"

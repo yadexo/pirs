@@ -4,6 +4,8 @@ import * as React from "react";
 import { ImagePlus, Loader2, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
+import { ClientImageError, prepareForUpload } from "@/lib/client-image";
+import type { UploadErrorCode } from "@/lib/upload-error";
 
 /**
  * Form building blocks for clinic-portal drawers. Styled on the portal's
@@ -181,6 +183,48 @@ export function CheckboxField({
   );
 }
 
+interface PendingUpload {
+  id: string;
+  name: string;
+  previewUrl: string;
+  phase: "preparing" | "uploading";
+  pct: number;
+}
+
+/**
+ * `fetch` reports no progress for the body it is sending, so a clinic
+ * uploading a photo over a slow connection had a spinner and no way to tell
+ * a stalled upload from a slow one. XHR is the only API that does.
+ */
+function xhrUpload(body: FormData, onProgress: (pct: number) => void): Promise<{ url: string; width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/uploads");
+    xhr.responseType = "json";
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onerror = () => reject(new ClientImageError("network"));
+    xhr.ontimeout = () => reject(new ClientImageError("network"));
+    xhr.onload = () => {
+      const body = (xhr.response ?? {}) as { url?: string; width?: number; height?: number; code?: UploadErrorCode; params?: Record<string, string | number> };
+      if (xhr.status >= 200 && xhr.status < 300 && body.url) {
+        resolve({ url: body.url, width: body.width ?? 0, height: body.height ?? 0 });
+        return;
+      }
+      // A body the platform rejected before our route ran has no JSON in it,
+      // which is how an oversized upload used to read as "Upload failed."
+      reject(new ClientImageError(body.code ?? (xhr.status === 413 ? "imageTooLarge" : "unknown"), body.params));
+    };
+    xhr.send(body);
+  });
+}
+
+function asClientFailure(err: unknown): { code: UploadErrorCode; params?: Record<string, string | number> } {
+  if (err instanceof ClientImageError) return { code: err.code, params: err.params };
+  return { code: "unknown" };
+}
+
 /** Uploads to /api/uploads and keeps the resulting URL in a hidden input. */
 export function ImageField({
   label,
@@ -210,43 +254,101 @@ export function ImageField({
   const t = useTranslations("merchant.form");
   const initial = Array.isArray(defaultValue) ? defaultValue : defaultValue ? [defaultValue] : [];
   const [urls, setUrls] = React.useState<string[]>(initial);
-  const [uploading, setUploading] = React.useState(false);
+  const [pending, setPending] = React.useState<PendingUpload[]>([]);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const error = uploadError ?? errors?.[name];
   const limit = multiple ? max : 1;
+  const uploading = pending.length > 0;
+
+  /**
+   * The server answers with a code rather than a sentence, because an API
+   * route has no reliable request locale. Every arm names its key literally
+   * so tests/i18n-key-coverage.test.ts can see them.
+   */
+  function messageFor(code: UploadErrorCode, params?: Record<string, string | number>): string {
+    switch (code) {
+      case "imageTooLarge":
+        return t("errUploadTooLarge");
+      case "heicUnsupported":
+        return t("errUploadHeic");
+      case "unsupportedType":
+        return t("errUploadUnsupported");
+      case "corrupt":
+        return t("errUploadCorrupt");
+      case "tooSmall":
+        return t("errUploadTooSmall", {
+          width: Number(params?.width ?? 0),
+          height: Number(params?.height ?? 0),
+          minWidth: Number(params?.minWidth ?? 0),
+          minHeight: Number(params?.minHeight ?? 0),
+        });
+      case "tooComplex":
+        return t("errUploadTooComplex");
+      case "rateLimited":
+        return t("errUploadRateLimited");
+      case "notAllowed":
+        return t("errUploadNotAllowed");
+      case "storageMisconfigured":
+        return t("errUploadStorage");
+      case "network":
+        return t("errUploadNetwork");
+      default:
+        return t("errUploadUnknown");
+    }
+  }
+
+  // Previews are object URLs of the processed blob; let them go when the
+  // field does, or the tab holds every image the clinic ever picked.
+  React.useEffect(() => () => pending.forEach((p) => URL.revokeObjectURL(p.previewUrl)), [pending]);
 
   async function upload(files: FileList | null) {
     if (!files?.length) return;
     setUploadError(null);
-    setUploading(true);
-    try {
-      const added: string[] = [];
-      for (const file of Array.from(files).slice(0, limit - (multiple ? urls.length : 0))) {
+
+    const room = limit - (multiple ? urls.length : 0);
+    const picked = Array.from(files).slice(0, Math.max(0, room));
+    const failures: string[] = [];
+
+    for (const file of picked) {
+      const id = `${file.name}-${Date.now()}-${Math.random()}`;
+      let previewUrl = "";
+      try {
+        const prepared = await prepareForUpload(file, purpose);
+        previewUrl = URL.createObjectURL(prepared.blob);
+        setPending((prev) => [...prev, { id, name: file.name, previewUrl, phase: "uploading", pct: 0 }]);
+
         const body = new FormData();
         body.set("merchantId", merchantId);
         if (purpose) body.set("purpose", purpose);
-        body.set("file", file);
-        const res = await fetch("/api/uploads", { method: "POST", body });
-        const json = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-        if (!res.ok || !json.url) throw new Error(json.error ?? t("uploadFailed"));
-        added.push(json.url);
+        body.set("file", new File([prepared.blob], prepared.filename, { type: prepared.blob.type }));
+
+        const result = await xhrUpload(body, (pct) => setPending((prev) => prev.map((p) => (p.id === id ? { ...p, pct } : p))));
+
+        // Each success is kept. The old loop threw on the first failure and
+        // dropped everything already uploaded in that batch with it.
+        setUrls((prev) => {
+          const next = multiple ? [...prev, result.url].slice(0, limit) : [result.url];
+          onChange?.(next);
+          return next;
+        });
+      } catch (e) {
+        const { code, params } = asClientFailure(e);
+        failures.push(`${file.name} — ${messageFor(code, params)}`);
+      } finally {
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        setPending((prev) => prev.filter((p) => p.id !== id));
       }
-      setUrls((prev) => {
-        const next = multiple ? [...prev, ...added].slice(0, limit) : added.slice(0, 1);
-        onChange?.(next);
-        return next;
-      });
-    } catch (e) {
-      setUploadError(e instanceof Error ? e.message : t("uploadFailed"));
-    } finally {
-      setUploading(false);
-      if (inputRef.current) inputRef.current.value = "";
     }
+
+    if (failures.length) {
+      setUploadError(picked.length === 1 ? failures[0]! : t("uploadPartial", { count: failures.length, names: failures.join("; ") }));
+    }
+    if (inputRef.current) inputRef.current.value = "";
   }
 
   return (
-    <Field label={label} name={name} error={error} hint={hint ?? t("uploadHint")}>
+    <Field label={label} name={name} error={error} hint={hint ?? (purpose === "logo" || purpose === "app-icon" ? t("uploadHintTransparent") : t("uploadHint"))}>
       {urls.map((u) => (
         <input key={u} type="hidden" name={name} value={u} />
       ))}
@@ -271,7 +373,21 @@ export function ImageField({
             </button>
           </div>
         ))}
-        {urls.length < limit && (
+        {pending.map((p) => (
+          <div key={p.id} className="relative h-20 w-20 overflow-hidden rounded-[10px] border border-border bg-app">
+            {/* The preview is the processed image, so it appears before the
+                upload finishes rather than after it. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={p.previewUrl} alt="" className="h-full w-full object-cover opacity-60" />
+            <div className="absolute inset-x-0 bottom-0 bg-surface/90 px-1 pb-1 pt-0.5 text-center text-[10px] font-medium tabular-nums">
+              {p.phase === "preparing" ? t("preparing") : t("uploadProgress", { percent: p.pct })}
+            </div>
+            <div className="absolute inset-x-0 bottom-0 h-0.5 bg-border">
+              <div className="h-full bg-primary transition-[width]" style={{ width: `${p.pct}%` }} />
+            </div>
+          </div>
+        ))}
+        {urls.length + pending.length < limit && (
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
@@ -287,7 +403,10 @@ export function ImageField({
         ref={inputRef}
         id={name}
         type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
+        // .heic/.heif are listed so an iPhone photo picked from Files isn't
+        // greyed out. Safari decodes it and lib/client-image.ts converts it;
+        // other browsers get a message saying what to do instead.
+        accept="image/png,image/jpeg,image/webp,image/gif,image/avif,.heic,.heif"
         multiple={multiple}
         className="sr-only"
         onChange={(e) => upload(e.target.files)}
