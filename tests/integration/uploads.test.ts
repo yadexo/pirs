@@ -123,6 +123,17 @@ describe("POST /api/uploads", () => {
     expect(body.code).toBe("rateLimited");
   });
 
+  it("stores the shape the clinic chose, not the default one", async () => {
+    asUser(ownerId);
+    // The field sends the chosen aspect alongside the file; without it the
+    // server re-crops a square crop back to 4:3 and the choice is lost.
+    const square = await post({ merchantId: tenantId, purpose: "product-image", aspect: "1" }, { buffer: await photo(2000, 2000), name: "a.jpg", type: "image/jpeg" });
+    expect(square.body).toMatchObject({ width: 1200, height: 1200 });
+
+    const landscape = await post({ merchantId: tenantId, purpose: "product-image", aspect: String(4 / 3) }, { buffer: await photo(2000, 2000), name: "b.jpg", type: "image/jpeg" });
+    expect(landscape.body).toMatchObject({ width: 1200, height: 900 });
+  });
+
   it("ignores a crop the clinic's own form never offered", async () => {
     asUser(ownerId);
     // 3:1 is not one of product-image's aspects; the server picks its default

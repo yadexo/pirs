@@ -27,6 +27,12 @@ describe("every upload failure has something to say", () => {
     }
   });
 
+  it("sends the clinic's chosen crop shape with the file", () => {
+    // Easy to leave out, and silently wrong when it is: the server falls back
+    // to the purpose's default shape and the choice is lost.
+    expect(field.includes('body.set("aspect"')).toBe(true);
+  });
+
   it("shows every one of them from the upload field", () => {
     for (const code of codes) {
       expect(`${code}: ${field.includes(`t("${UPLOAD_ERROR_KEYS[code]}"`)}`).toBe(`${code}: true`);

@@ -344,6 +344,9 @@ export function ImageField({
         const body = new FormData();
         body.set("merchantId", merchantId);
         if (purpose) body.set("purpose", purpose);
+        // Without this the server falls back to the purpose's default shape
+        // and crops the clinic's square crop to 4:3 all over again.
+        if (choice) body.set("aspect", String(choice.aspect));
         body.set("file", new File([prepared.blob], prepared.filename, { type: prepared.blob.type }));
 
         const result = await xhrUpload(body, (pct) => setPending((prev) => prev.map((p) => (p.id === id ? { ...p, pct } : p))));
