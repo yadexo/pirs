@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import sharp from "sharp";
-import { getStorageProvider } from "@/lib/providers/storage";
+import { getStorageProvider, sniffImage, MAX_FILE_BYTES } from "@/lib/providers/storage";
+import { processImage } from "@/lib/image-pipeline";
+import { specFor } from "@/lib/image-spec";
 import { rateLimit } from "@/lib/rate-limit";
+import { UploadError, asUploadError } from "@/lib/upload-error";
 import { ActionError, requireMerchantAction } from "@/lib/merchant-action";
 
 /**
@@ -9,94 +11,86 @@ import { ActionError, requireMerchantAction } from "@/lib/merchant-action";
  * an agency admin working inside a clinic can upload too. Uploading on its own
  * changes nothing a client sees — the form that uses the URL is authorised
  * separately — so any clinic user may upload, rate limited per user.
+ *
+ * The browser has already cropped and downscaled whatever was picked
+ * (lib/client-image.ts), both to stay under the platform's request-body
+ * ceiling and to convert an iPhone's HEIC. None of that is trusted here: the
+ * bytes are sniffed, decoded and resized again, and the dimensions reported
+ * back are the ones sharp produced, never the ones the browser claimed.
  */
+
+export const runtime = "nodejs"; // sharp is a native module, not an edge one
+export const dynamic = "force-dynamic";
+// A 50 megapixel source resized on a cold function is slow but not minutes slow.
+export const maxDuration = 30;
+
+/** Headroom over the storage limit for multipart overhead, checked before buffering. */
+const MAX_REQUEST_FILE_BYTES = MAX_FILE_BYTES + 1024 * 1024;
+
 export async function POST(req: NextRequest) {
-  const formData = await req.formData();
-  const merchantId = formData.get("merchantId");
-  if (typeof merchantId !== "string" || !merchantId) {
-    return NextResponse.json({ error: "Missing clinic." }, { status: 400 });
-  }
-
-  let userId: string;
   try {
-    ({ user: { id: userId } } = await requireMerchantAction(merchantId, "member"));
-  } catch (err) {
-    const message = err instanceof ActionError ? err.message : "Not allowed.";
-    return NextResponse.json({ error: message }, { status: 403 });
-  }
+    const formData = await req.formData();
+    const merchantId = formData.get("merchantId");
+    if (typeof merchantId !== "string" || !merchantId) {
+      throw new UploadError("notAllowed", "Missing clinic.");
+    }
 
-  const { ok } = await rateLimit(`upload:${userId}`, 30, 60 * 1000);
-  if (!ok) return NextResponse.json({ error: "Too many uploads. Wait a minute and try again." }, { status: 429 });
+    let userId: string;
+    let db: Awaited<ReturnType<typeof requireMerchantAction>>["db"];
+    try {
+      ({ user: { id: userId }, db } = await requireMerchantAction(merchantId, "member"));
+    } catch (err) {
+      throw new UploadError("notAllowed", err instanceof ActionError ? err.message : "Not allowed.");
+    }
 
-  const file = formData.get("file");
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "No file provided." }, { status: 400 });
-  }
+    const { ok } = await rateLimit(`upload:${userId}`, 30, 60 * 1000);
+    if (!ok) throw new UploadError("rateLimited", "Too many uploads. Wait a minute and try again.");
 
-  const buffer = Buffer.from(await file.arrayBuffer());
+    const file = formData.get("file");
+    if (!(file instanceof File)) throw new UploadError("corrupt", "No file provided.");
+    // Checked before reading the body into memory, so an oversized upload
+    // costs us the headers rather than the whole file.
+    if (file.size > MAX_REQUEST_FILE_BYTES) {
+      throw new UploadError("imageTooLarge", `That image is ${(file.size / 1024 / 1024).toFixed(1)}MB. The limit is ${MAX_FILE_BYTES / 1024 / 1024}MB.`);
+    }
 
-  // An app icon becomes the home-screen icon of the clinic's app, which iOS
-  // renders up to 180pt at 3x. It has to be square and sharp at that size.
-  const purpose = String(formData.get("purpose") ?? "");
-  if (purpose === "app-icon") {
-    const problem = await appIconProblem(buffer);
-    if (problem) return NextResponse.json({ error: problem }, { status: 400 });
-  }
-  const limit = MAX_DIMENSIONS[purpose];
-  if (limit) {
-    const problem = await tooLarge(buffer, limit);
-    if (problem) return NextResponse.json({ error: problem }, { status: 400 });
-  }
+    const buffer = Buffer.from(await file.arrayBuffer());
 
-  try {
+    // What the bytes are, not what the browser said they are.
+    const sniffed = sniffImage(buffer);
+    if (!sniffed) throw new UploadError("unsupportedType", "Unsupported file type. Upload a PNG, JPEG, WebP, GIF or AVIF image.");
+    if (!sniffed.accepted) {
+      throw new UploadError("heicUnsupported", "iPhone HEIC photos can't be converted here. Open this page on your iPhone, or export the photo as JPEG and try again.");
+    }
+
+    const purpose = String(formData.get("purpose") ?? "") || null;
+    const spec = specFor(purpose);
+
+    // The crop the clinic chose, accepted only if it is one this kind of
+    // image actually offers — the output size is ours to decide, not the
+    // browser's to ask for.
+    const requested = Number(formData.get("aspect"));
+    const aspect = spec.aspects.find((a) => Math.abs(a - requested) < 0.01);
+
+    const brandColor =
+      purpose === "app-icon" ? (await db.tenantBranding.findFirst({ select: { primaryColor: true } }))?.primaryColor ?? null : null;
+
+    const processed = await processImage(buffer, { purpose, aspect, brandColor });
+
     const stored = await getStorageProvider().upload({
-      buffer,
+      buffer: processed.buffer,
       filename: file.name,
-      mimeType: file.type,
+      mimeType: processed.mime,
     });
-    return NextResponse.json({ url: stored.url });
+
+    return NextResponse.json({ url: stored.url, width: processed.width, height: processed.height });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Upload failed.";
-    return NextResponse.json({ error: message }, { status: 400 });
-  }
-}
-
-/**
- * Size limits per kind of image, so a clinic’s phone photo does not become a
- * 12-megapixel download for every client opening a product page.
- */
-const MAX_DIMENSIONS: Record<string, { width: number; height: number; label: string }> = {
-  "product-image": { width: 800, height: 800, label: "Product images" },
-  "client-result": { width: 1920, height: 1080, label: "Before and after photos" },
-};
-
-async function tooLarge(buffer: Buffer, limit: { width: number; height: number; label: string }): Promise<string | null> {
-  try {
-    const { width, height } = await sharp(buffer).metadata();
-    if (!width || !height) return "That file isn’t an image we can read.";
-    if (width > limit.width || height > limit.height) {
-      return `${limit.label} can be at most ${limit.width}×${limit.height} pixels. This one is ${width}×${height} — resize it and try again.`;
+    const error = asUploadError(err);
+    // Our own misconfiguration is worth a log line; a clinic picking the
+    // wrong file is not.
+    if (error.code === "storageMisconfigured" || error.code === "unknown") {
+      console.error("[uploads]", error.code, error.message);
     }
-    return null;
-  } catch {
-    return "That file isn’t an image we can read.";
-  }
-}
-
-const MIN_APP_ICON_PX = 512;
-
-async function appIconProblem(buffer: Buffer): Promise<string | null> {
-  try {
-    const { width, height } = await sharp(buffer).metadata();
-    if (!width || !height) return "That file isn't an image we can read.";
-    // Square isn't required any more: a non-square upload is centred on the
-    // brand colour instead of cropped (lib/app-icon.ts). Both sides still
-    // need enough resolution to read sharply at the 180pt iOS renders it at.
-    if (width < MIN_APP_ICON_PX || height < MIN_APP_ICON_PX) {
-      return `App icons must be at least ${MIN_APP_ICON_PX}×${MIN_APP_ICON_PX} pixels (1024×1024 square is best). This one is ${width}×${height}.`;
-    }
-    return null;
-  } catch {
-    return "That file isn't an image we can read.";
+    return NextResponse.json({ code: error.code, error: error.message, params: error.params }, { status: error.status });
   }
 }
