@@ -3,6 +3,8 @@ import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { nanoid } from "nanoid";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { UploadError } from "@/lib/upload-error";
+import { isRealProduction } from "@/lib/deploy-env";
 
 export interface StoredFile {
   url: string;
@@ -48,7 +50,14 @@ export function validateUpload(file: { buffer: Buffer; mimeType?: string }): { m
 }
 
 class LocalStorageProvider implements StorageProvider {
+  constructor(private readonly env: NodeJS.ProcessEnv = process.env) {}
+
   async upload(file: { buffer: Buffer; filename: string; mimeType: string }): Promise<StoredFile> {
+    // Second line of defence behind getStorageProvider: writing to the
+    // deployment's own filesystem is not storage on a serverless host, it is
+    // an EROFS a moment later (or, worse, a file that vanishes on the next
+    // deploy and takes every clinic's logo with it).
+    assertLocalDiskIsWritable(this.env);
     const { ext } = validateUpload(file);
     const safeName = `${nanoid(16)}${ext}`;
     const dir = path.join(process.cwd(), "public", "uploads");
@@ -74,9 +83,15 @@ export class S3StorageProvider implements StorageProvider {
   private publicUrl: string;
 
   constructor(env: NodeJS.ProcessEnv = process.env) {
-    const missing = ["S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_PUBLIC_URL"].filter((k) => !env[k]);
+    const missing = ["S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_PUBLIC_URL"].filter((k) => !env[k]?.trim());
     if (missing.length) {
-      throw new Error(`S3 storage is selected but not configured. Missing: ${missing.join(", ")}.`);
+      throw new UploadError("storageMisconfigured", `S3 storage is selected but not configured. Missing: ${missing.join(", ")}.`);
+    }
+    // "auto" is R2's region and is not a region AWS knows. Against real S3 it
+    // fails as "the authorization header is malformed", which reads like a
+    // credentials problem and sends people looking in the wrong place.
+    if (!env.S3_ENDPOINT?.trim() && (env.S3_REGION ?? "").trim().toLowerCase() === "auto") {
+      console.warn('[storage] S3_REGION is "auto" with no S3_ENDPOINT. That pairing is for Cloudflare R2; AWS S3 needs a real region such as eu-central-1.');
     }
     this.bucket = env.S3_BUCKET!;
     this.publicUrl = env.S3_PUBLIC_URL!.replace(/\/+$/, "");
@@ -106,6 +121,49 @@ export class S3StorageProvider implements StorageProvider {
   }
 }
 
-export function getStorageProvider(): StorageProvider {
-  return process.env.STORAGE_PROVIDER === "s3" ? new S3StorageProvider() : new LocalStorageProvider();
+/**
+ * Whether this host can be written to at all. Vercel's filesystem is read-only
+ * apart from /tmp, which does not survive the request — so "local" storage
+ * there is not a fallback, it is a silent data-loss bug.
+ */
+function localDiskIsWritable(env: NodeJS.ProcessEnv = process.env): boolean {
+  return !env.VERCEL && !isRealProduction(env);
+}
+
+function assertLocalDiskIsWritable(env: NodeJS.ProcessEnv = process.env): void {
+  if (localDiskIsWritable(env)) return;
+  throw new UploadError(
+    "storageMisconfigured",
+    'Uploads are set to local disk, which this host cannot write to. Set STORAGE_PROVIDER="s3" (with S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY and S3_PUBLIC_URL) for this deployment.',
+  );
+}
+
+/**
+ * Which storage this deployment uses — and a loud failure when that question
+ * has no good answer.
+ *
+ * This used to be `=== "s3" ? S3 : Local`, so every other value — unset, a
+ * capital "S3", a space pasted into a dashboard field, a variable scoped to
+ * the wrong environment — quietly became "write to the local disk", which on
+ * Vercel is a read-only filesystem. Every clinic's upload failed with an
+ * EROFS reported as if the clinic had sent a bad file. Misconfiguration now
+ * says so, in the log and to the person uploading.
+ *
+ * Only whitespace is forgiven. A value that is nearly right is reported
+ * rather than guessed at, because guessing is what hid this for months.
+ */
+export function getStorageProvider(env: NodeJS.ProcessEnv = process.env): StorageProvider {
+  const configured = (env.STORAGE_PROVIDER ?? "").trim();
+
+  if (configured === "s3") return new S3StorageProvider(env);
+
+  if (configured !== "" && configured !== "local") {
+    throw new UploadError(
+      "storageMisconfigured",
+      `STORAGE_PROVIDER is "${configured}", which is not a storage provider. Use "s3" (lowercase) for S3-compatible storage, or "local" for development.`,
+    );
+  }
+
+  assertLocalDiskIsWritable(env);
+  return new LocalStorageProvider(env);
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { validateUpload } from "@/lib/providers/storage";
+import { validateUpload, getStorageProvider, S3StorageProvider } from "@/lib/providers/storage";
+import { UploadError } from "@/lib/upload-error";
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16]);
@@ -32,5 +33,61 @@ describe("upload validation", () => {
     expect(() => validateUpload({ buffer: Buffer.alloc(0) })).toThrow(/empty/);
     const huge = Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]);
     expect(() => validateUpload({ buffer: huge })).toThrow(/5MB/);
+  });
+});
+
+/**
+ * The bug this guards: STORAGE_PROVIDER used to be compared with === "s3" and
+ * anything else silently meant "write to local disk", which on Vercel is a
+ * read-only filesystem. Every clinic's upload failed with an EROFS reported as
+ * if they had sent a bad file. A value that isn't a provider must say so.
+ */
+describe("choosing a storage provider", () => {
+  const s3Env = {
+    STORAGE_PROVIDER: "s3",
+    S3_BUCKET: "b",
+    S3_ACCESS_KEY_ID: "k",
+    S3_SECRET_ACCESS_KEY: "s",
+    S3_PUBLIC_URL: "https://cdn.example.com",
+  } as unknown as NodeJS.ProcessEnv;
+
+  it("uses S3 when it is configured", () => {
+    expect(getStorageProvider(s3Env)).toBeInstanceOf(S3StorageProvider);
+  });
+
+  it("names the S3 settings that are missing instead of failing later", () => {
+    const partial = { ...s3Env, S3_PUBLIC_URL: "" } as NodeJS.ProcessEnv;
+    expect(() => getStorageProvider(partial)).toThrow(/Missing: S3_PUBLIC_URL/);
+    try {
+      getStorageProvider(partial);
+    } catch (err) {
+      expect((err as UploadError).code).toBe("storageMisconfigured");
+    }
+  });
+
+  it("refuses a value that is not a provider, rather than guessing", () => {
+    for (const value of ["S3", "disk", "aws", "s3 "]) {
+      const env = { STORAGE_PROVIDER: value } as unknown as NodeJS.ProcessEnv;
+      // "s3 " is only whitespace away and is forgiven; the rest are reported.
+      if (value.trim() === "s3") continue;
+      expect(() => getStorageProvider(env)).toThrow(/not a storage provider/);
+    }
+    expect(getStorageProvider({ STORAGE_PROVIDER: " s3 ", ...s3Env } as unknown as NodeJS.ProcessEnv)).toBeInstanceOf(S3StorageProvider);
+  });
+
+  it("refuses local disk on a host that cannot be written to", () => {
+    for (const env of [
+      { STORAGE_PROVIDER: "local", VERCEL: "1" },
+      { VERCEL: "1" },
+      { STORAGE_PROVIDER: "local", VERCEL_ENV: "production" },
+      { APP_ENV: "production" },
+    ] as unknown as NodeJS.ProcessEnv[]) {
+      expect(() => getStorageProvider(env)).toThrow(/cannot write to/);
+    }
+  });
+
+  it("still uses local disk in development", () => {
+    expect(getStorageProvider({ STORAGE_PROVIDER: "local" } as unknown as NodeJS.ProcessEnv)).toBeTruthy();
+    expect(getStorageProvider({} as NodeJS.ProcessEnv)).toBeTruthy();
   });
 });
