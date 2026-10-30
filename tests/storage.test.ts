@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateUpload, getStorageProvider, S3StorageProvider } from "@/lib/providers/storage";
+import { validateUpload, sniffImage, getStorageProvider, S3StorageProvider, MAX_FILE_BYTES } from "@/lib/providers/storage";
 import { UploadError } from "@/lib/upload-error";
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
@@ -31,8 +31,31 @@ describe("upload validation", () => {
 
   it("rejects empty and oversized files", () => {
     expect(() => validateUpload({ buffer: Buffer.alloc(0) })).toThrow(/empty/);
-    const huge = Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]);
-    expect(() => validateUpload({ buffer: huge })).toThrow(/5MB/);
+    const huge = Buffer.concat([PNG, Buffer.alloc(MAX_FILE_BYTES)]);
+    expect(() => validateUpload({ buffer: huge })).toThrow(/15MB/);
+    // A phone photo that would once have been refused outright is now fine:
+    // the browser downscales before uploading, and the server resizes again.
+    expect(() => validateUpload({ buffer: Buffer.concat([PNG, Buffer.alloc(6 * 1024 * 1024)]) })).not.toThrow();
+  });
+
+  it("recognises AVIF, and names HEIC rather than calling it unsupported", () => {
+    const iso = (brand: string) => Buffer.concat([Buffer.alloc(4), Buffer.from("ftyp"), Buffer.from(brand), Buffer.alloc(8)]);
+
+    expect(sniffImage(iso("avif"))).toMatchObject({ kind: "avif", accepted: true });
+    expect(validateUpload({ buffer: iso("avif") })).toEqual({ mime: "image/avif", ext: ".avif" });
+
+    for (const brand of ["heic", "heix", "hevc", "mif1"]) {
+      expect(sniffImage(iso(brand))).toMatchObject({ kind: "heic", accepted: false });
+      // The deployed sharp has libheif for AVIF only, so this cannot be
+      // decoded server-side — the message has to tell the clinic what to do.
+      try {
+        validateUpload({ buffer: iso(brand) });
+        throw new Error(`expected ${brand} to be refused`);
+      } catch (err) {
+        expect((err as UploadError).code).toBe("heicUnsupported");
+        expect((err as UploadError).message).toMatch(/iPhone/);
+      }
+    }
   });
 });
 

@@ -15,37 +15,75 @@ export interface StorageProvider {
   upload(file: { buffer: Buffer; filename: string; mimeType: string }): Promise<StoredFile>;
 }
 
-const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5MB
+export const MAX_FILE_BYTES = 15 * 1024 * 1024; // 15MB
+
+/** An ISO base media container ("....ftyp<brand>"), which is how HEIC and AVIF both arrive. */
+function isoBrand(b: Buffer): string | null {
+  return b.subarray(4, 8).toString("ascii") === "ftyp" ? b.subarray(8, 12).toString("ascii").toLowerCase() : null;
+}
 
 /**
- * Raster image types we accept, identified by their leading bytes.
+ * Raster image types, identified by their leading bytes.
  *
  * SVG is deliberately absent: it is XML that can carry <script>, and uploads
  * are served from our own origin, so an SVG "logo" would be stored XSS against
  * every clinic user and client who loads it.
+ *
+ * HEIC is present but not `accepted`. The sharp build we deploy has libheif
+ * compiled for AVIF only — no HEVC decoder — so an iPhone's default photo
+ * cannot be decoded here. Recognising it anyway is what lets the browser say
+ * "convert this on your iPhone" instead of the useless "unsupported file
+ * type" a clinic used to get. The browser converts HEIC before upload
+ * (lib/client-image.ts), so this is the last-resort message, not the path.
  */
-const SIGNATURES: { mime: string; ext: string; matches: (b: Buffer) => boolean }[] = [
-  { mime: "image/png", ext: ".png", matches: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
-  { mime: "image/jpeg", ext: ".jpg", matches: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
-  { mime: "image/gif", ext: ".gif", matches: (b) => ["GIF87a", "GIF89a"].includes(b.subarray(0, 6).toString("ascii")) },
+const SIGNATURES: { kind: string; mime: string; ext: string; accepted: boolean; matches: (b: Buffer) => boolean }[] = [
+  { kind: "png", mime: "image/png", ext: ".png", accepted: true, matches: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
+  { kind: "jpeg", mime: "image/jpeg", ext: ".jpg", accepted: true, matches: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  { kind: "gif", mime: "image/gif", ext: ".gif", accepted: true, matches: (b) => ["GIF87a", "GIF89a"].includes(b.subarray(0, 6).toString("ascii")) },
   {
+    kind: "webp",
     mime: "image/webp",
     ext: ".webp",
+    accepted: true,
     matches: (b) => b.subarray(0, 4).toString("ascii") === "RIFF" && b.subarray(8, 12).toString("ascii") === "WEBP",
+  },
+  { kind: "avif", mime: "image/avif", ext: ".avif", accepted: true, matches: (b) => ["avif", "avis"].includes(isoBrand(b) ?? "") },
+  {
+    kind: "heic",
+    mime: "image/heic",
+    ext: ".heic",
+    accepted: false,
+    matches: (b) => ["heic", "heix", "hevc", "hevx", "mif1", "msf1"].includes(isoBrand(b) ?? ""),
   },
 ];
 
+export interface SniffedImage {
+  kind: string;
+  mime: string;
+  ext: string;
+  /** False for a type we can name but cannot decode. */
+  accepted: boolean;
+}
+
 /**
- * Checks size, then decides the type from the file's own bytes. The browser's
- * declared MIME type and the filename's extension are both attacker-chosen,
- * so neither is trusted: the stored extension and Content-Type come from what
- * the bytes actually are.
+ * What the bytes actually are. The browser's declared MIME type and the
+ * filename's extension are both attacker-chosen, so neither is consulted:
+ * the stored extension and Content-Type come from the file itself.
  */
+export function sniffImage(buffer: Buffer): SniffedImage | null {
+  const found = SIGNATURES.find((s) => s.matches(buffer));
+  return found ? { kind: found.kind, mime: found.mime, ext: found.ext, accepted: found.accepted } : null;
+}
+
+/** Checks size, then type, refusing with a code the browser can translate. */
 export function validateUpload(file: { buffer: Buffer; mimeType?: string }): { mime: string; ext: string } {
-  if (file.buffer.byteLength === 0) throw new Error("The file is empty");
-  if (file.buffer.byteLength > MAX_FILE_BYTES) throw new Error("File exceeds the 5MB upload limit");
-  const detected = SIGNATURES.find((s) => s.matches(file.buffer));
-  if (!detected) throw new Error("Unsupported file type. Upload a PNG, JPEG, WebP or GIF image.");
+  if (file.buffer.byteLength === 0) throw new UploadError("corrupt", "The file is empty");
+  if (file.buffer.byteLength > MAX_FILE_BYTES) throw new UploadError("imageTooLarge", `File exceeds the ${MAX_FILE_BYTES / 1024 / 1024}MB upload limit`);
+  const detected = sniffImage(file.buffer);
+  if (!detected) throw new UploadError("unsupportedType", "Unsupported file type. Upload a PNG, JPEG, WebP, GIF or AVIF image.");
+  if (!detected.accepted) {
+    throw new UploadError("heicUnsupported", "iPhone HEIC photos can't be converted here. Open this page on your iPhone, or export the photo as JPEG and try again.");
+  }
   return { mime: detected.mime, ext: detected.ext };
 }
 

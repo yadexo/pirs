@@ -55,6 +55,28 @@ export async function loadIconSource(url: string | null | undefined, env: NodeJS
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
+/**
+ * How an uploaded image is fitted onto a square icon tile.
+ *
+ * A square upload fills the tile edge to edge, on the white backing
+ * transparency has always flattened to. A non-square one (a wordmark, a logo
+ * on a wide lockup) would lose its edges to that same crop, so it is centred
+ * on the brand colour instead — never cropped into something the clinic
+ * didn't upload.
+ *
+ * Shared with lib/image-pipeline.ts, which bakes this in at upload time, so
+ * the stored icon and the sizes served from it agree about the canvas.
+ */
+export function iconCanvas(
+  width: number | undefined,
+  height: number | undefined,
+  color: string | null,
+): { fit: "cover" | "contain"; background: string } {
+  const brand = color && HEX.test(color) ? color : "#0b0d12";
+  const square = !!width && !!height && Math.abs(width - height) / Math.max(width, height) < 0.02;
+  return square ? { fit: "cover", background: "#ffffff" } : { fit: "contain", background: brand };
+}
+
 function monogram(name: string): string {
   const letters = name
     .split(/\s+/)
@@ -79,15 +101,8 @@ export async function renderAppIcon(
 
   if (source) {
     try {
-      // A square upload fills the tile edge to edge, same as always, on the
-      // same white backing transparency has always flattened to. A non-square
-      // one (a wordmark, a logo on a wide lockup) would lose its edges to
-      // that same crop, so it's centred on the brand colour instead — never
-      // cropped into something the clinic didn't upload.
       const { width, height } = await sharp(source).metadata();
-      const square = !!width && !!height && Math.abs(width - height) / Math.max(width, height) < 0.02;
-      const fit = square ? ("cover" as const) : ("contain" as const);
-      const canvas = square ? "#ffffff" : background;
+      const { fit, background: canvas } = iconCanvas(width, height, color);
 
       if (!maskable) {
         // iOS rounds the corners itself and shows transparency as black.
