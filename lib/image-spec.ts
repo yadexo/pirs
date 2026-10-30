@@ -26,8 +26,14 @@ export interface ImageSpec {
    * work with rather than upscaling what the browser threw away.
    */
   clientMaxEdge: number;
-  /** Aspect ratios (width/height) the clinic may crop to; the first is the default. Empty means no crop. */
+  /** Aspect ratios (width/height) this kind of image comes in; the first is the default. */
   aspects: number[];
+  /**
+   * Whether the clinic is asked to choose what to keep. A photograph is
+   * cropped; an app icon or a logo is fitted whole onto its canvas, because
+   * cropping a wordmark to a square cuts the name in half.
+   */
+  crop: boolean;
   /** A fixed output width when cropped to an aspect, or a cap on the longest edge. */
   output: { width: number } | { maxEdge: number };
   /** "alphaAware" keeps PNG when the image has transparency, and uses WebP when it doesn't. */
@@ -43,15 +49,15 @@ const SPECS: Record<ImagePurpose, ImageSpec> = {
    * 1024 square with the brand canvas already painted in, so the sizes served
    * from /app-icon/<n>.png are a plain downscale of it.
    */
-  "app-icon": { label: "The app icon", clientMaxEdge: 2048, aspects: [1], output: { width: 1024 }, format: "png", quality: 100, min: { width: 200, height: 200 } },
+  "app-icon": { label: "The app icon", clientMaxEdge: 2048, aspects: [1], crop: false, output: { width: 1024 }, format: "png", quality: 100, min: { width: 200, height: 200 } },
   /** Keeps its proportions and its transparency — a logo on a coloured header must not arrive with a white box around it. */
-  logo: { label: "The logo", clientMaxEdge: 2048, aspects: [], output: { maxEdge: 1024 }, format: "alphaAware", quality: 85, min: { width: 64, height: 64 } },
-  "product-image": { label: "Product images", clientMaxEdge: 2400, aspects: [4 / 3, 1], output: { width: 1200 }, format: "webp", quality: 82, min: { width: 300, height: 300 } },
+  logo: { label: "The logo", clientMaxEdge: 2048, aspects: [], crop: false, output: { maxEdge: 1024 }, format: "alphaAware", quality: 85, min: { width: 64, height: 64 } },
+  "product-image": { label: "Product images", clientMaxEdge: 2400, aspects: [4 / 3, 1], crop: true, output: { width: 1200 }, format: "webp", quality: 82, min: { width: 300, height: 300 } },
   /** Before and after photos: never cropped, because the framing is the point of the comparison. */
-  "client-result": { label: "Before and after photos", clientMaxEdge: 2400, aspects: [], output: { maxEdge: 1600 }, format: "webp", quality: 82, min: { width: 300, height: 300 } },
-  "cover-image": { label: "The cover photo", clientMaxEdge: 2400, aspects: [16 / 9], output: { width: 1600 }, format: "webp", quality: 82, min: { width: 600, height: 338 } },
-  "offer-image": { label: "Offer images", clientMaxEdge: 2400, aspects: [4 / 3], output: { width: 1200 }, format: "webp", quality: 82, min: { width: 300, height: 300 } },
-  "package-image": { label: "Package images", clientMaxEdge: 2400, aspects: [4 / 3], output: { width: 1200 }, format: "webp", quality: 82, min: { width: 300, height: 300 } },
+  "client-result": { label: "Before and after photos", clientMaxEdge: 2400, aspects: [], crop: false, output: { maxEdge: 1600 }, format: "webp", quality: 82, min: { width: 300, height: 300 } },
+  "cover-image": { label: "The cover photo", clientMaxEdge: 2400, aspects: [16 / 9], crop: true, output: { width: 1600 }, format: "webp", quality: 82, min: { width: 600, height: 338 } },
+  "offer-image": { label: "Offer images", clientMaxEdge: 2400, aspects: [4 / 3], crop: true, output: { width: 1200 }, format: "webp", quality: 82, min: { width: 300, height: 300 } },
+  "package-image": { label: "Package images", clientMaxEdge: 2400, aspects: [4 / 3], crop: true, output: { width: 1200 }, format: "webp", quality: 82, min: { width: 300, height: 300 } },
 };
 
 /**
@@ -63,6 +69,7 @@ const DEFAULT_SPEC: ImageSpec = {
   label: "Images",
   clientMaxEdge: 2000,
   aspects: [],
+  crop: false,
   output: { maxEdge: 1600 },
   format: "webp",
   quality: 82,

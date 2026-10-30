@@ -199,7 +199,10 @@ export async function prepareForUpload(file: File, purpose?: string | null, opti
     if (decoded.width * decoded.height > MAX_SOURCE_PIXELS) throw new ClientImageError("tooComplex");
     if (!decoded.width || !decoded.height) throw new ClientImageError("corrupt");
 
-    const aspect = options.aspect ?? spec.aspects[0];
+    // Only a photograph is cropped. An app icon or a logo keeps all of
+    // itself and is fitted onto its canvas server-side — centre-cropping a
+    // wordmark to a square would cut the clinic's name in half.
+    const aspect = spec.crop ? (options.aspect ?? spec.aspects[0]) : undefined;
     const crop = options.crop ?? defaultCrop(decoded.width, decoded.height, aspect);
 
     // Never upscale here: the server has the spec and can do it once, from

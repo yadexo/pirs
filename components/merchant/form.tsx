@@ -5,6 +5,8 @@ import { ImagePlus, Loader2, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { ClientImageError, prepareForUpload } from "@/lib/client-image";
+import { specFor } from "@/lib/image-spec";
+import { ImageCrop, type CropChoice } from "@/components/merchant/image-crop";
 import type { UploadErrorCode } from "@/lib/upload-error";
 
 /**
@@ -257,9 +259,12 @@ export function ImageField({
   const [pending, setPending] = React.useState<PendingUpload[]>([]);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const [cropFile, setCropFile] = React.useState<File | null>(null);
+  const cropResolver = React.useRef<((choice: CropChoice | null) => void) | null>(null);
   const error = uploadError ?? errors?.[name];
   const limit = multiple ? max : 1;
   const uploading = pending.length > 0;
+  const spec = specFor(purpose);
 
   /**
    * The server answers with a code rather than a sentence, because an API
@@ -302,6 +307,20 @@ export function ImageField({
   // field does, or the tab holds every image the clinic ever picked.
   React.useEffect(() => () => pending.forEach((p) => URL.revokeObjectURL(p.previewUrl)), [pending]);
 
+  /** Opens the cropper and waits for the clinic to choose, one file at a time. */
+  function requestCrop(file: File): Promise<CropChoice | null> {
+    return new Promise((resolve) => {
+      cropResolver.current = resolve;
+      setCropFile(file);
+    });
+  }
+
+  function finishCrop(choice: CropChoice | null) {
+    cropResolver.current?.(choice);
+    cropResolver.current = null;
+    setCropFile(null);
+  }
+
   async function upload(files: FileList | null) {
     if (!files?.length) return;
     setUploadError(null);
@@ -314,7 +333,11 @@ export function ImageField({
       const id = `${file.name}-${Date.now()}-${Math.random()}`;
       let previewUrl = "";
       try {
-        const prepared = await prepareForUpload(file, purpose);
+        // Photographs are cropped by the clinic; an icon or a logo is fitted
+        // whole, so there is nothing to choose.
+        const choice = spec.crop ? await requestCrop(file) : null;
+        if (spec.crop && !choice) continue; // backed out of this one
+        const prepared = await prepareForUpload(file, purpose, choice ? { crop: choice.crop, aspect: choice.aspect } : {});
         previewUrl = URL.createObjectURL(prepared.blob);
         setPending((prev) => [...prev, { id, name: file.name, previewUrl, phase: "uploading", pct: 0 }]);
 
@@ -411,6 +434,7 @@ export function ImageField({
         className="sr-only"
         onChange={(e) => upload(e.target.files)}
       />
+      {cropFile && <ImageCrop file={cropFile} aspects={spec.aspects} onDone={finishCrop} />}
     </Field>
   );
 }
