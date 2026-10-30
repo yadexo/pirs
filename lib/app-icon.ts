@@ -9,7 +9,7 @@ import sharp from "sharp";
  * none.
  */
 
-export const ICON_SIZES = [180, 192, 512] as const;
+export const ICON_SIZES = [180, 192, 512, 1024] as const;
 export type IconVariant = { size: (typeof ICON_SIZES)[number]; maskable: boolean };
 
 const MAX_SOURCE_BYTES = 5 * 1024 * 1024;

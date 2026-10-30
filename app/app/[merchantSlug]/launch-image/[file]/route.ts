@@ -9,7 +9,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ merchan
   const clinic = size ? await getPublicClinic(merchantSlug) : null;
   if (!size || !clinic) return new NextResponse("Not found", { status: 404 });
 
-  const source = await loadIconSource(clinic.appIconUrl);
+  // The launch screen shows the clinic's logo, the same mark as the app's
+  // own Home — falling back to the icon only when there is no logo, which is
+  // what it used to use for everyone.
+  const source = (await loadIconSource(clinic.logoUrl)) ?? (await loadIconSource(clinic.appIconUrl));
   const png = await renderLaunchImage(source, size, { name: clinic.name, color: clinic.color, background: clinic.launchBackground });
   return new NextResponse(new Uint8Array(png), {
     headers: {

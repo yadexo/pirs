@@ -87,6 +87,16 @@ describe("clinic settings", () => {
     const branding = (over: Record<string, string> = {}) =>
       fd({ businessName: "Settings Clinic", primaryColor: "#112233", currency: "EUR", timeZone: "Europe/Amsterdam", ...over });
 
+    it("saves the cover photo, which the client app rendered but nothing could set", async () => {
+      asOwner();
+      expect(await S.saveBrandingAction(clinic, branding({ coverImageUrl: "/uploads/abc123.webp" }))).toMatchObject({ ok: true });
+      expect((await rawDb.tenantBranding.findFirst({ where: { tenantId: clinic } }))?.coverImageUrl).toBe("/uploads/abc123.webp");
+
+      // And can be taken off again.
+      expect(await S.saveBrandingAction(clinic, branding())).toMatchObject({ ok: true });
+      expect((await rawDb.tenantBranding.findFirst({ where: { tenantId: clinic } }))?.coverImageUrl).toBeNull();
+    });
+
     it("validates colour, currency, time zone and website", async () => {
       asOwner();
       const errs = errorsOf(await S.saveBrandingAction(clinic, branding({ primaryColor: "red", currency: "XXQ", timeZone: "Mars/Olympus", website: "http://insecure.example" })));
@@ -216,18 +226,24 @@ describe("clinic settings", () => {
       return { status: res.status, json: (await res.json()) as { error?: string; url?: string } };
     };
 
-    it("refuses icons below the minimum size on either side, accepts square or non-square above it", async () => {
+    it("takes any icon with enough pixels to work with, and refuses only what hasn't", async () => {
       asOwner();
-      expect((await send(await png(256, 256))).json.error).toMatch(/at least 512/);
-      expect((await send(await png(1024, 400))).json.error).toMatch(/at least 512/);
-      // Non-square no longer gets rejected — it's centred on the brand colour
-      // instead (lib/app-icon.ts), not cropped.
-      const wide = await send(await png(1024, 600));
-      expect(wide.status).toBe(200);
-      expect(wide.json.url).toMatch(/\.png$/);
-      const ok = await send(await png(1024, 1024));
-      expect(ok.status).toBe(200);
-      expect(ok.json.url).toMatch(/\.png$/);
+      // 512 used to be the minimum, which refused plenty of usable logos.
+      // Anything from 200 up is now scaled onto the 1024 tile instead.
+      for (const [w, h] of [
+        [256, 256],
+        [1024, 400],
+        [1024, 600],
+        [1024, 1024],
+      ]) {
+        const res = await send(await png(w!, h!));
+        expect([`${w}x${h}`, res.status]).toEqual([`${w}x${h}`, 200]);
+        expect(res.json.url).toMatch(/\.png$/);
+      }
+
+      const tiny = await send(await png(150, 150));
+      expect(tiny.status).toBe(400);
+      expect(tiny.json.error).toMatch(/at least 200×200/);
     });
   });
 });

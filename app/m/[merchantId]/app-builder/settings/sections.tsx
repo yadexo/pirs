@@ -309,6 +309,15 @@ export function BrandingSection({ merchantId, data, canEdit }: { merchantId: str
                 hint={t("appIconHint")}
               />
             </div>
+            <ImageField
+              label={t("coverLabel")}
+              name="coverImageUrl"
+              merchantId={merchantId}
+              purpose="cover-image"
+              defaultValue={b?.coverImageUrl}
+              errors={errors}
+              hint={t("coverHint")}
+            />
             <div className="flex items-center gap-3">
               <HomeScreenIconPreview logoUrl={appIconUrl} color={color} name={name} />
               <p className="max-w-xs text-[12px] text-ink-muted">{t("iconPreviewHint")}</p>

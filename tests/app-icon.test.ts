@@ -8,7 +8,9 @@ describe("clinic app icons", () => {
   it("serves only the sizes the manifest names", () => {
     expect(parseIconFile("192.png")).toEqual({ size: 192, maskable: false });
     expect(parseIconFile("maskable-512.png")).toEqual({ size: 512, maskable: true });
-    for (const f of ["100.png", "512.jpg", "../512.png", "maskable-.png"]) expect(parseIconFile(f)).toBeNull();
+    // 1024 is what an upload is now normalised to, so it is served too.
+    expect(parseIconFile("1024.png")).toEqual({ size: 1024, maskable: false });
+    for (const f of ["100.png", "512.jpg", "../512.png", "maskable-.png", "2048.png"]) expect(parseIconFile(f)).toBeNull();
   });
 
   it("never fetches an icon from outside our own storage", async () => {

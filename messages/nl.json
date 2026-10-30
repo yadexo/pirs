@@ -1152,6 +1152,8 @@
             "logoHint": "Wordt bovenaan op Start in de app getoond.",
             "appIconLabel": "App-icoon",
             "appIconHint": "Minimaal 200×200. Vierkant vult het icoon volledig; elke andere vorm wordt gecentreerd op je merkkleur. Wordt het icoon zodra klanten jouw app aan hun beginscherm toevoegen.",
+            "coverLabel": "Omslagfoto",
+            "coverHint": "De brede foto bovenaan Start in de app. Elke foto — je kiest zelf welk deel je toont, en hij wordt verkleind naar 1600×900.",
             "iconPreviewHint": "Zo ziet dit eruit als beginscherm-icoon, afgerond zoals iOS dat doet.",
             "brandColorLabel": "Merkkleur",
             "brandColorHexAria": "Merkkleur hex-code",

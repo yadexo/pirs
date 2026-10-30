@@ -1152,6 +1152,8 @@
             "logoHint": "Shown at the top of the app's Home.",
             "appIconLabel": "App icon",
             "appIconHint": "At least 200×200. Square fills the icon edge to edge; any other shape is centred on your brand colour. Becomes the icon when clients add your app to their home screen.",
+            "coverLabel": "Cover photo",
+            "coverHint": "The wide photo across the top of the app's Home. Any photo — you choose which part to show, and it's resized to 1600×900.",
             "iconPreviewHint": "How this looks as a home-screen icon, rounded the way iOS rounds it.",
             "brandColorLabel": "Brand colour",
             "brandColorHexAria": "Brand colour hex",
