@@ -20,9 +20,10 @@ to delete and nothing that could be committed by accident.
   npm run prod:clinic-login -- --clinic testclinic   # who can open a clinic's portal
   npm run prod:push-debug -- --clinic testclinic     # why notifications did or didn't arrive
   npm run prod:membership-debug -- --clinic testclinic --item "Bleken Sessie"   # why a member price did or didn't apply
+  npm run prod:storage-check                         # why uploads say storage isn't set up
 
 .PARAMETER Task
-status | migrate | stripe | apple-pay | items | admin | reset-admin | client | clinic-login | push-debug | membership-debug
+status | migrate | stripe | apple-pay | items | admin | reset-admin | client | clinic-login | push-debug | membership-debug | storage-check
 
 .PARAMETER Url
 The connection string, for automation. Prefer the prompt: an argument is saved
@@ -34,7 +35,7 @@ Skip the confirmation. Intended for scripts, not for day-to-day use.
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("status", "migrate", "stripe", "apple-pay", "items", "admin", "reset-admin", "client", "clinic-login", "push-debug", "membership-debug")]
+  [ValidateSet("status", "migrate", "stripe", "apple-pay", "items", "admin", "reset-admin", "client", "clinic-login", "push-debug", "membership-debug", "storage-check")]
   [string]$Task = "status",
 
   [string]$Url,
@@ -46,6 +47,15 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path $PSScriptRoot -Parent)
+
+# This one task isn't a database task at all — it tests S3 storage, and
+# prisma/storage-check.ts prompts for its own S3_* values. Asking for a
+# Postgres connection string first would be pointless and confusing, so it
+# skips the rest of this script entirely.
+if ($Task -eq "storage-check") {
+  & npx tsx prisma/storage-check.ts
+  exit $LASTEXITCODE
+}
 
 # Use Neon's direct connection string (the host without "-pooler"): migrations
 # take a lock that a pooled connection can fail on.

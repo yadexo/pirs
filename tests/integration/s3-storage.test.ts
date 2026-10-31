@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { S3Client, CreateBucketCommand, GetObjectCommand, HeadBucketCommand } from "@aws-sdk/client-s3";
 import { S3StorageProvider } from "@/lib/providers/storage";
+import { checkStorage, type S3CheckConfig } from "../../prisma/storage-check";
 
 /**
  * Round-trips a real upload through an S3-compatible server. Runs when
@@ -51,5 +52,54 @@ describe.skipIf(!endpoint)("S3 storage provider", () => {
     expect(() => new S3StorageProvider({ S3_BUCKET: "x" } as unknown as NodeJS.ProcessEnv)).toThrow(
       /Missing: S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_PUBLIC_URL/,
     );
+  });
+
+  /**
+   * prisma/storage-check.ts — the tool for "uploads fail with 'storage isn't
+   * set up correctly'". The case it exists for is the one the app itself
+   * can never catch: S3_PUBLIC_URL present but wrong, which lets every
+   * upload keep succeeding while every icon and launch image quietly fails.
+   */
+  describe("storage-check", () => {
+    const config: S3CheckConfig = {
+      bucket: env.S3_BUCKET!,
+      accessKeyId: env.S3_ACCESS_KEY_ID!,
+      secretAccessKey: env.S3_SECRET_ACCESS_KEY!,
+      publicUrl: env.S3_PUBLIC_URL!,
+      region: "us-east-1",
+      endpoint,
+    };
+
+    it("uploads and reads back byte-for-byte", async () => {
+      const result = await checkStorage(config);
+      expect(result).toMatchObject({ ok: true, step: "ok" });
+    });
+
+    it("names the bucket problem when the bucket doesn't exist", async () => {
+      const result = await checkStorage({ ...config, bucket: "this-bucket-does-not-exist-anywhere" });
+      expect(result.ok).toBe(false);
+      expect(result.step).toBe("upload");
+      expect(result.message).toMatch(/NoSuchBucket/);
+    });
+
+    it("catches a wrong-but-present S3_PUBLIC_URL, which the app itself never detects", async () => {
+      // The upload still succeeds — this is exactly why the app's own error
+      // handling can't see this class of misconfiguration.
+      const result = await checkStorage({ ...config, publicUrl: `${config.publicUrl}-wrong` });
+      expect(result.ok).toBe(false);
+      expect(result.step).toBe("read-back");
+      expect(result.message).toMatch(/could not be reached|S3_PUBLIC_URL/);
+    });
+
+    it("catches S3_PUBLIC_URL pointing at a different, still-reachable bucket", async () => {
+      // A stub fetch stands in for "reachable, but serving someone else's
+      // object" — the one failure mode that needs a byte mismatch, not a
+      // network error, to prove it's being checked at all.
+      const stub: typeof fetch = async () => new Response("not what was uploaded", { status: 200 });
+      const result = await checkStorage(config, stub);
+      expect(result.ok).toBe(false);
+      expect(result.step).toBe("read-back");
+      expect(result.message).toMatch(/doesn't match|different bucket/);
+    });
   });
 });

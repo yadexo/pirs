@@ -35,6 +35,7 @@
     "seed": "tsx prisma/seed.ts",
     "serve": "node scripts/serve.mjs",
     "prod:membership-debug": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 membership-debug",
+    "prod:storage-check": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 storage-check",
     "stg:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/staging.ps1 status",
     "stg:migrate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/staging.ps1 migrate",
     "stg:wipe": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/staging.ps1 wipe",
