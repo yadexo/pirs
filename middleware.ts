@@ -2,6 +2,7 @@ import NextAuth, { type NextAuthRequest } from "next-auth";
 import { NextResponse, type NextRequest } from "next/server";
 import { authConfig } from "@/auth.config";
 import { LAST_CLINIC_COOKIE, slugFromAppPath } from "@/lib/clinic-link";
+import { legacyRedirectUrl } from "@/lib/legacy-domain";
 import { clientAppPath, isClientHost, loginRedirectForHost, shortClientAppPath } from "@/lib/portal-hosts";
 import { applySecurityHeaders } from "@/lib/security-headers";
 
@@ -74,6 +75,16 @@ function route(req: NextAuthRequest, nonce: string): NextResponse {
   const isMerchantUser = user?.role === "TENANT_ADMIN" || user?.role === "STAFF";
 
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+
+  // --- the domain we moved off -------------------------------------------
+  // Before everything else, or the old domain would be served rather than
+  // left behind: the rewrite below would hand out real clinic pages on it,
+  // "/" on an old subdomain would show the landing page, and the auth gates
+  // would send visitors to a login whose cookie is scoped to a dead host.
+  // 308 rather than 301 because /api is inside the matcher, and a POST to an
+  // old API path must not quietly become a GET.
+  const legacy = legacyRedirectUrl(host, pathname, req.nextUrl.search);
+  if (legacy) return NextResponse.redirect(legacy, 308);
 
   // --- the root domain is the client app ---------------------------------
   // pirs.io/<clinic>/... serves /app/<clinic>/... without the client ever
