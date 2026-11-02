@@ -49,9 +49,9 @@ describe("country from the clinic's address", () => {
 
 describe("onboarding URLs", () => {
   it("return to the host the clinic came from", () => {
-    expect(onboardingUrls("https://clinic.pirs.io", "c123")).toEqual({
-      refresh_url: "https://clinic.pirs.io/m/c123/stripe/refresh",
-      return_url: "https://clinic.pirs.io/m/c123/stripe/return",
+    expect(onboardingUrls("https://clinic.deza.ai", "c123")).toEqual({
+      refresh_url: "https://clinic.deza.ai/m/c123/stripe/refresh",
+      return_url: "https://clinic.deza.ai/m/c123/stripe/return",
     });
   });
 });

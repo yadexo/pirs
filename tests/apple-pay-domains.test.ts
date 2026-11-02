@@ -5,15 +5,15 @@ describe("Apple Pay checkout domains", () => {
   const env = (o: Record<string, string | undefined>) => o as NodeJS.ProcessEnv;
 
   it("registers the client app domain and this deployment, once each", () => {
-    expect(checkoutDomains(env({ CLIENT_APP_URL: "https://pirs.io", APP_URL: "https://clinic.pirs.io" }))).toEqual(["pirs.io", "clinic.pirs.io"]);
-    expect(checkoutDomains(env({ CLIENT_APP_URL: "https://pirs.io/", APP_URL: "https://pirs.io" }))).toEqual(["pirs.io"]);
+    expect(checkoutDomains(env({ CLIENT_APP_URL: "https://deza.ai", APP_URL: "https://clinic.deza.ai" }))).toEqual(["deza.ai", "clinic.deza.ai"]);
+    expect(checkoutDomains(env({ CLIENT_APP_URL: "https://deza.ai/", APP_URL: "https://deza.ai" }))).toEqual(["deza.ai"]);
   });
 
   it("takes extra domains from APPLE_PAY_DOMAINS, with or without a scheme", () => {
-    expect(checkoutDomains(env({ APP_URL: "https://clinic.pirs.io", APPLE_PAY_DOMAINS: "www.pirs.io, https://preview.pirs.io" }))).toEqual([
-      "clinic.pirs.io",
-      "www.pirs.io",
-      "preview.pirs.io",
+    expect(checkoutDomains(env({ APP_URL: "https://clinic.deza.ai", APPLE_PAY_DOMAINS: "www.deza.ai, https://preview.deza.ai" }))).toEqual([
+      "clinic.deza.ai",
+      "www.deza.ai",
+      "preview.deza.ai",
     ]);
   });
 
@@ -42,26 +42,26 @@ describe("registering domains on a connected account", () => {
 
   it("registers each domain on the clinic's own account", async () => {
     const { api, created } = fakeApi();
-    const results = await registerApplePayDomains(api, "acct_clinic", ["pirs.io", "clinic.pirs.io"]);
+    const results = await registerApplePayDomains(api, "acct_clinic", ["deza.ai", "clinic.deza.ai"]);
     expect(results.every((r) => r.status === "registered")).toBe(true);
     expect(created).toEqual([
-      { domain: "pirs.io", account: "acct_clinic" },
-      { domain: "clinic.pirs.io", account: "acct_clinic" },
+      { domain: "deza.ai", account: "acct_clinic" },
+      { domain: "clinic.deza.ai", account: "acct_clinic" },
     ]);
   });
 
   it("is safe to run twice — an existing domain is left alone", async () => {
-    const { api, created } = fakeApi(["pirs.io"]);
-    const results = await registerApplePayDomains(api, "acct_clinic", ["pirs.io", "clinic.pirs.io"]);
+    const { api, created } = fakeApi(["deza.ai"]);
+    const results = await registerApplePayDomains(api, "acct_clinic", ["deza.ai", "clinic.deza.ai"]);
     expect(results.map((r) => r.status)).toEqual(["already", "registered"]);
-    expect(created).toEqual([{ domain: "clinic.pirs.io", account: "acct_clinic" }]);
+    expect(created).toEqual([{ domain: "clinic.deza.ai", account: "acct_clinic" }]);
   });
 
   it("one domain failing doesn't stop the rest", async () => {
-    const { api, created } = fakeApi([], "pirs.io");
-    const results = await registerApplePayDomains(api, "acct_clinic", ["pirs.io", "clinic.pirs.io"]);
-    expect(results[0]).toMatchObject({ domain: "pirs.io", status: "failed", error: "This domain isn't reachable." });
+    const { api, created } = fakeApi([], "deza.ai");
+    const results = await registerApplePayDomains(api, "acct_clinic", ["deza.ai", "clinic.deza.ai"]);
+    expect(results[0]).toMatchObject({ domain: "deza.ai", status: "failed", error: "This domain isn't reachable." });
     expect(results[1]).toMatchObject({ status: "registered" });
-    expect(created).toEqual([{ domain: "clinic.pirs.io", account: "acct_clinic" }]);
+    expect(created).toEqual([{ domain: "clinic.deza.ai", account: "acct_clinic" }]);
   });
 });

@@ -51,7 +51,7 @@ describe("where a notification opens", () => {
     // short address. Either way the link never leaves the installed scope.
     delete process.env.CLIENT_APP_URL;
     expect(clinicBase("riverside")).toBe("/app/riverside");
-    process.env.CLIENT_APP_URL = "https://pirs.io";
+    process.env.CLIENT_APP_URL = "https://deza.ai";
     expect(clinicBase("riverside")).toBe("/riverside");
     delete process.env.CLIENT_APP_URL;
   });
