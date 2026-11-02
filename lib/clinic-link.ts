@@ -1,10 +1,9 @@
 /** Shared by the browser (QR scanning) and the server (cookies, redirects). */
 
+import { isClientHost } from "@/lib/portal-hosts";
+
 export const LAST_CLINIC_COOKIE = "last_clinic";
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
-/** Hosts whose first path segment is the clinic itself (pirs.io/riverside). */
-const CLIENT_ROOT_HOSTS = new Set(["pirs.io", "www.pirs.io"]);
 
 export function isClinicSlug(value: string | undefined | null): value is string {
   return !!value && value.length <= 80 && SLUG.test(value);
@@ -19,7 +18,7 @@ export function slugFromAppPath(pathname: string): string | null {
 
 /**
  * Reads a scanned clinic QR, in either shape: the long /app/<clinic> path, or
- * the short pirs.io/<clinic> link clinics print now.
+ * the short deza.ai/<clinic> link clinics print now.
  *
  * Only the slug is taken from it, never the host, so a doctored code can at
  * most open another clinic's page here. The short shape is accepted only from
@@ -41,10 +40,12 @@ export function slugFromScannedCode(value: string): string | null {
   const fromAppPath = slugFromAppPath(url.pathname);
   if (fromAppPath) return fromAppPath;
 
-  const ourRootDomain = url.hostname === "relative.invalid" || CLIENT_ROOT_HOSTS.has(url.hostname.toLowerCase());
+  // The same host table the middleware routes on — not a second copy of it,
+  // which is how a printed poster for a new domain comes to scan as nothing.
+  const ourRootDomain = url.hostname === "relative.invalid" || isClientHost(url.hostname);
   if (!ourRootDomain) return null;
 
-  // One segment only: pirs.io/riverside, never pirs.io/some/other/page.
+  // One segment only: deza.ai/riverside, never deza.ai/some/other/page.
   const [, first = "", second] = url.pathname.split("/");
   if (second) return null;
   const slug = first ? decodeURIComponent(first) : null;
