@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
 import { searchListedClinics } from "@/lib/clinic-directory";
+import { ROOT } from "../fixtures/hosts";
 
 const manifestRoute = await import("@/app/app/[merchantSlug]/manifest.webmanifest/route");
 const iconRoute = await import("@/app/app/[merchantSlug]/app-icon/[file]/route");
@@ -53,8 +54,36 @@ describe("find your clinic + installable clinic app", () => {
     const res = await manifestRoute.GET(new Request("http://x"), { params: Promise.resolve({ merchantSlug: slug("pwa-hidden") }) });
     expect(res.status).toBe(200);
     const m = await res.json();
-    expect(m).toMatchObject({ name: `Zephyr Hidden ${stamp}`, start_url: `/app/${slug("pwa-hidden")}`, display: "standalone" });
+    expect(m).toMatchObject({
+      name: `Zephyr Hidden ${stamp}`,
+      id: `/app/${slug("pwa-hidden")}`,
+      start_url: `/app/${slug("pwa-hidden")}`,
+      // Everything but the client app lives on this host too, so the installed
+      // app's scope has to keep the clinic portal and agency console outside it.
+      scope: "/app/",
+      display: "standalone",
+    });
     expect(m.icons.map((i: { purpose: string }) => i.purpose)).toContain("maskable");
+  });
+
+  /**
+   * On the root domain the whole host is the client app, so the scope is "/".
+   * Getting this wrong is silent and expensive: a scope of "/app/" while pages
+   * are served at /<clinic> puts every deep link outside the installed app,
+   * and iOS opens it in Safari with an address bar instead of full screen.
+   */
+  it("scopes the installed app to the whole root domain when that host is the client app", async () => {
+    // The host arrives as x-forwarded-host behind the proxy, and `host` is a
+    // forbidden header a Request won't carry anyway.
+    const res = await manifestRoute.GET(new Request("http://x", { headers: { "x-forwarded-host": ROOT } }), {
+      params: Promise.resolve({ merchantSlug: slug("pwa-hidden") }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      id: `/${slug("pwa-hidden")}`,
+      start_url: `/${slug("pwa-hidden")}`,
+      scope: "/",
+    });
   });
 
   it("gives suspended or unknown clinics no manifest and no icon", async () => {
