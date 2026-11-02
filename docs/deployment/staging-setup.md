@@ -8,11 +8,14 @@ test on the fixed URL, merge to `main`" is all you need (see `CLAUDE.md`).
 Known facts this doc assumes (yours may differ if something changes):
 
 - Vercel project `pirs`, deploying from GitHub `yadexo/pirs`, production
-  domains `pirs.io` and `clinic.pirs.io`.
+  domains `deza.ai` and `clinic.deza.ai`. The project and repository names
+  predate the rebrand and are deliberately unchanged: renaming the Vercel
+  project would change every preview URL, and the `*.vercel.app` hosts those
+  produce are asserted on in `tests/portal-hosts.test.ts`.
 - Neon project with a `production` branch at `ep-frosty-cloud-zal3mzce`
   (region `eu-west-2`, database `neondb`).
 - Stripe: still in test mode everywhere ("Pirs.io sandbox" keys), with a
-  Connect webhook at `https://clinic.pirs.io/api/webhooks/stripe`.
+  Connect webhook at `https://clinic.deza.ai/api/webhooks/stripe`.
 
 ## 1. Neon: create the staging branch
 
@@ -43,24 +46,24 @@ Known facts this doc assumes (yours may differ if something changes):
 Vercel builds a new preview on every push to every branch, but the URL is
 random per-deployment unless you pin a domain to the branch:
 
-1. Buy/use a subdomain you control under `pirs.io` — e.g. `staging.pirs.io`.
+1. Buy/use a subdomain you control under `deza.ai` — e.g. `staging.deza.ai`.
    (Or reuse an existing one if you'd rather.)
 2. Vercel project `pirs` → **Settings → Domains → Add**.
-3. Enter `staging.pirs.io`. When asked which branch it should track, choose
+3. Enter `staging.deza.ai`. When asked which branch it should track, choose
    **Git Branch** and type `staging` (not "Production" — that's what makes
    this a staging-only domain instead of a second production domain).
-4. Vercel shows you a CNAME (or A/ALIAS) record to add wherever `pirs.io`'s
+4. Vercel shows you a CNAME (or A/ALIAS) record to add wherever `deza.ai`'s
    DNS is managed. Add it there.
-5. Push anything to the `staging` branch and `https://staging.pirs.io` will
+5. Push anything to the `staging` branch and `https://staging.deza.ai` will
    serve that deployment once it builds — same URL every time, so it's safe
    to bookmark on your phone.
 
 This single domain reaches all three surfaces by path
 (`/login`, `/app/<clinic-slug>`, `/m/<id>`, `/agency`) — it won't automatically
-get the short `pirs.io/<clinic>` or `clinic.pirs.io` auto-redirect behaviour,
+get the short `deza.ai/<clinic>` or `clinic.deza.ai` auto-redirect behaviour,
 because those hostnames are hardcoded in `lib/portal-hosts.ts`. That's fine
 for testing the app itself; if you later want staging to mirror the exact
-hostname-based routing too, add `staging.pirs.io` style entries there — it's
+hostname-based routing too, add `staging.deza.ai` style entries there — it's
 a few lines, not required for this setup.
 
 ## 3. Vercel: environment variables
@@ -84,10 +87,10 @@ New**, paste the value, tick only **Preview**, save.
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | a fresh pair — run `node -e "console.log(require('web-push').generateVAPIDKeys())"` locally | keeps a staging push subscription from ever being deliverable with production's identity. `WEB_PUSH_PUBLIC_KEY`/`WEB_PUSH_PRIVATE_KEY` are a separate, unimplemented integration point (see `.env.example`) — don't confuse them with these |
 | `VAPID_SUBJECT` | `mailto:you@example.com` (anything reachable) | |
 | `RESEND_API_KEY` | reuse Production's | one Resend account is fine |
-| `EMAIL_FROM` | something that reads as staging, e.g. `staging@pirs.io` | so a test email is never mistaken for a real one |
+| `EMAIL_FROM` | something that reads as staging, e.g. `staging@deza.ai` | so a test email is never mistaken for a real one |
 | `STORAGE_PROVIDER` / `S3_*` | reuse Production's bucket and credentials | uploads from staging land in the same bucket; acceptable for test data, see note below if that bothers you |
-| `APP_URL` | `https://staging.pirs.io` | |
-| `CLIENT_APP_URL` | `https://staging.pirs.io` | same domain serves both here, unlike production's split |
+| `APP_URL` | `https://staging.deza.ai` | |
+| `CLIENT_APP_URL` | `https://staging.deza.ai` | same domain serves both here, unlike production's split |
 | `APP_ENV` | `staging` | used only by `lib/observability.ts` error reports, if you set `ERROR_WEBHOOK_URL` too |
 | `PLATFORM_FEE_PERCENT` | reuse Production's (or leave unset) | |
 | `CRON_SECRET` | leave unset, or set your own | staging doesn't need the cron jobs production has (see step 5) |
@@ -109,7 +112,7 @@ endpoints even though the account is shared:
 
 1. Stripe dashboard → make sure **test mode** is on (toggle, top right).
 2. **Developers → Webhooks → Add endpoint**.
-   - URL: `https://staging.pirs.io/api/webhooks/stripe`
+   - URL: `https://staging.deza.ai/api/webhooks/stripe`
    - Listen for the platform-account events your production endpoint listens
      for.
    - Copy the signing secret into `STRIPE_WEBHOOK_SECRET` (Preview-scoped, see
@@ -130,7 +133,7 @@ Production's two cron-job.org jobs (`/api/cron/marketing` every 5 minutes,
 `/api/cron/memberships` hourly) exist to keep demo/real data moving over time.
 Staging's seeded data doesn't need that upkeep — skip this unless you're
 specifically testing cron behaviour. If you do want it, create the same two
-jobs pointed at `https://staging.pirs.io/api/cron/<job>` with their own
+jobs pointed at `https://staging.deza.ai/api/cron/<job>` with their own
 `CRON_SECRET` (set that var in Vercel first).
 
 ## Everyday use after this is done once
@@ -138,15 +141,15 @@ jobs pointed at `https://staging.pirs.io/api/cron/<job>` with their own
 ```bash
 git checkout staging && git pull
 # ...make changes, commit...
-git push                 # Vercel builds and deploys to staging.pirs.io
+git push                 # Vercel builds and deploys to staging.deza.ai
 ```
 
-Open `https://staging.pirs.io` on your phone to test. When it's right:
+Open `https://staging.deza.ai` on your phone to test. When it's right:
 
 ```bash
 git checkout main && git pull
 git merge staging
-git push                 # deploys to pirs.io / clinic.pirs.io
+git push                 # deploys to deza.ai / clinic.deza.ai
 ```
 
 If a change needs a migration, run `npm run stg:migrate` against the staging

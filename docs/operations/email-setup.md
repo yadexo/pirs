@@ -8,16 +8,16 @@ registrar or DNS host manages it (Cloudflare, Route 53, your domain's own
 panel).
 
 1. Resend dashboard → **Domains → Add Domain**. Enter the domain you'll send
-   from — e.g. `pirs.io` (production sends from the live domain; staging from
-   `staging@pirs.io`, the **same** domain, no separate DNS needed — see §3).
+   from — e.g. `deza.ai` (production sends from the live domain; staging from
+   `staging@deza.ai`, the **same** domain, no separate DNS needed — see §3).
 2. Resend shows you the exact records to add. They look like this (your real
    values come from the dashboard, not this doc):
 
    | Type | Host | Value | Purpose |
    |---|---|---|---|
-   | TXT | `send.pirs.io` (or similar) | `v=spf1 include:amazonses.com ~all` | SPF — authorises Resend's servers to send as you |
-   | CNAME | `resend._domainkey.pirs.io` | `resend._domainkey.resend.com` (example) | DKIM — signs every message so receivers can verify it wasn't altered |
-   | TXT | `pirs.io` or `_dmarc.pirs.io` | `v=DMARC1; p=none; rua=mailto:you@pirs.io` | DMARC — tells receivers what to do with mail that fails SPF/DKIM |
+   | TXT | `send.deza.ai` (or similar) | `v=spf1 include:amazonses.com ~all` | SPF — authorises Resend's servers to send as you |
+   | CNAME | `resend._domainkey.deza.ai` | `resend._domainkey.resend.com` (example) | DKIM — signs every message so receivers can verify it wasn't altered |
+   | TXT | `deza.ai` or `_dmarc.deza.ai` | `v=DMARC1; p=none; rua=mailto:you@deza.ai` | DMARC — tells receivers what to do with mail that fails SPF/DKIM |
 
    Add exactly what Resend's dashboard shows — the subdomain and value are
    specific to your account and change if you re-add the domain.
@@ -43,9 +43,9 @@ panel).
 |---|---|---|
 | `EMAIL_PROVIDER` | `resend` | `resend` |
 | `RESEND_API_KEY` | your Resend API key | same key (one Resend account covers both — see note) |
-| `EMAIL_FROM` | `no-reply@pirs.io` (or your chosen local part) | `staging@pirs.io` |
+| `EMAIL_FROM` | `no-reply@deza.ai` (or your chosen local part) | `staging@deza.ai` |
 
-Both `EMAIL_FROM` addresses are on the **same verified domain** (`pirs.io`),
+Both `EMAIL_FROM` addresses are on the **same verified domain** (`deza.ai`),
 so one set of DNS records covers both — Resend verifies the domain, not each
 individual address on it. This matches `docs/deployment/staging-setup.md`,
 which already has `EMAIL_FROM` as a Preview-scoped Vercel variable.

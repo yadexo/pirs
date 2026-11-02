@@ -1,6 +1,6 @@
 # Working on this repo
 
-White-label, multi-tenant clinic SaaS (branded "Pirs"). Three surfaces, one
+White-label, multi-tenant clinic SaaS (branded "Deza"). Three surfaces, one
 codebase: agency admin (`/agency`), clinic portal (`/m/:merchantId`), client
 app (`/app/:merchantSlug`). See `README.md` for the architecture.
 
@@ -25,13 +25,19 @@ with the raw client except in platform-admin code paths.
 
 ## Deployment
 
+`pirs.io` is the domain the platform moved off. While `LEGACY_ROOT_DOMAIN` is
+set, it and its subdomains answer every request with a 308 to the same path on
+`deza.ai` — except `/api/webhooks/stripe` and `/api/cron/*`, which keep
+answering there until those addresses are repointed by hand. Every host is
+derived from `NEXT_PUBLIC_ROOT_DOMAIN`; see `docs/operations/domain-move.md`.
+
 There are three environments:
 
 | | Database | Where it runs | Branch |
 |---|---|---|---|
 | Local dev | Docker Postgres (`app_dev` / `app_test`) | your machine | any |
 | **Staging** | Neon branch `staging` | Vercel Preview, fixed URL (see `docs/deployment/staging-setup.md`) | `staging` |
-| **Production** | Neon `production` branch (`ep-frosty-cloud-zal3mzce`) | Vercel Production, `pirs.io` / `clinic.pirs.io` | `main` |
+| **Production** | Neon `production` branch (`ep-frosty-cloud-zal3mzce`) | Vercel Production, `deza.ai` / `clinic.deza.ai` | `main` |
 
 **Until the first real clinics are onboarded: work directly on `main`, test
 on production with `testclinic2`.** This is a temporary, explicitly-chosen
@@ -43,7 +49,7 @@ clinic. Push straight to `main`:
 git checkout main
 git pull
 # ...work, commit...
-git push                      # deploys to pirs.io / clinic.pirs.io
+git push                      # deploys to deza.ai / clinic.deza.ai
 ```
 
 Keep `staging` in sync so it's ready the moment this exception ends — merge
@@ -71,7 +77,7 @@ git push                      # deploys to the staging URL automatically
 git checkout main
 git pull
 git merge staging
-git push                      # deploys to pirs.io / clinic.pirs.io
+git push                      # deploys to deza.ai / clinic.deza.ai
 ```
 
 **Never touch the production database or production Vercel env vars without
