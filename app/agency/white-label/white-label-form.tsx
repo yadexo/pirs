@@ -34,7 +34,7 @@ export function WhiteLabelForm({ settings }: { settings: WhiteLabelSettings | nu
             <label htmlFor="name" className={label}>
               Brand name
             </label>
-            <input id="name" name="name" defaultValue={settings?.name ?? "DezaAI"} required className={field} />
+            <input id="name" name="name" defaultValue={settings?.name ?? "Deza"} required className={field} />
           </div>
           <div>
             <label htmlFor="primaryColor" className={label}>

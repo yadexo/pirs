@@ -63,7 +63,7 @@ export async function requestPasswordResetAction(_prev: FormState, fd: FormData)
       branding = { name: place, logoUrl: account.tenant.branding?.logoUrl ?? null, color: account.tenant.branding?.primaryColor ?? null };
     } else {
       const agency = await rawDb.agencySettings.findFirst({ select: { name: true, senderName: true, logoLightUrl: true, primaryColor: true } });
-      place = agency?.senderName || agency?.name || "DezaAI";
+      place = agency?.senderName || agency?.name || "Deza";
       branding = { name: place, logoUrl: agency?.logoLightUrl ?? null, color: agency?.primaryColor ?? null };
     }
 

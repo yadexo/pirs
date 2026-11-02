@@ -3,7 +3,7 @@ import "server-only";
 /**
  * The absolute address of a clinic's client app, for a link that means
  * something outside a request — an email, where there is no host header to
- * read from. The short address (pirs.io/<slug>) when CLIENT_APP_URL names
+ * read from. The short address (deza.ai/<slug>) when CLIENT_APP_URL names
  * one, the long one (APP_URL/app/<slug>) otherwise. Same shape as the links
  * printed inside the app itself (lib/public-clinic.ts's clientBasePath).
  */

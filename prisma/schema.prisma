@@ -2118,7 +2118,7 @@ model ImpersonationSession {
 model AgencySettings {
   id String @id @default(cuid())
 
-  name         String  @default("DezaAI")
+  name         String  @default("Deza")
   logoLightUrl String?
   logoDarkUrl  String?
   faviconUrl   String?

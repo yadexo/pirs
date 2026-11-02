@@ -9,7 +9,12 @@ import { getTwoFactorStatus, issueBackupCodes, disableTwoFactor, twoFactorRequir
 import { qrSvg } from "@/lib/qr";
 import { writeAuditLog } from "@/lib/audit";
 
-const ISSUER = "Pirs";
+/**
+ * The name an authenticator app files the account under. Not exported: this
+ * is a "use server" file, which may only export async functions, and
+ * importing it into a unit test would pull in the whole auth stack anyway.
+ */
+const ISSUER = "Deza";
 
 function actorTypeFor(role: string): "PLATFORM_ADMIN" | "STAFF" {
   return role === "PLATFORM_ADMIN" ? "PLATFORM_ADMIN" : "STAFF";

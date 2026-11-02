@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CODE_ALPHABET, isBackupCode, normaliseCode, redeemQrValue, tokenFromScan } from "@/lib/redeemable-shared";
+import { CODE_ALPHABET, isBackupCode, normaliseCode, redeemQrValue, tokenFromScan, REDEEM_QR_PREFIX } from "@/lib/redeemable-shared";
 
 /**
  * The code format, tested without a database: what goes in a QR, what comes
@@ -8,7 +8,7 @@ import { CODE_ALPHABET, isBackupCode, normaliseCode, redeemQrValue, tokenFromSca
 describe("item codes", () => {
   it("puts the token in the QR and nothing else", () => {
     const token = "Yb3_QmT7xK1pLz0aWnEr9sQv";
-    expect(redeemQrValue(token)).toBe(`pirs-item:${token}`);
+    expect(redeemQrValue(token)).toBe(`${REDEEM_QR_PREFIX}${token}`);
     expect(redeemQrValue(token)).not.toMatch(/[0-9a-f]{25,}/); // no ids smuggled in
   });
 
@@ -21,10 +21,10 @@ describe("item codes", () => {
   it("refuses anything that isn't one of its codes", () => {
     // The check-in code from the Scan tab: same camera, different meaning.
     expect(tokenFromScan("tenant123.client456.1790000000.c2lnbmF0dXJl")).toBeNull();
-    expect(tokenFromScan("https://pirs.io/testclinic")).toBeNull();
-    expect(tokenFromScan("pirs-item:")).toBeNull();
-    expect(tokenFromScan("pirs-item:short")).toBeNull();
-    expect(tokenFromScan("pirs-item:has spaces in it and is long enough")).toBeNull();
+    expect(tokenFromScan("https://deza.ai/testclinic")).toBeNull();
+    expect(tokenFromScan(REDEEM_QR_PREFIX)).toBeNull();
+    expect(tokenFromScan(`${REDEEM_QR_PREFIX}short`)).toBeNull();
+    expect(tokenFromScan(`${REDEEM_QR_PREFIX}has spaces in it and is long enough`)).toBeNull();
     expect(tokenFromScan("")).toBeNull();
   });
 

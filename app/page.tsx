@@ -128,7 +128,7 @@ export default async function PortalIndexPage() {
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-white">
               {(agency?.name ?? "D").charAt(0)}
             </span>
-            <span className="text-[15px] font-semibold">{agency?.name ?? "DezaAI"}</span>
+            <span className="text-[15px] font-semibold">{agency?.name ?? "Deza"}</span>
           </div>
           <h1 className="text-[26px] font-semibold tracking-tight">Three portals, one system</h1>
           <p className="mt-2 max-w-2xl text-[14px] leading-relaxed text-ink-muted">

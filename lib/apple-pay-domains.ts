@@ -34,7 +34,7 @@ function hostOf(value: string | undefined | null): string | null {
 
 /**
  * Every domain a clinic's checkout can run on: the client app's root domain
- * (pirs.io) and this deployment's own host (clinic.pirs.io). APPLE_PAY_DOMAINS
+ * (deza.ai) and this deployment's own host (clinic.deza.ai). APPLE_PAY_DOMAINS
  * adds any others, comma-separated — a preview host, say, or www.
  */
 export function checkoutDomains(env: NodeJS.ProcessEnv = process.env): string[] {

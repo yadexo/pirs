@@ -135,7 +135,7 @@ export async function inviteAdminAction(
         primaryColor: true,
       },
     });
-    const agencyName = agency?.senderName || agency?.name || "DezaAI";
+    const agencyName = agency?.senderName || agency?.name || "Deza";
     const template = platformAdminInviteEmail({
       branding: {
         name: agencyName,

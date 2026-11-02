@@ -28,7 +28,7 @@ export function clientNumber(customerProfileId: string): string {
   return `${digits.slice(0, 4)} ${digits.slice(4)}`;
 }
 
-/** "DezaAI 4821 3390" — the platform's own white-label name, never a fixed one. */
+/** "Deza 4821 3390" — the platform's own white-label name, never a fixed one. */
 export function clientNumberLabel(customerProfileId: string, platformName: string): string {
   // A platform with no name of its own contributes nothing, not a space.
   return `${platformName} ${clientNumber(customerProfileId)}`.trim();

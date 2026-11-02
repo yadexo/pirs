@@ -27,7 +27,7 @@ export function asLocale(value: string | null | undefined): AppLocale | null {
  * clinic's default. Never consulted for a signed-in account; User.locale is
  * the only source of truth there (see lib/locale.ts's resolveLocale).
  */
-export const LOCALE_COOKIE = "pirs_locale";
+export const LOCALE_COOKIE = "deza_locale";
 
 export async function setLocaleCookie(locale: AppLocale): Promise<void> {
   (await cookies()).set(LOCALE_COOKIE, locale, {

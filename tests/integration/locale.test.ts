@@ -14,7 +14,7 @@ let lastCookieSet: { name: string; value: string } | undefined;
 vi.mock("next/headers", () => ({
   headers: vi.fn(async () => new Headers({ "x-pathname": currentPathname })),
   cookies: vi.fn(async () => ({
-    get: (name: string) => (name === "pirs_locale" && currentCookie !== undefined ? { value: currentCookie } : undefined),
+    get: (name: string) => (name === "deza_locale" && currentCookie !== undefined ? { value: currentCookie } : undefined),
     set: (name: string, value: string) => {
       lastCookieSet = { name, value };
       currentCookie = value;

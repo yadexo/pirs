@@ -5,7 +5,7 @@ export function appUrl(): string {
 
 /**
  * Where the client app lives for clients. CLIENT_APP_URL is the short root
- * domain (https://pirs.io), which serves a clinic at /<slug>. Without it —
+ * domain (https://deza.ai), which serves a clinic at /<slug>. Without it —
  * local development — the app is served from this deployment under /app.
  */
 export function clientAppUrl(slug: string): string {

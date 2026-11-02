@@ -56,7 +56,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-white">
               {(agency?.name ?? "D").charAt(0)}
             </span>
-            <span className="text-[15px] font-semibold">{agency?.name ?? "DezaAI"}</span>
+            <span className="text-[15px] font-semibold">{agency?.name ?? "Deza"}</span>
           </div>
 
           <div className="rounded-card border border-border bg-surface p-6 shadow-card">
@@ -105,7 +105,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-white">
             {(agency?.name ?? "D").charAt(0)}
           </span>
-          <span className="text-[15px] font-semibold">{agency?.name ?? "DezaAI"}</span>
+          <span className="text-[15px] font-semibold">{agency?.name ?? "Deza"}</span>
         </div>
 
         <div className="rounded-card border border-border bg-surface p-6 shadow-card">

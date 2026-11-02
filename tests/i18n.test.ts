@@ -119,7 +119,7 @@ const TRACKED_FILES = [
 const PROSE_LIKE = /\b([A-Z][a-z]+(?:[\s][A-Za-z][a-z]*){1,}[.?!]?)\b/;
 // Known non-prose false positives this heuristic would otherwise flag.
 const ALLOWLIST = [
-  "DezaAI",
+  "Deza",
   "Google Authenticator",
   "1Password",
   "Authy",

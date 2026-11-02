@@ -59,7 +59,7 @@ function withPathname(req: NextRequest, nonce: string) {
   return NextResponse.next({ request: { headers: withPathnameHeaders(req, nonce) } });
 }
 
-/** Remembers the clinic being viewed, so /app (and pirs.io) reopens it next time. */
+/** Remembers the clinic being viewed, so /app (and deza.ai) reopens it next time. */
 function rememberClinic(req: NextRequest, res: NextResponse, appPath: string) {
   const slug = slugFromAppPath(appPath);
   if (slug && req.cookies.get(LAST_CLINIC_COOKIE)?.value !== slug) {
@@ -87,8 +87,8 @@ function route(req: NextAuthRequest, nonce: string): NextResponse {
   if (legacy) return NextResponse.redirect(legacy, 308);
 
   // --- the root domain is the client app ---------------------------------
-  // pirs.io/<clinic>/... serves /app/<clinic>/... without the client ever
-  // seeing "/app", and pirs.io itself opens "Find your clinic". A rewrite, not
+  // deza.ai/<clinic>/... serves /app/<clinic>/... without the client ever
+  // seeing "/app", and deza.ai itself opens "Find your clinic". A rewrite, not
   // a redirect, so the short address stays in the browser. Reserved routes
   // (/api, /login, /m, /agency, …) are untouched.
   if (isClientHost(host)) {
@@ -112,7 +112,7 @@ function route(req: NextAuthRequest, nonce: string): NextResponse {
   }
 
   // --- custom subdomains open straight on their own login -----------------
-  // clinic.pirs.io → clinic login, admin.pirs.io → admin login. Any
+  // clinic.deza.ai → clinic login, admin.deza.ai → admin login. Any
   // other host (*.vercel.app, localhost) keeps the three-portal landing page.
   // 307, not permanent, so browsers don't cache it if the mapping changes.
   if (pathname === "/") {

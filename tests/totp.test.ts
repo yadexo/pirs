@@ -67,10 +67,14 @@ describe("TOTP (RFC 6238)", () => {
   });
 
   it("builds an otpauth:// URI an authenticator app can scan", () => {
-    const uri = totpUri("JBSWY3DPEHPK3PXP", "owner@clinic.example", "Pirs");
-    expect(uri).toMatch(/^otpauth:\/\/totp\/Pirs%3Aowner%40clinic\.example\?/);
+    // A neutral issuer: this is about URI construction, and importing the real
+    // one from lib/actions/two-factor.ts would drag the whole auth stack into
+    // a unit test.
+    const ISSUER = "Example";
+    const uri = totpUri("JBSWY3DPEHPK3PXP", "owner@clinic.example", ISSUER);
+    expect(uri.startsWith(`otpauth://totp/${ISSUER}%3Aowner%40clinic.example?`)).toBe(true);
     expect(uri).toContain("secret=JBSWY3DPEHPK3PXP");
-    expect(uri).toContain("issuer=Pirs");
+    expect(uri).toContain(`issuer=${ISSUER}`);
     expect(uri).toContain("digits=6");
     expect(uri).toContain("period=30");
   });

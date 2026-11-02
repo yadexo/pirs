@@ -9,7 +9,7 @@ export default async function AgencyLayout({ children }: { children: React.React
   const pathname = (await headers()).get("x-pathname") ?? "/agency";
 
   return (
-    <AgencyShell agencyName={agency?.name ?? "DezaAI"} support={support} pathname={pathname}>
+    <AgencyShell agencyName={agency?.name ?? "Deza"} support={support} pathname={pathname}>
       {children}
     </AgencyShell>
   );

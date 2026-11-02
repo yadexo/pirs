@@ -7,7 +7,7 @@
  */
 
 /** Marks a QR as one of ours, and as an item rather than a check-in. */
-export const REDEEM_QR_PREFIX = "pirs-item:";
+export const REDEEM_QR_PREFIX = "deza-item:";
 
 /**
  * No 0/O, 1/I/L or 5/S: this code gets read aloud and typed by a

@@ -117,7 +117,7 @@ export async function createMerchantAction(_prevState: unknown, formData: FormDa
   const agency = await rawDb.agencySettings.findFirst({
     select: { name: true, senderName: true, logoLightUrl: true, primaryColor: true },
   });
-  const agencyName = agency?.senderName || agency?.name || "DezaAI";
+  const agencyName = agency?.senderName || agency?.name || "Deza";
   // Same derivation as the owner's own staff profile above — the form has no
   // separate "your name" field, only the clinic's.
   const [ownerFirstName] = parsed.data.name.split(" ");
