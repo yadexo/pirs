@@ -188,11 +188,15 @@ Against production, in a fresh private window per host:
 - `login.deza.ai/` → "Find your clinic"
 - `login.deza.ai/<clinic>` → the client app, short address still in the bar
 - `login.deza.ai/app/<clinic>` → 308 to `/<clinic>`
-- `deza.ai/` and `www.deza.ai/` → **the marketing site**, untouched by this app
-- `deza.ai/<clinic>` → whatever the marketing site does with an unknown path.
-  It must *not* be the client app, and must not redirect anywhere we own.
-- `staging.deza.ai/app/<clinic>` → the client app on the long form;
-  `staging.deza.ai/<clinic>` → **404**. Staging is not a client host.
+- `deza.ai/` and `www.deza.ai/` → **the marketing site**. This is a check on
+  step 2, not on the code: no host table names the apex, but this app answers
+  on *any* domain attached to the Vercel project, showing the landing page at
+  `/` and — through the pre-`/app` compatibility route — redirecting
+  `/<clinic>` into the client app. Removing the two domains is what stops it.
+- `staging.deza.ai/app/<clinic>` → the client app on the long form.
+  `staging.deza.ai/<clinic>` → a 308 to `/app/<clinic>`, from that same
+  compatibility route; what it must *not* do is serve the short address
+  directly, which is what a client host does.
 - `pirs.io/<clinic>` → 308 to `https://login.deza.ai/<clinic>`
 - `www.pirs.io/<clinic>` → 308 to `https://login.deza.ai/<clinic>` —
   **never** to `https://deza.ai/<clinic>`, which is the marketing site
