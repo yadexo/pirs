@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { isClinicSlug, slugFromAppPath, slugFromScannedCode } from "@/lib/clinic-link";
-import { ROOT, WWW } from "./fixtures/hosts";
+import { CLIENT, ROOT, WWW } from "./fixtures/hosts";
 
 describe("clinic links", () => {
   it("reads the clinic from a scanned poster code, whatever the host", () => {
@@ -10,17 +10,20 @@ describe("clinic links", () => {
   });
 
   it("reads the short link a clinic prints now", () => {
-    expect(slugFromScannedCode(`https://${ROOT}/riverside-clinic?join=1`)).toBe("riverside-clinic");
-    expect(slugFromScannedCode(`https://${WWW}/riverside-clinic`)).toBe("riverside-clinic");
+    expect(slugFromScannedCode(`https://${CLIENT}/riverside-clinic?join=1`)).toBe("riverside-clinic");
     expect(slugFromScannedCode("/riverside-clinic")).toBe("riverside-clinic");
   });
 
   it("does not treat every website's first path segment as a clinic", () => {
     // Someone else's QR code must not open one of our clinics.
     expect(slugFromScannedCode("https://example.com/riverside-clinic")).toBeNull();
-    expect(slugFromScannedCode(`https://${ROOT}/some/other/page`)).toBeNull();
-    // Our domain as someone else's subdomain prefix is not our domain.
-    expect(slugFromScannedCode(`https://${ROOT}.evil.com/riverside-clinic`)).toBeNull();
+    expect(slugFromScannedCode(`https://${CLIENT}/some/other/page`)).toBeNull();
+    // Our own domain as someone else's subdomain prefix is not our domain.
+    expect(slugFromScannedCode(`https://${CLIENT}.evil.com/riverside-clinic`)).toBeNull();
+    // The apex and www are a marketing site, not a client host: a short link
+    // there is not a clinic code, however much it looks like one.
+    expect(slugFromScannedCode(`https://${ROOT}/riverside-clinic`)).toBeNull();
+    expect(slugFromScannedCode(`https://${WWW}/riverside-clinic`)).toBeNull();
   });
 
   it("ignores codes that aren't clinic links", () => {

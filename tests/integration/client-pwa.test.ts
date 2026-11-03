@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
 import { searchListedClinics } from "@/lib/clinic-directory";
-import { ROOT } from "../fixtures/hosts";
+import { CLIENT, ROOT } from "../fixtures/hosts";
 
 const manifestRoute = await import("@/app/app/[merchantSlug]/manifest.webmanifest/route");
 const iconRoute = await import("@/app/app/[merchantSlug]/app-icon/[file]/route");
@@ -67,15 +67,15 @@ describe("find your clinic + installable clinic app", () => {
   });
 
   /**
-   * On the root domain the whole host is the client app, so the scope is "/".
+   * On the client host the whole host is the client app, so the scope is "/".
    * Getting this wrong is silent and expensive: a scope of "/app/" while pages
    * are served at /<clinic> puts every deep link outside the installed app,
    * and iOS opens it in Safari with an address bar instead of full screen.
    */
-  it("scopes the installed app to the whole root domain when that host is the client app", async () => {
+  it("scopes the installed app to the whole host when that host is the client app", async () => {
     // The host arrives as x-forwarded-host behind the proxy, and `host` is a
     // forbidden header a Request won't carry anyway.
-    const res = await manifestRoute.GET(new Request("http://x", { headers: { "x-forwarded-host": ROOT } }), {
+    const res = await manifestRoute.GET(new Request("http://x", { headers: { "x-forwarded-host": CLIENT } }), {
       params: Promise.resolve({ merchantSlug: slug("pwa-hidden") }),
     });
     expect(res.status).toBe(200);
@@ -83,6 +83,23 @@ describe("find your clinic + installable clinic app", () => {
       id: `/${slug("pwa-hidden")}`,
       start_url: `/${slug("pwa-hidden")}`,
       scope: "/",
+    });
+  });
+
+  /**
+   * The apex is a separate marketing site. Were it ever attached to this app
+   * again, the manifest must not claim the whole origin — a scope of "/" there
+   * would put the marketing pages inside the installed clinic app.
+   */
+  it("keeps the scope under /app/ on the apex, which this app does not serve", async () => {
+    const res = await manifestRoute.GET(new Request("http://x", { headers: { "x-forwarded-host": ROOT } }), {
+      params: Promise.resolve({ merchantSlug: slug("pwa-hidden") }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      id: `/app/${slug("pwa-hidden")}`,
+      start_url: `/app/${slug("pwa-hidden")}`,
+      scope: "/app/",
     });
   });
 

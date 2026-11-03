@@ -18,12 +18,12 @@ export function slugFromAppPath(pathname: string): string | null {
 
 /**
  * Reads a scanned clinic QR, in either shape: the long /app/<clinic> path, or
- * the short deza.ai/<clinic> link clinics print now.
+ * the short login.deza.ai/<clinic> link clinics print now.
  *
  * Only the slug is taken from it, never the host, so a doctored code can at
  * most open another clinic's page here. The short shape is accepted only from
- * our own root domain (or a relative link) — otherwise every URL in the world
- * would look like a clinic code.
+ * one of our own client hosts (or a relative link) — otherwise every URL in
+ * the world would look like a clinic code.
  */
 export function slugFromScannedCode(value: string): string | null {
   const text = value.trim();
@@ -42,10 +42,10 @@ export function slugFromScannedCode(value: string): string | null {
 
   // The same host table the middleware routes on — not a second copy of it,
   // which is how a printed poster for a new domain comes to scan as nothing.
-  const ourRootDomain = url.hostname === "relative.invalid" || isClientHost(url.hostname);
-  if (!ourRootDomain) return null;
+  const onAClientHost = url.hostname === "relative.invalid" || isClientHost(url.hostname);
+  if (!onAClientHost) return null;
 
-  // One segment only: deza.ai/riverside, never deza.ai/some/other/page.
+  // One segment only: login.deza.ai/riverside, never login.deza.ai/some/other/page.
   const [, first = "", second] = url.pathname.split("/");
   if (second) return null;
   const slug = first ? decodeURIComponent(first) : null;
