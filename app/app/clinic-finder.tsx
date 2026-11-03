@@ -12,7 +12,7 @@ import { useQrCamera, type CameraProblem } from "@/components/use-qr-camera";
 
 /**
  * `prefix` is where clinics live on this host: "" on the root domain, where a
- * clinic is deza.ai/riverside, and "/app" elsewhere. Opening a clinic on the
+ * clinic is login.deza.ai/riverside, and "/app" elsewhere. Opening a clinic on the
  * wrong one of those would leave the installed app's scope.
  */
 export function ClinicFinder({ appName, prefix }: { appName: string; prefix: string }) {

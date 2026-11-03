@@ -234,7 +234,7 @@ describe("redeemable items", () => {
     expect(tokenFromScan(redeemQrValue(token))).toBe(token);
     // A check-in code is tenant.client.expiry.signature — not an item.
     expect(tokenFromScan("tenant123.client456.1790000000.c2lnbmF0dXJl")).toBeNull();
-    expect(tokenFromScan("https://pirs.io/testclinic")).toBeNull();
+    expect(tokenFromScan("https://login.deza.ai/testclinic")).toBeNull();
     expect(tokenFromScan("")).toBeNull();
   });
 });

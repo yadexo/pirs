@@ -21,7 +21,7 @@ describe("item codes", () => {
   it("refuses anything that isn't one of its codes", () => {
     // The check-in code from the Scan tab: same camera, different meaning.
     expect(tokenFromScan("tenant123.client456.1790000000.c2lnbmF0dXJl")).toBeNull();
-    expect(tokenFromScan("https://deza.ai/testclinic")).toBeNull();
+    expect(tokenFromScan("https://login.deza.ai/testclinic")).toBeNull();
     expect(tokenFromScan(REDEEM_QR_PREFIX)).toBeNull();
     expect(tokenFromScan(`${REDEEM_QR_PREFIX}short`)).toBeNull();
     expect(tokenFromScan(`${REDEEM_QR_PREFIX}has spaces in it and is long enough`)).toBeNull();

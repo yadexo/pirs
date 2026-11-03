@@ -30,7 +30,7 @@ export function settingsRedirect(req: NextRequest, merchantId: string, notice?: 
 }
 
 /**
- * The origin the clinic's browser is actually on (clinic.deza.ai, a preview
+ * The origin the clinic's browser is actually on (app.deza.ai, a preview
  * URL, localhost), so Stripe returns them to the same host they left from —
  * where their session cookie lives.
  */

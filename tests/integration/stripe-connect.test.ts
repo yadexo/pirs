@@ -12,7 +12,7 @@ vi.mock("@/client-auth", () => ({ clientAuth: vi.fn(), clientSignIn: vi.fn(), cl
 const { handleConnect, handleRefresh, handleReturn } = await import("@/lib/stripe-connect-http");
 const webhook = await import("@/app/api/webhooks/stripe/route");
 
-const ORIGIN = "https://clinic.deza.ai";
+const ORIGIN = "https://app.deza.ai";
 
 /** A Stripe client that records the v2 calls and returns accounts we control. */
 function fakeStripe() {
@@ -58,10 +58,10 @@ describe("Stripe Connect onboarding", () => {
     return new NextRequest(`${ORIGIN}/m/${clinic}/stripe/connect`, {
       method: "POST",
       body,
-      headers: { origin, host: "clinic.deza.ai", "x-forwarded-proto": "https", "content-type": "application/x-www-form-urlencoded" },
+      headers: { origin, host: "app.deza.ai", "x-forwarded-proto": "https", "content-type": "application/x-www-form-urlencoded" },
     });
   };
-  const get = (path: string) => new NextRequest(`${ORIGIN}/m/${clinic}/stripe/${path}`, { headers: { host: "clinic.deza.ai", "x-forwarded-proto": "https" } });
+  const get = (path: string) => new NextRequest(`${ORIGIN}/m/${clinic}/stripe/${path}`, { headers: { host: "app.deza.ai", "x-forwarded-proto": "https" } });
   const notice = (res: Response) => new URL(res.headers.get("location")!).searchParams.get("stripe");
 
   beforeAll(async () => {
