@@ -137,6 +137,38 @@ describe("password tokens and sessions", () => {
       expect(sent.calls).toHaveLength(0);
     });
 
+    /**
+     * A client's reset link has to open on the client host. One host serves
+     * everything in development, so this only shows with CLIENT_APP_URL set —
+     * and in production a link to the portal host would land the client
+     * outside the installed app's scope, on a host their session cookie does
+     * not cover.
+     *
+     * Fresh accounts, because the rate limit is three requests an hour per
+     * address and the cases above have already spent most of them.
+     */
+    it("sends a client to the client host, and staff to this deployment", async () => {
+      const clientEmail = `origin-client-${stamp}@x.com`;
+      const staffEmail = `origin-staff-${stamp}@x.com`;
+      await rawDb.user.create({ data: { tenantId, email: clientEmail, passwordHash: "!", role: "CUSTOMER" } });
+      await rawDb.user.create({ data: { tenantId, email: staffEmail, passwordHash: "!", role: "STAFF" } });
+
+      const original = process.env.CLIENT_APP_URL;
+      process.env.CLIENT_APP_URL = "https://login.example.test";
+      try {
+        await ask(clientEmail, slug);
+        expect(sent.calls[0]!.body).toContain("https://login.example.test/set-password?token=");
+        sent.calls.length = 0;
+
+        await ask(staffEmail);
+        expect(sent.calls[0]!.body).toContain(`${process.env.APP_URL}/set-password?token=`);
+        expect(sent.calls[0]!.body).not.toContain("login.example.test");
+      } finally {
+        if (original === undefined) delete process.env.CLIENT_APP_URL;
+        else process.env.CLIENT_APP_URL = original;
+      }
+    });
+
     it("stops sending after three requests an hour for one address, still answering the same", async () => {
       const email = `staff-${stamp}@x.com`;
       await rawDb.rateLimitBucket.deleteMany({ where: { key: `reset:email:${email}` } });

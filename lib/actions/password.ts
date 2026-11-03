@@ -8,7 +8,7 @@ import { rawDb } from "@/lib/db";
 import { rateLimit } from "@/lib/rate-limit";
 import { getEmailProvider } from "@/lib/providers/notifications";
 import { consumePasswordToken, issuePasswordToken, MIN_PASSWORD_LENGTH, RESET_TTL_MS } from "@/lib/password-tokens";
-import { appUrl } from "@/lib/app-url";
+import { appUrl, clientAppOrigin } from "@/lib/app-url";
 
 type FormState = { error?: string; sent?: boolean } | undefined;
 
@@ -52,7 +52,11 @@ export async function requestPasswordResetAction(_prev: FormState, fd: FormData)
 
   if (account) {
     const token = await issuePasswordToken(account.id, RESET_TTL_MS);
-    const resetUrl = `${appUrl()}/set-password?token=${encodeURIComponent(token)}`;
+    // A client's link has to open on the client host — the same origin as the
+    // app they are signing in to. Staff and platform admins belong on this
+    // deployment's own host, which is the portal.
+    const origin = clinicSlug ? clientAppOrigin() : appUrl();
+    const resetUrl = `${origin}/set-password?token=${encodeURIComponent(token)}`;
 
     // A platform admin has no clinic — the agency's own identity stands in,
     // the same as the welcome email a new clinic owner gets.
