@@ -10,6 +10,10 @@ panel).
 1. Resend dashboard → **Domains → Add Domain**. Enter the domain you'll send
    from — e.g. `deza.ai` (production sends from the live domain; staging from
    `staging@deza.ai`, the **same** domain, no separate DNS needed — see §3).
+
+   The apex `deza.ai` is right here even though the app itself is served on
+   `login.deza.ai` and `app.deza.ai`: mail is sent *from* the apex, nothing is
+   served on it. Don't "correct" these records to a subdomain.
 2. Resend shows you the exact records to add. They look like this (your real
    values come from the dashboard, not this doc):
 

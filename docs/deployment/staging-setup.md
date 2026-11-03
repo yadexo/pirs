@@ -8,14 +8,16 @@ test on the fixed URL, merge to `main`" is all you need (see `CLAUDE.md`).
 Known facts this doc assumes (yours may differ if something changes):
 
 - Vercel project `pirs`, deploying from GitHub `yadexo/pirs`, production
-  domains `deza.ai` and `clinic.deza.ai`. The project and repository names
+  domains `login.deza.ai` (client app) and `app.deza.ai` (clinic portal).
+  The apex `deza.ai` and `www` are a separate marketing site and are not
+  attached to this project. The project and repository names
   predate the rebrand and are deliberately unchanged: renaming the Vercel
   project would change every preview URL, and the `*.vercel.app` hosts those
   produce are asserted on in `tests/portal-hosts.test.ts`.
 - Neon project with a `production` branch at `ep-frosty-cloud-zal3mzce`
   (region `eu-west-2`, database `neondb`).
 - Stripe: still in test mode everywhere ("Pirs.io sandbox" keys), with a
-  Connect webhook at `https://clinic.deza.ai/api/webhooks/stripe`.
+  Connect webhook at `https://app.deza.ai/api/webhooks/stripe`.
 
 ## 1. Neon: create the staging branch
 
@@ -59,12 +61,15 @@ random per-deployment unless you pin a domain to the branch:
    to bookmark on your phone.
 
 This single domain reaches all three surfaces by path
-(`/login`, `/app/<clinic-slug>`, `/m/<id>`, `/agency`) — it won't automatically
-get the short `deza.ai/<clinic>` or `clinic.deza.ai` auto-redirect behaviour,
-because those hostnames are hardcoded in `lib/portal-hosts.ts`. That's fine
-for testing the app itself; if you later want staging to mirror the exact
-hostname-based routing too, add `staging.deza.ai` style entries there — it's
-a few lines, not required for this setup.
+(`/login`, `/app/<clinic-slug>`, `/m/<id>`, `/agency`) — it deliberately does
+not get the short `login.deza.ai/<clinic>` form or the `app.deza.ai` login
+redirect, because the hosts those belong to are derived from
+`NEXT_PUBLIC_ROOT_DOMAIN` and staging is not one of them. That's fine for
+testing the app itself.
+
+Don't "fix" it by adding `staging.deza.ai` to `NEXT_PUBLIC_EXTRA_CLIENT_HOSTS`
+unless you also want short links minted *from* staging — see the
+`CLIENT_APP_URL` row below for why that is a trap.
 
 ## 3. Vercel: environment variables
 
@@ -90,7 +95,7 @@ New**, paste the value, tick only **Preview**, save.
 | `EMAIL_FROM` | something that reads as staging, e.g. `staging@deza.ai` | so a test email is never mistaken for a real one |
 | `STORAGE_PROVIDER` / `S3_*` | reuse Production's bucket and credentials | uploads from staging land in the same bucket; acceptable for test data, see note below if that bothers you |
 | `APP_URL` | `https://staging.deza.ai` | |
-| `CLIENT_APP_URL` | `https://staging.deza.ai` | same domain serves both here, unlike production's split |
+| `CLIENT_APP_URL` | **leave unset** | setting it switches every generated link — QR codes, emails, push payloads — to the short `/<clinic>` form, which does not resolve on staging because staging is not a client host. Unset keeps staging on the long `/app/<clinic>` links, which do work |
 | `APP_ENV` | `staging` | used only by `lib/observability.ts` error reports, if you set `ERROR_WEBHOOK_URL` too |
 | `PLATFORM_FEE_PERCENT` | reuse Production's (or leave unset) | |
 | `CRON_SECRET` | leave unset, or set your own | staging doesn't need the cron jobs production has (see step 5) |
@@ -149,7 +154,7 @@ Open `https://staging.deza.ai` on your phone to test. When it's right:
 ```bash
 git checkout main && git pull
 git merge staging
-git push                 # deploys to deza.ai / clinic.deza.ai
+git push                 # deploys to login.deza.ai / app.deza.ai
 ```
 
 If a change needs a migration, run `npm run stg:migrate` against the staging
