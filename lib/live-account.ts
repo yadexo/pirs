@@ -1,5 +1,6 @@
 import "server-only";
 import { rawDb } from "@/lib/db";
+import { logSignIn } from "@/lib/signin-log";
 import type { SessionPermissions } from "@/types/next-auth";
 
 export interface LiveAccount {
@@ -36,10 +37,30 @@ export async function loadLiveAccount(userId: string, authTime?: number): Promis
       twoFactor: { select: { confirmedAt: true } },
     },
   });
-  if (!user || user.status !== "ACTIVE") return null;
-  if (isBlockedStaff(user)) return null;
+  // Each refusal is logged as a reason code: the person sees only "your access
+  // changed", and a session refused here *after* a correct sign-in used to
+  // leave nothing in the logs at all.
+  if (!user || user.status !== "ACTIVE") {
+    logSignIn("session_refused_account_inactive");
+    return null;
+  }
+  if (isBlockedStaff(user)) {
+    logSignIn("session_refused_staff_blocked");
+    return null;
+  }
   // Sessions from before a password reset or account closure are over.
-  if (user.sessionsValidAfter && (!authTime || authTime < user.sessionsValidAfter.getTime())) return null;
+  if (user.sessionsValidAfter) {
+    if (!authTime) {
+      logSignIn("session_refused_no_auth_time");
+      return null;
+    }
+    if (authTime < user.sessionsValidAfter.getTime()) {
+      // How far ahead the cut-off is of the moment this session began. A few
+      // seconds is a real reset; minutes or more is a clock that disagreed.
+      logSignIn("session_refused_after_reset", { ahead_s: (user.sessionsValidAfter.getTime() - authTime) / 1000 });
+      return null;
+    }
+  }
   return { role: user.role, tenantId: user.tenantId, permissions: permissionsFor(user), twoFactorConfirmed: !!user.twoFactor?.confirmedAt };
 }
 

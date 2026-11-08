@@ -7,6 +7,7 @@ import { rawDb } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
 import { LOGIN_ATTEMPTS_PER_ACCOUNT, LOGIN_ATTEMPTS_PER_IP, LOGIN_WINDOW_MS } from "@/lib/login-limits";
+import { logSignIn } from "@/lib/signin-log";
 import { permissionsFor } from "@/lib/live-account";
 import { getTwoFactorStatus, verifyTwoFactorCode } from "@/lib/two-factor";
 import type { SessionPermissions, SessionUserShape } from "@/types/next-auth";
@@ -100,7 +101,15 @@ export async function authorizeCredentials(
   const password = credentials?.password as string | undefined;
   const tenantSlug = credentials?.tenantSlug as string | undefined;
 
-  if (!portal || !email || !password) return null;
+  // Every outcome below is logged as a reason code (lib/signin-log.ts), so a
+  // failed sign-in can be told apart in the logs. What the caller is told is
+  // unchanged: still one generic failure, so the form cannot be used to find
+  // out which part was wrong.
+  const at = { audience, portal };
+  if (!portal || !email || !password) {
+    logSignIn("missing_fields", { audience });
+    return null;
+  }
 
   // Both limits run regardless of which trips first, so a attacker spraying
   // one password across many accounts from one address is still caught, and
@@ -110,7 +119,10 @@ export async function authorizeCredentials(
     rateLimit(`login:ip:${ip}`, LOGIN_ATTEMPTS_PER_IP, LOGIN_WINDOW_MS),
   ]);
   const limited = !byAccount.ok ? byAccount : !byIp.ok ? byIp : null;
-  if (limited) throw new RateLimitedSignIn(limited.retryAfterMs);
+  if (limited) {
+    logSignIn(!byAccount.ok ? "rate_limited_account" : "rate_limited_ip", at);
+    throw new RateLimitedSignIn(limited.retryAfterMs);
+  }
 
   const roles = audience === "client" ? (["CUSTOMER"] as const) : (["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF"] as const);
   let user;
@@ -120,21 +132,50 @@ export async function authorizeCredentials(
     // Same address registered under two clinics is ambiguous — we cannot
     // guess which, and picking one would be a security bug.
     const match = matches[0];
-    if (matches.length !== 1 || !match) return null;
+    if (matches.length > 1) {
+      logSignIn("ambiguous_email", { ...at, roles: matches.map((m) => m.role) });
+      return null;
+    }
+    if (!match) {
+      logSignIn("no_such_user", at);
+      return null;
+    }
     // A suspended clinic must not be reachable through this door.
-    if (match.tenant && match.tenant.status !== "ACTIVE") return null;
+    if (match.tenant && match.tenant.status !== "ACTIVE") {
+      logSignIn("clinic_not_active", { ...at, role: match.role });
+      return null;
+    }
     user = match;
   } else {
-    if (portal !== "customer" || audience !== "client" || !tenantSlug) return null;
+    if (portal !== "customer" || audience !== "client" || !tenantSlug) {
+      logSignIn("invalid_portal", at);
+      return null;
+    }
     const tenant = await rawDb.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true, status: true } });
-    if (!tenant || tenant.status !== "ACTIVE") return null;
+    if (!tenant || tenant.status !== "ACTIVE") {
+      logSignIn("clinic_not_active", at);
+      return null;
+    }
     user = await rawDb.user.findFirst({ where: { email, tenantId: tenant.id, role: "CUSTOMER" }, include });
   }
 
-  if (!user || user.status !== "ACTIVE") return null;
+  if (!user) {
+    logSignIn("no_such_user", at);
+    return null;
+  }
+  if (user.status !== "ACTIVE") {
+    logSignIn("account_not_active", { ...at, role: user.role });
+    return null;
+  }
   // Deactivated staff, or a staff login with no profile, cannot sign in.
-  if (user.role === "STAFF" && (!user.staffProfile || !user.staffProfile.active)) return null;
-  if (!(await verifyPassword(password, user.passwordHash))) return null;
+  if (user.role === "STAFF" && (!user.staffProfile || !user.staffProfile.active)) {
+    logSignIn("staff_blocked", { ...at, role: user.role });
+    return null;
+  }
+  if (!(await verifyPassword(password, user.passwordHash))) {
+    logSignIn("wrong_password", { ...at, role: user.role });
+    return null;
+  }
 
   // Second factor, only for an account that has confirmed one. A secret
   // generated mid-setup and never confirmed doesn't count — see
@@ -142,11 +183,18 @@ export async function authorizeCredentials(
   const twoFactor = await getTwoFactorStatus(user.id);
   if (twoFactor?.confirmedAt) {
     const code = (credentials?.totpCode as string | undefined)?.trim();
-    if (!code) throw new TwoFactorRequiredSignIn();
-    if (!(await verifyTwoFactorCode(user.id, twoFactor.secret, code))) throw new InvalidTwoFactorCodeSignIn();
+    if (!code) {
+      logSignIn("two_factor_required", { ...at, role: user.role });
+      throw new TwoFactorRequiredSignIn();
+    }
+    if (!(await verifyTwoFactorCode(user.id, twoFactor.secret, code))) {
+      logSignIn("two_factor_invalid_code", { ...at, role: user.role });
+      throw new InvalidTwoFactorCodeSignIn();
+    }
   }
 
   await rawDb.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  logSignIn("success", { ...at, role: user.role });
 
   const permissions: SessionPermissions = permissionsFor(user);
   let name = email;

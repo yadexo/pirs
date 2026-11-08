@@ -19,6 +19,7 @@ import { getEmailProvider } from "@/lib/providers/notifications";
 import { senderFor } from "@/lib/emails/sender";
 import { welcomeClientEmail } from "@/lib/emails/templates";
 import { resolveLocale } from "@/lib/locale";
+import { logSignIn } from "@/lib/signin-log";
 
 export type ActionResult = { error: string } | never;
 
@@ -95,10 +96,18 @@ export async function unifiedSignInAction(_prevState: unknown, formData: FormDat
   const totpCode = String(formData.get("totpCode") ?? "").trim();
   if (!email || !password) return { error: "Email and password are required." };
 
-  const user = await rawDb.user.findFirst({
+  // The same row findFirst would have picked — no order is asked for, so which
+  // one that is is the database's choice. When the address is on more than one
+  // account that choice decides which sign-in (staff or client) is used, so it
+  // is logged: an admin whose email is also a client account may land on the
+  // wrong one.
+  const accounts = await rawDb.user.findMany({
     where: { email: email.toLowerCase(), role: { in: ["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF", "CUSTOMER"] } },
     select: { role: true, tenantId: true, tenant: { select: { slug: true } } },
+    take: 5,
   });
+  const user = accounts[0] ?? null;
+  if (accounts.length > 1) logSignIn("multiple_accounts_for_email", { roles: accounts.map((a) => a.role) });
 
   const next = String(formData.get("next") ?? "") || null;
 
