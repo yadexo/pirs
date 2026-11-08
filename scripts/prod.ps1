@@ -35,7 +35,7 @@ Skip the confirmation. Intended for scripts, not for day-to-day use.
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("status", "migrate", "stripe", "apple-pay", "items", "admin", "reset-admin", "client", "clinic-login", "push-debug", "membership-debug", "storage-check")]
+  [ValidateSet("status", "migrate", "stripe", "apple-pay", "items", "admin", "reset-admin", "client", "clinic-login", "push-debug", "membership-debug", "storage-check", "admins")]
   [string]$Task = "status",
 
   [string]$Url,
@@ -88,6 +88,7 @@ $commands = @{
   "clinic-login" = @("npx", "tsx", "prisma/clinic-login.ts")
   "push-debug"   = @("npx", "tsx", "prisma/push-debug.ts")
   "membership-debug" = @("npx", "tsx", "prisma/membership-debug.ts")
+  "admins"       = @("npx", "tsx", "prisma/list-platform-admins.ts")
 }
 $command = $commands[$Task]
 $exe = $command[0]
@@ -95,7 +96,7 @@ $exe = $command[0]
 $commandArgs = @($command[1..($command.Length - 1)]) + @($Rest | Where-Object { $_ })
 
 # "stripe" only writes when asked to store what Stripe says.
-$readOnly = $Task -in @("status", "push-debug", "membership-debug") -or ($Task -eq "stripe" -and -not ($Rest -contains "--sync"))
+$readOnly = $Task -in @("status", "push-debug", "membership-debug", "admins") -or ($Task -eq "stripe" -and -not ($Rest -contains "--sync"))
 Write-Host ""
 Write-Host "Task:     $Task" -ForegroundColor Cyan
 Write-Host "Database: $target" -ForegroundColor Cyan

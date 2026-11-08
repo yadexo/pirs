@@ -6,6 +6,7 @@ import { CredentialsSignin } from "@auth/core/errors";
 import { rawDb } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
+import { LOGIN_ATTEMPTS_PER_ACCOUNT, LOGIN_ATTEMPTS_PER_IP, LOGIN_WINDOW_MS } from "@/lib/login-limits";
 import { permissionsFor } from "@/lib/live-account";
 import { getTwoFactorStatus, verifyTwoFactorCode } from "@/lib/two-factor";
 import type { SessionPermissions, SessionUserShape } from "@/types/next-auth";
@@ -105,8 +106,8 @@ export async function authorizeCredentials(
   // one password across many accounts from one address is still caught, and
   // a botnet trying one account from many addresses still is too.
   const [byAccount, byIp] = await Promise.all([
-    rateLimit(`login:${portal}:${email}`, 10, 10 * 60 * 1000),
-    rateLimit(`login:ip:${ip}`, 30, 10 * 60 * 1000),
+    rateLimit(`login:${portal}:${email}`, LOGIN_ATTEMPTS_PER_ACCOUNT, LOGIN_WINDOW_MS),
+    rateLimit(`login:ip:${ip}`, LOGIN_ATTEMPTS_PER_IP, LOGIN_WINDOW_MS),
   ]);
   const limited = !byAccount.ok ? byAccount : !byIp.ok ? byIp : null;
   if (limited) throw new RateLimitedSignIn(limited.retryAfterMs);
