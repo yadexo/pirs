@@ -72,6 +72,7 @@ Wait for a certificate on all four before going further.
 | Variable | Production | Preview |
 |---|---|---|
 | `NEXT_PUBLIC_ROOT_DOMAIN` | `deza.ai` | `deza.ai` |
+| `AUTH_URL`, `NEXTAUTH_URL` | **unset** | **unset** |
 | `APP_URL` | `https://app.deza.ai` | `https://staging.deza.ai` |
 | `CLIENT_APP_URL` | `https://login.deza.ai` | **unset** — see below |
 | `EMAIL_FROM` | `no-reply@deza.ai` | `staging@deza.ai` |
@@ -84,6 +85,18 @@ link generation from the long `/app/<clinic>` form to the short `/<clinic>`
 one, everywhere at once — QR codes, emails, push payloads. Staging is not a
 client host, so `staging.deza.ai/<clinic>` does not resolve: a short link
 minted there is dead, including on anything printed from staging.
+
+**`AUTH_URL` and `NEXTAUTH_URL` must be unset, on every environment.** Auth.js
+uses either one *instead of* the host a request arrived on. This app answers on
+several hosts, so with one set, a sign-in on any host but that one succeeds,
+sets its cookie on its own host, and is then redirected to the pinned host — which
+has no cookie, and shows its own login. It looks as though signing in did
+nothing. Pinned to `https://app.deza.ai`, the clinic login works and the
+platform admin login at `admin.deza.ai` silently doesn't, which looks like a
+host-routing bug and is not one. The server logs a
+`[auth][warn]` line at startup if either is set, but only warns: it changes
+nothing. Remove it in Vercel and **redeploy** — like every variable here it is
+bound to a deployment, not applied on save.
 
 Leave `NEXT_PUBLIC_CLIENT_HOST`, `CLINIC_HOST`, `ADMIN_HOST` and
 `NEXT_PUBLIC_EXTRA_CLIENT_HOSTS` unset — each host is derived from
@@ -215,8 +228,65 @@ Against production, in a fresh private window per host:
 - Scan a clinic's QR from the clinic portal and confirm it opens the clinic.
 - Use "forgot password" inside a clinic's client app and confirm the emailed
   link is on `login.deza.ai`, not `app.deza.ai`.
+- Open `https://admin.deza.ai/api/auth/providers`, then the same on
+  `app.deza.ai` and `login.deza.ai`. Each `signinUrl` and `callbackUrl` must
+  name **the host you opened**. One that names a different host means
+  `AUTH_URL`/`NEXTAUTH_URL` is set, and sign-in on every other host is broken.
+- Sign in at `admin.deza.ai` end to end, 2FA included, and land on `/agency`.
 
-## 11. Check the database
+## 11. A platform admin can't sign in
+
+Account ACTIVE, 2FA confirmed, no lockout, password right — and still no. Work
+through these in order; each takes a minute and none changes anything.
+
+1. **Did the server accept the sign-in?** Run `npm run prod:admins`, make one
+   failed attempt, run it again. If **last sign-in moved**, the password and
+   code were accepted and the problem is *after* sign-in (cause A or B below).
+   If it did not move, sign-in was refused before that (cause C).
+2. **Where did the browser end up?** In devtools → Network, look at the sign-in
+   POST. A `303` whose `Location` is another host is cause A. A `303` to
+   `/agency` followed by a bounce to `/login?reason=access-changed` is cause B.
+   The form coming back with a red message is cause C: read the message.
+3. **Read the log line.** In Vercel → Logs, search `[signin]`. One line per
+   outcome, a reason code and a few labels, never an email, password or address:
+
+   | `outcome=` | Meaning |
+   |---|---|
+   | `success` | Password and code were accepted. If the person is still stuck, it is A or B. |
+   | `wrong_password` | The account was found and the password did not match. |
+   | `no_such_user` | No account with that address, at that door. |
+   | `ambiguous_email` | The address is on more than one staff-type account; `roles=` says which. Sign-in refuses both. |
+   | `multiple_accounts_for_email` | Seen at `/login` before the password: the address is on several accounts, e.g. `roles=CUSTOMER+PLATFORM_ADMIN`. Which sign-in it is sent to is left to the database, so an admin can land on the client one. |
+   | `account_not_active` | The account is DISABLED or still INVITED. |
+   | `clinic_not_active` | The clinic is suspended. |
+   | `staff_blocked` | A staff member whose profile is missing or deactivated. |
+   | `rate_limited_account`, `rate_limited_ip` | Too many attempts. Clears itself within 10 minutes; `prod:admins` shows the time left. |
+   | `two_factor_required` | Not a failure: the correct first step of a 2FA sign-in. |
+   | `two_factor_invalid_code` | Wrong code, or one already used within its 30 seconds. |
+   | `session_refused_after_reset` | Sign-in worked, then the session was refused because it began before the account's `sessionsValidAfter`. `ahead_s=` is how far ahead that cut-off was: a few seconds is a reset a moment ago, minutes or more is a clock that disagreed. |
+   | `session_refused_account_inactive`, `session_refused_staff_blocked`, `session_refused_no_auth_time` | The same, for an account switched off since, a staff member no longer able to act, or a session with no start time. |
+
+   Auth.js also logs `[auth][error] CredentialsSignin` for every refused
+   sign-in, including each normal 2FA first step; ignore those and read `[signin]`.
+   No `[signin]` failure and no error at all, but the person is still at the
+   login: cause A.
+
+**Causes**
+
+- **A. `AUTH_URL` / `NEXTAUTH_URL` is set.** The providers check in step 10
+  shows it. Unset it in Vercel and redeploy.
+- **B. The session cut-off is in the future.** `prod:admins` shows each admin's
+  `sessionsValidAfter` and flags one that has not passed yet, and compares the
+  database's clock with your computer's. `npm run prod:reset-admin` stamps the
+  cut-off with the **database's** clock, so a PC clock that runs ahead no longer
+  matters; a reset made *before* that fix, from a computer that ran ahead, left
+  one in the future. It ends by itself at the time shown. To end it sooner, run
+  `prod:reset-admin` once more.
+- **C. The account itself.** The address is also on another account
+  (`prod:admins` lists the other accounts' roles, nothing more), or it is stored
+  with capital letters, which sign-in can never find.
+
+## 12. Check the database
 
 Code fallbacks are invisible once an `AgencySettings` row exists, and
 `prisma/seed.ts` never creates one — so the live row decides what the platform
@@ -227,7 +297,7 @@ say pirs.io. Change it through that form, not with SQL.
 The migration shipped with this change only alters the column's *default*,
 which does not touch rows that already exist.
 
-## 12. Tell users
+## 13. Tell users
 
 Everyone has to sign in again: every cookie is host-only, so a session on the
 old domain is never sent to the new one. There is no way around this — a
