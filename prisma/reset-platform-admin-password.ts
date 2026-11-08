@@ -64,7 +64,8 @@ export async function resetPlatformAdminPassword(
 
     let lockoutCleared = 0;
     if (input.clearLockout) {
-      // Only the sign-in counters for this email, e.g. "login:unified:<email>".
+      // Only the sign-in counters for this email, e.g. "login:admin:<email>" —
+      // every door's counter for it, whatever the door is called.
       lockoutCleared = (await tx.rateLimitBucket.deleteMany({ where: { key: { startsWith: "login:", endsWith: `:${email}` } } })).count;
     }
     return { id: admin.id, email: admin.email, lockoutCleared };

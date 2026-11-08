@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { auth } from "@/auth";
+import { openedDoor } from "@/lib/portal-scope";
 import { rawDb } from "@/lib/db";
 import { LoginForm } from "./login-form";
 import { loadLiveAccount } from "@/lib/live-account";
@@ -33,6 +35,13 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const session = await auth();
   const agency = await rawDb.agencySettings.findFirst();
   const portal = target ? await describeDestination(target) : null;
+
+  // Which door this is: the host decides (admin.deza.ai is the admin login
+  // whatever the link said), and only where the host identifies no surface does
+  // the destination get a say. It scopes which accounts the sign-in considers,
+  // so one address can be a platform admin, a clinic owner and a client at once.
+  const requestHeaders = await headers();
+  const door = openedDoor(requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"), target);
 
   // A session whose account was deactivated since is treated as signed out;
   // otherwise the portals send it here and this page would send it back.
@@ -134,7 +143,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             </p>
           )}
           <div className="mt-5">
-            <LoginForm next={target} />
+            <LoginForm next={target} portal={door.portal} clinic={door.tenantSlug} />
           </div>
         </div>
 

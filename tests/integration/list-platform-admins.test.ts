@@ -39,15 +39,15 @@ describe("list-platform-admins script", () => {
     await rawDb.rateLimitBucket.createMany({
       data: [
         // Locked: past the account limit, 7 minutes to go.
-        { key: `login:unified:${bareAdmin}`, count: LOGIN_ATTEMPTS_PER_ACCOUNT + 1, resetAt: inMinutes(7) },
+        { key: `login:admin:${bareAdmin}`, count: LOGIN_ATTEMPTS_PER_ACCOUNT + 1, resetAt: inMinutes(7) },
         // Running but not locked.
-        { key: `login:unified:${protectedAdmin}`, count: 3, resetAt: inMinutes(4) },
+        { key: `login:admin:${protectedAdmin}`, count: 3, resetAt: inMinutes(4) },
         // Exactly at the limit is still allowed: it is the next attempt that is refused.
-        { key: `login:unified:lpa-edge-${stamp}@example.com`, count: LOGIN_ATTEMPTS_PER_ACCOUNT, resetAt: inMinutes(2) },
+        { key: `login:admin:lpa-edge-${stamp}@example.com`, count: LOGIN_ATTEMPTS_PER_ACCOUNT, resetAt: inMinutes(2) },
         // A locked address.
         { key: `login:ip:203.0.113.${stamp % 250}`, count: LOGIN_ATTEMPTS_PER_IP + 5, resetAt: inMinutes(9) },
         // Over the limit but already over: must not be reported as a lock.
-        { key: `login:unified:lpa-expired-${stamp}@example.com`, count: 99, resetAt: new Date(now.getTime() - 1000) },
+        { key: `login:admin:lpa-expired-${stamp}@example.com`, count: 99, resetAt: new Date(now.getTime() - 1000) },
         // Not a sign-in counter at all.
         { key: `register:lpa-${stamp}`, count: 99, resetAt: inMinutes(5) },
       ],
@@ -90,7 +90,7 @@ describe("list-platform-admins script", () => {
       const report = await listPlatformAdmins(db, now);
       expect(find(report, bareAdmin)).toMatchObject({
         kind: "account",
-        portal: "unified",
+        portal: "admin",
         attempts: LOGIN_ATTEMPTS_PER_ACCOUNT + 1,
         limit: LOGIN_ATTEMPTS_PER_ACCOUNT,
         locked: true,
@@ -132,7 +132,7 @@ describe("list-platform-admins script", () => {
       const before = [await rawDb.user.count(), await rawDb.rateLimitBucket.count(), await rawDb.twoFactorSecret.count()];
       await listPlatformAdmins(db, now);
       expect([await rawDb.user.count(), await rawDb.rateLimitBucket.count(), await rawDb.twoFactorSecret.count()]).toEqual(before);
-      const bucket = await rawDb.rateLimitBucket.findUniqueOrThrow({ where: { key: `login:unified:${bareAdmin}` } });
+      const bucket = await rawDb.rateLimitBucket.findUniqueOrThrow({ where: { key: `login:admin:${bareAdmin}` } });
       expect(bucket.count).toBe(LOGIN_ATTEMPTS_PER_ACCOUNT + 1);
     });
 

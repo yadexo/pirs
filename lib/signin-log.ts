@@ -24,7 +24,9 @@ export type SignInOutcome =
   | "rate_limited_account"
   | "rate_limited_ip"
   | "no_such_user"
-  /** The email is on more than one staff-type account, so there is no single account to sign in to. */
+  /** The address has an account, but not of the kind this door signs in — a clinic owner at the admin login, say. */
+  | "no_account_of_type"
+  /** The email is on more than one account of this door's own kind, so there is no single account to sign in to. */
   | "ambiguous_email"
   | "clinic_not_active"
   | "account_not_active"
@@ -32,8 +34,6 @@ export type SignInOutcome =
   | "wrong_password"
   | "two_factor_required"
   | "two_factor_invalid_code"
-  /** Seen before the password is checked: the email is on several accounts, which can send it to the wrong sign-in. */
-  | "multiple_accounts_for_email"
   /** A session that signed in fine, refused afterwards (lib/live-account.ts). */
   | "session_refused_account_inactive"
   | "session_refused_staff_blocked"
@@ -51,7 +51,7 @@ export interface SignInFields {
 }
 
 /** Outcomes that are expected in normal use and are not a problem. */
-const INFO: ReadonlySet<SignInOutcome> = new Set(["success", "two_factor_required", "multiple_accounts_for_email"]);
+const INFO: ReadonlySet<SignInOutcome> = new Set(["success", "two_factor_required"]);
 
 /**
  * Letters, digits and `_ + -`. No "@", colon, dot, slash or space, so nothing
@@ -62,22 +62,60 @@ const INFO: ReadonlySet<SignInOutcome> = new Set(["success", "two_factor_require
 const SAFE = /^[A-Za-z0-9_+-]{1,64}$/;
 const clean = (value: string | number) => (SAFE.test(String(value)) ? String(value) : "?");
 
-export function formatSignInLine(outcome: SignInOutcome, fields: SignInFields = {}): string {
+function format(tag: string, outcome: string, fields: SignInFields): string {
   const parts = [`outcome=${outcome}`];
   if (fields.audience) parts.push(`audience=${clean(fields.audience)}`);
   if (fields.portal) parts.push(`portal=${clean(fields.portal)}`);
   if (fields.role) parts.push(`role=${clean(fields.role)}`);
   if (fields.roles?.length) parts.push(`roles=${clean([...fields.roles].sort().join("+"))}`);
   if (fields.ahead_s !== undefined) parts.push(`ahead_s=${clean(Math.round(fields.ahead_s))}`);
-  return `[signin] ${parts.join(" ")}`;
+  return `[${tag}] ${parts.join(" ")}`;
 }
 
-/** Logging must never be the reason a sign-in fails. */
+/** Never lets logging be the reason something fails. */
+function write(line: string, info: boolean): void {
+  try {
+    if (info) console.info(line);
+    else console.warn(line);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function formatSignInLine(outcome: SignInOutcome, fields: SignInFields = {}): string {
+  return format("signin", outcome, fields);
+}
+
 export function logSignIn(outcome: SignInOutcome, fields: SignInFields = {}): void {
   try {
-    const line = formatSignInLine(outcome, fields);
-    if (INFO.has(outcome)) console.info(line);
-    else console.warn(line);
+    write(formatSignInLine(outcome, fields), INFO.has(outcome));
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Outcomes of asking for a password-reset link (lib/actions/password.ts). The
+ * person always sees "we sent a link", so without these a reset that went to
+ * nobody — or to an address whose account is of a different kind than the door
+ * it was asked for — leaves nothing behind at all.
+ */
+export type ResetOutcome =
+  | "sent"
+  | "no_such_user"
+  /** The address has an account, but not of the kind this door resets. */
+  | "no_account_of_type"
+  /** Several accounts of the same kind on one address: there is no single one to send to. */
+  | "ambiguous_email"
+  | "rate_limited"
+  | "clinic_not_active";
+
+const RESET_INFO: ReadonlySet<ResetOutcome> = new Set<ResetOutcome>(["sent"]);
+
+/** Search for `[reset]`. Same rules as above: reason codes and labels, never an address. */
+export function logReset(outcome: ResetOutcome, fields: SignInFields = {}): void {
+  try {
+    write(format("reset", outcome, fields), RESET_INFO.has(outcome));
   } catch {
     /* ignore */
   }

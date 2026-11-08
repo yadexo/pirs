@@ -118,17 +118,17 @@ describe("reset-platform-admin-password script", () => {
     const future = new Date(Date.now() + 10 * 60_000);
     await rawDb.rateLimitBucket.createMany({
       data: [
-        { key: `login:unified:${adminEmail}`, count: 11, resetAt: future },
-        { key: `login:unified:${otherAdminEmail}`, count: 11, resetAt: future },
+        { key: `login:admin:${adminEmail}`, count: 11, resetAt: future },
+        { key: `login:admin:${otherAdminEmail}`, count: 11, resetAt: future },
       ],
     });
 
     await resetPlatformAdminPassword(db, { email: adminEmail, password: "a-brand-new-password" });
-    expect(await rawDb.rateLimitBucket.count({ where: { key: `login:unified:${adminEmail}` } })).toBe(1);
+    expect(await rawDb.rateLimitBucket.count({ where: { key: `login:admin:${adminEmail}` } })).toBe(1);
 
     const result = await resetPlatformAdminPassword(db, { email: adminEmail, password: "a-brand-new-password", clearLockout: true });
     expect(result.lockoutCleared).toBe(1);
-    expect(await rawDb.rateLimitBucket.count({ where: { key: `login:unified:${adminEmail}` } })).toBe(0);
-    expect(await rawDb.rateLimitBucket.count({ where: { key: `login:unified:${otherAdminEmail}` } })).toBe(1);
+    expect(await rawDb.rateLimitBucket.count({ where: { key: `login:admin:${adminEmail}` } })).toBe(0);
+    expect(await rawDb.rateLimitBucket.count({ where: { key: `login:admin:${otherAdminEmail}` } })).toBe(1);
   });
 });

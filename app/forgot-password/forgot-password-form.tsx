@@ -6,7 +6,7 @@ import { requestPasswordResetAction } from "@/lib/actions/password";
 import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/merchant/form";
 
-export function ForgotPasswordForm({ clinic }: { clinic: string | null }) {
+export function ForgotPasswordForm({ clinic, portal = null }: { clinic: string | null; portal?: string | null }) {
   const t = useTranslations("auth.resetPassword");
   const [state, action, pending] = useActionState(requestPasswordResetAction, undefined);
   if (state?.sent) {
@@ -19,6 +19,7 @@ export function ForgotPasswordForm({ clinic }: { clinic: string | null }) {
   return (
     <form action={action} className="space-y-3.5">
       {clinic && <input type="hidden" name="clinic" value={clinic} />}
+      {!clinic && portal && <input type="hidden" name="portal" value={portal} />}
       <TextField label={t("emailLabel")} name="email" type="email" autoComplete="email" required />
       {state?.error && (
         <p role="alert" className="text-[12px] text-[var(--accent-red)]">

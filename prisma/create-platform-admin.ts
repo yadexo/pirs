@@ -8,8 +8,10 @@
  * but it then ends up in your shell history, so prefer the prompt.
  *
  * Refuses when:
- *   - the email is already used by any agency, clinic admin or staff account
- *     (sign-in needs the address to be unique among those, or nobody can log in);
+ *   - the email is already a platform admin (the admin sign-in needs the
+ *     address to name exactly one, or nobody can log in). A clinic owner,
+ *     staff member or client on the same address is fine: each door signs in
+ *     its own kind of account.
  *   - a platform admin already exists, unless `--additional` is passed.
  * Before writing it shows which database it is about to change and asks for
  * "yes"; `--yes` skips that for automation.
@@ -20,8 +22,6 @@ import { hashPassword } from "../lib/password";
 import { AdminSetupError, arg, ask, checkPassword, confirmOrCancel, exitWith, flag, readNewPassword } from "./admin-cli";
 
 export { AdminSetupError, MIN_ADMIN_PASSWORD_LENGTH } from "./admin-cli";
-
-const STAFF_ROLES = ["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF"] as const;
 
 export async function createPlatformAdmin(
   db: PrismaClient,
@@ -36,8 +36,11 @@ export async function createPlatformAdmin(
   // One transaction, so two runs at once cannot both pass the checks.
   return db.$transaction(
     async (tx) => {
-      const taken = await tx.user.findFirst({ where: { email, role: { in: [...STAFF_ROLES] } }, select: { role: true } });
-      if (taken) throw new AdminSetupError(`${email} already has a ${taken.role} account. Nothing was changed.`);
+      // Only another platform admin is a clash: the admin sign-in considers no
+      // other kind of account, so a clinic owner, staff member or client may
+      // share the address (see lib/portal-scope.ts).
+      const taken = await tx.user.findFirst({ where: { email, role: "PLATFORM_ADMIN" }, select: { role: true } });
+      if (taken) throw new AdminSetupError(`${email} already has a PLATFORM_ADMIN account. Nothing was changed.`);
 
       if (!input.allowAdditional) {
         const existing = await tx.user.count({ where: { role: "PLATFORM_ADMIN" } });

@@ -17,7 +17,7 @@ describe("sign-in rate limiting", () => {
     // Real bcrypt compares for every attempt, by design — slow on purpose.
     const email = `ratelimit-${Date.now()}@example.com`;
     await rawDb.user.create({ data: { email, passwordHash: await hashPassword("correct-horse-1"), role: "PLATFORM_ADMIN" } });
-    const creds = { portal: "unified", email, password: "wrong" };
+    const creds = { portal: "staff", email, password: "wrong" };
 
     let limited: Error | null = null;
     for (let i = 0; i < 11; i++) {
@@ -36,7 +36,7 @@ describe("sign-in rate limiting", () => {
     expect(limited!.message).toMatch(/^__rate_limited__:\d+/);
 
     // The right password doesn't lift the lock early.
-    await expect(authorizeCredentials({ portal: "unified", email, password: "correct-horse-1" }, "staff", "203.0.113.99")).rejects.toThrow(
+    await expect(authorizeCredentials({ portal: "staff", email, password: "correct-horse-1" }, "staff", "203.0.113.99")).rejects.toThrow(
       /__rate_limited__:/,
     );
   }, 60000);
@@ -50,7 +50,7 @@ describe("sign-in rate limiting", () => {
     let limited: Error | null = null;
     for (let i = 0; i < 31; i++) {
       try {
-        await authorizeCredentials({ portal: "unified", email: `iplimit-${stamp}-${i}@example.com`, password: "wrong" }, "staff", ip);
+        await authorizeCredentials({ portal: "staff", email: `iplimit-${stamp}-${i}@example.com`, password: "wrong" }, "staff", ip);
       } catch (err) {
         limited = err as Error;
         break;

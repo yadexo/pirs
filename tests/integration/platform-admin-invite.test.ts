@@ -125,13 +125,35 @@ describe("inviteAdminAction", () => {
     expect(audit!.actorUserId).toBe(adminId);
   });
 
-  it("refuses an email that already has an account", async () => {
+  it("refuses an email that is already a platform admin", async () => {
     const adminId = await makeAdmin({ twoFactorConfirmed: true });
     asUser(adminId);
-    const existing = await rawDb.user.create({ data: { email: `existing-${Date.now()}@x.com`, passwordHash: "x", role: "STAFF" } });
+    const existing = await rawDb.user.create({ data: { email: `existing-${Date.now()}@x.com`, passwordHash: "x", role: "PLATFORM_ADMIN" } });
     createdUserIds.push(existing.id);
     const res = await inviteAdminAction(fd({ firstName: "A", lastName: "B", email: existing.email }));
     expect("error" in res && res.error).toBeTruthy();
+  });
+
+  it("allows an email that is a clinic or client account elsewhere", async () => {
+    // Each door signs in its own kind of account (lib/portal-scope.ts), so a
+    // clinic owner or a client of some clinic can also be a platform admin.
+    const adminId = await makeAdmin({ twoFactorConfirmed: true });
+    asUser(adminId);
+    const stamp = Date.now();
+    for (const role of ["TENANT_ADMIN", "STAFF", "CUSTOMER"] as const) {
+      // Every test here invites from the same (unknown) address, and the
+      // per-address limit is ten an hour: clear it so this case is about the
+      // email clash and not about how many tests ran before it.
+      await rawDb.rateLimitBucket.deleteMany({ where: { key: { startsWith: "admin-invite:" } } });
+      const email = `shared-${role.toLowerCase()}-${stamp}@x.com`;
+      const other = await rawDb.user.create({ data: { email, passwordHash: "x", role } as never });
+      createdUserIds.push(other.id);
+      const res = await inviteAdminAction(fd({ firstName: "A", lastName: "B", email }));
+      expect(res, `inviting an address held by a ${role}`).toMatchObject({ ok: true });
+      const created = await rawDb.user.findFirst({ where: { email, role: "PLATFORM_ADMIN" } });
+      expect(created).toBeTruthy();
+      createdUserIds.push(created!.id);
+    }
   });
 });
 

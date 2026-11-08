@@ -6,8 +6,16 @@ import { useTranslations } from "next-intl";
 import { unifiedSignInAction } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
 
-export function LoginForm({ next }: { next?: string | null }) {
+/**
+ * `portal` is the door the page was opened at (lib/portal-scope.ts). It rides
+ * along on the form because it only narrows which accounts the sign-in looks
+ * at — it grants nothing — and the page sets it from the host. `clinic` is set
+ * for a client door only, so "forgot password" resets that clinic's client
+ * account rather than a staff account on the same address.
+ */
+export function LoginForm({ next, portal = "staff", clinic = null }: { next?: string | null; portal?: string; clinic?: string | null }) {
   const t = useTranslations("auth");
+  const forgotHref = clinic ? `/forgot-password?clinic=${encodeURIComponent(clinic)}` : `/forgot-password?portal=${encodeURIComponent(portal)}`;
   const [state, formAction, pending] = useActionState(unifiedSignInAction, undefined);
   // Controlled, not read back from the DOM on the second step — React resets
   // a form's uncontrolled fields once its action settles (the same thing a
@@ -31,6 +39,7 @@ export function LoginForm({ next }: { next?: string | null }) {
       <form action={formAction} className="space-y-3.5">
         <input type="hidden" name="email" value={credentials.email} />
         <input type="hidden" name="password" value={credentials.password} />
+        <input type="hidden" name="portal" value={portal} />
         {next && <input type="hidden" name="next" value={next} />}
         <p className="text-[13px] text-ink-muted">{t("twoFactor.prompt")}</p>
         <div>
@@ -66,6 +75,7 @@ export function LoginForm({ next }: { next?: string | null }) {
 
   return (
     <form action={formAction} className="space-y-3.5">
+      <input type="hidden" name="portal" value={portal} />
       {next && <input type="hidden" name="next" value={next} />}
       <div>
         <label htmlFor="email" className="mb-1.5 block text-[12px] font-medium">
@@ -101,7 +111,7 @@ export function LoginForm({ next }: { next?: string | null }) {
       <Button type="submit" loading={pending} className="w-full">
         {t("signIn")}
       </Button>
-      <Link href="/forgot-password" className="block text-center text-[12px] text-ink-muted underline underline-offset-2 hover:text-ink">
+      <Link href={forgotHref} className="block text-center text-[12px] text-ink-muted underline underline-offset-2 hover:text-ink">
         {t("forgotPassword")}
       </Link>
     </form>

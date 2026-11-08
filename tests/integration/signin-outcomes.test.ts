@@ -47,7 +47,7 @@ describe("sign-in outcomes in the logs", () => {
     }
     return { lines, result, error };
   }
-  const staff = (email: string, extra: Record<string, unknown> = {}) => authorizeCredentials({ portal: "unified", email, password: PASSWORD, ...extra }, "staff", `198.51.100.${(stamp % 200) + 1}`);
+  const staff = (email: string, extra: Record<string, unknown> = {}) => authorizeCredentials({ portal: "staff", email, password: PASSWORD, ...extra }, "staff", `198.51.100.${(stamp % 200) + 1}`);
 
   beforeAll(async () => {
     tenantId = (await rawDb.tenant.create({ data: { slug: `so-${stamp}`, name: "Outcomes Clinic" } })).id;
@@ -68,6 +68,15 @@ describe("sign-in outcomes in the logs", () => {
     // The same address on two clinics: ambiguous.
     await user("ambiguous", { tenantId, role: "TENANT_ADMIN" });
     await rawDb.user.create({ data: { tenantId: otherTenantId, email: addr("ambiguous"), passwordHash, role: "TENANT_ADMIN" } });
+
+    // One person, one address, three accounts of different kinds — which used
+    // to refuse all three. The client is at the *other* clinic because
+    // User's @@unique([tenantId, email]) forbids two accounts of any kind on
+    // one address at one clinic.
+    await user("everything", { role: "PLATFORM_ADMIN" });
+    await rawDb.user.create({ data: { tenantId, email: addr("everything"), passwordHash, role: "TENANT_ADMIN" } });
+    const client = await rawDb.user.create({ data: { tenantId: otherTenantId, email: addr("everything"), passwordHash, role: "CUSTOMER" } });
+    await rawDb.customerProfile.create({ data: { tenantId: otherTenantId, userId: client.id, firstName: "Ever", lastName: "Ything" } });
   });
 
   afterAll(async () => {
@@ -75,6 +84,11 @@ describe("sign-in outcomes in the logs", () => {
     for (const id of [tenantId, otherTenantId, suspendedTenantId]) await deleteTenantCompletely(id).catch(() => undefined);
     await rawDb.rateLimitBucket.deleteMany({ where: { key: { contains: `-${stamp}@` } } });
     await rawDb.rateLimitBucket.deleteMany({ where: { key: { contains: `198.51.100.${(stamp % 200) + 1}` } } });
+    // Fixed addresses this file uses: left behind, they would count towards the
+    // IP limit on a rerun inside the same ten-minute window.
+    for (const ip of ["198.51.100.210", "198.51.100.240", "198.51.100.250", "198.51.100.251"]) {
+      await rawDb.rateLimitBucket.deleteMany({ where: { key: `login:ip:${ip}` } });
+    }
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -83,19 +97,19 @@ describe("sign-in outcomes in the logs", () => {
     it("logs a success with the role, and returns the account", async () => {
       const { lines, result } = await capture(() => staff(addr("admin")));
       expect(result).toMatchObject({ role: "PLATFORM_ADMIN" });
-      expect(lines).toEqual(["[signin] outcome=success audience=staff portal=unified role=PLATFORM_ADMIN"]);
+      expect(lines).toEqual(["[signin] outcome=success audience=staff portal=staff role=PLATFORM_ADMIN"]);
     });
 
     it("logs a wrong password as that, and still returns plain null", async () => {
-      const { lines, result } = await capture(() => authorizeCredentials({ portal: "unified", email: addr("admin"), password: WRONG }, "staff", "198.51.100.250"));
+      const { lines, result } = await capture(() => authorizeCredentials({ portal: "staff", email: addr("admin"), password: WRONG }, "staff", "198.51.100.250"));
       expect(result).toBeNull();
-      expect(lines).toEqual(["[signin] outcome=wrong_password audience=staff portal=unified role=PLATFORM_ADMIN"]);
+      expect(lines).toEqual(["[signin] outcome=wrong_password audience=staff portal=staff role=PLATFORM_ADMIN"]);
     });
 
     it("tells an unknown address apart in the logs, though the caller can't tell", async () => {
       const unknown = await capture(() => staff(addr("nobody")));
-      const wrong = await capture(() => authorizeCredentials({ portal: "unified", email: addr("admin"), password: WRONG }, "staff", "198.51.100.251"));
-      expect(unknown.lines).toEqual(["[signin] outcome=no_such_user audience=staff portal=unified"]);
+      const wrong = await capture(() => authorizeCredentials({ portal: "staff", email: addr("admin"), password: WRONG }, "staff", "198.51.100.251"));
+      expect(unknown.lines).toEqual(["[signin] outcome=no_such_user audience=staff portal=staff"]);
       // To the caller both are the same thing, which is the point.
       expect(unknown.result).toBeNull();
       expect(wrong.result).toBeNull();
@@ -104,31 +118,42 @@ describe("sign-in outcomes in the logs", () => {
     it("says when the address is on two accounts, and which roles", async () => {
       const { lines, result } = await capture(() => staff(addr("ambiguous")));
       expect(result).toBeNull();
-      expect(lines).toEqual(["[signin] outcome=ambiguous_email audience=staff portal=unified roles=TENANT_ADMIN+TENANT_ADMIN"]);
+      expect(lines).toEqual(["[signin] outcome=ambiguous_email audience=staff portal=staff roles=TENANT_ADMIN+TENANT_ADMIN"]);
     });
 
     it("says when the account is not active", async () => {
       const { lines, result } = await capture(() => staff(addr("disabled")));
       expect(result).toBeNull();
-      expect(lines).toEqual(["[signin] outcome=account_not_active audience=staff portal=unified role=PLATFORM_ADMIN"]);
+      expect(lines).toEqual(["[signin] outcome=account_not_active audience=staff portal=staff role=PLATFORM_ADMIN"]);
     });
 
     it("says when the clinic is suspended", async () => {
       const { lines, result } = await capture(() => staff(addr("suspended")));
       expect(result).toBeNull();
-      expect(lines).toEqual(["[signin] outcome=clinic_not_active audience=staff portal=unified role=TENANT_ADMIN"]);
+      expect(lines).toEqual(["[signin] outcome=clinic_not_active audience=staff portal=staff role=TENANT_ADMIN"]);
     });
 
     it("says when a staff member has no usable profile", async () => {
       const { lines, result } = await capture(() => staff(addr("noprofile")));
       expect(result).toBeNull();
-      expect(lines).toEqual(["[signin] outcome=staff_blocked audience=staff portal=unified role=STAFF"]);
+      expect(lines).toEqual(["[signin] outcome=staff_blocked audience=staff portal=staff role=STAFF"]);
     });
 
     it("says when something was missing from the request", async () => {
-      const { lines, result } = await capture(() => authorizeCredentials({ portal: "unified", email: addr("admin") }, "staff"));
+      const { lines, result } = await capture(() => authorizeCredentials({ portal: "staff", email: addr("admin") }, "staff"));
       expect(result).toBeNull();
       expect(lines).toEqual(["[signin] outcome=missing_fields audience=staff"]);
+    });
+
+    it("says when an address has an account, but not of this door's kind", async () => {
+      // The clinic owner typing their address into the admin login. From the
+      // outside this is the same generic failure as a wrong password; in the
+      // logs it is the one line that explains the support call.
+      const { lines, result } = await capture(() =>
+        authorizeCredentials({ portal: "admin", email: addr("suspended"), password: PASSWORD }, "staff", "198.51.100.240"),
+      );
+      expect(result).toBeNull();
+      expect(lines).toEqual(["[signin] outcome=no_account_of_type audience=staff portal=admin"]);
     });
 
     it("says when the door doesn't fit the session", async () => {
@@ -138,12 +163,43 @@ describe("sign-in outcomes in the logs", () => {
     });
   });
 
+  describe("one address, three accounts, three doors", () => {
+    // The bug this fixes: the staff sign-in looked an address up across every
+    // staff role at once and refused whenever it found more than one, so the
+    // person who is a platform admin, a clinic owner and a client could not
+    // sign in anywhere at all.
+    const ip = "198.51.100.210";
+    const at = (portal: string, extra: Record<string, unknown> = {}) =>
+      authorizeCredentials({ portal, email: addr("everything"), password: PASSWORD, ...extra }, portal === "customer" ? "client" : "staff", ip);
+
+    it("the admin door signs in the platform admin", async () => {
+      await expect(at("admin")).resolves.toMatchObject({ role: "PLATFORM_ADMIN", tenantId: null });
+    });
+
+    it("the clinic door signs in the clinic account", async () => {
+      await expect(at("clinic")).resolves.toMatchObject({ role: "TENANT_ADMIN", tenantId, tenantSlug: `so-${stamp}` });
+    });
+
+    it("the clinic's own app signs in the client", async () => {
+      await expect(at("customer", { tenantSlug: `so-other-${stamp}` })).resolves.toMatchObject({ role: "CUSTOMER", tenantId: otherTenantId });
+    });
+
+    it("the staff fallback prefers the platform admin, and never the client", async () => {
+      await expect(at("staff")).resolves.toMatchObject({ role: "PLATFORM_ADMIN" });
+    });
+
+    it("logs each of them as a plain success, naming the door", async () => {
+      const { lines } = await capture(() => at("admin"));
+      expect(lines).toEqual(["[signin] outcome=success audience=staff portal=admin role=PLATFORM_ADMIN"]);
+    });
+  });
+
   describe("two-factor", () => {
     it("notes that a code was asked for — informationally, since it is the normal first step", async () => {
       const info = vi.spyOn(console, "info").mockImplementation(() => {});
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       await expect(staff(addr("twofa"))).rejects.toThrow(/__2fa_required__/);
-      expect(info).toHaveBeenCalledWith("[signin] outcome=two_factor_required audience=staff portal=unified role=PLATFORM_ADMIN");
+      expect(info).toHaveBeenCalledWith("[signin] outcome=two_factor_required audience=staff portal=staff role=PLATFORM_ADMIN");
       expect(warn).not.toHaveBeenCalled();
       seen.push(...info.mock.calls.map((c) => String(c[0])));
     });
@@ -152,13 +208,13 @@ describe("sign-in outcomes in the logs", () => {
       const wrongCode = totpCode(secret) === "000000" ? "111111" : "000000";
       const { lines, error } = await capture(() => staff(addr("twofa"), { totpCode: wrongCode }));
       expect((error as Error).message).toMatch(/__2fa_invalid_code__/);
-      expect(lines).toEqual(["[signin] outcome=two_factor_invalid_code audience=staff portal=unified role=PLATFORM_ADMIN"]);
+      expect(lines).toEqual(["[signin] outcome=two_factor_invalid_code audience=staff portal=staff role=PLATFORM_ADMIN"]);
     });
 
     it("logs a success once the right code is given", async () => {
       const { lines, result } = await capture(() => staff(addr("twofa"), { totpCode: totpCode(secret, Date.now() + 30_000) }));
       expect(result).toMatchObject({ role: "PLATFORM_ADMIN" });
-      expect(lines).toEqual(["[signin] outcome=success audience=staff portal=unified role=PLATFORM_ADMIN"]);
+      expect(lines).toEqual(["[signin] outcome=success audience=staff portal=staff role=PLATFORM_ADMIN"]);
     });
   });
 
@@ -168,11 +224,11 @@ describe("sign-in outcomes in the logs", () => {
       let last: { lines: string[]; error: unknown } = { lines: [], error: null };
       for (let i = 0; i < 11; i++) {
         // A fresh address each time, so only the account counter can trip.
-        last = await capture(() => authorizeCredentials({ portal: "unified", email, password: WRONG }, "staff", `203.0.113.${100 + i}`));
+        last = await capture(() => authorizeCredentials({ portal: "staff", email, password: WRONG }, "staff", `203.0.113.${100 + i}`));
         if (last.error) break;
       }
       expect((last.error as Error).message).toMatch(/^__rate_limited__:\d+/);
-      expect(last.lines).toEqual(["[signin] outcome=rate_limited_account audience=staff portal=unified"]);
+      expect(last.lines).toEqual(["[signin] outcome=rate_limited_account audience=staff portal=staff"]);
     }, 60000);
 
     it("names the address limit when that is what tripped", async () => {
@@ -180,11 +236,11 @@ describe("sign-in outcomes in the logs", () => {
       await rawDb.rateLimitBucket.deleteMany({ where: { key: `login:ip:${ip}` } });
       let last: { lines: string[]; error: unknown } = { lines: [], error: null };
       for (let i = 0; i < 31; i++) {
-        last = await capture(() => authorizeCredentials({ portal: "unified", email: addr(`ip-${i}`), password: WRONG }, "staff", ip));
+        last = await capture(() => authorizeCredentials({ portal: "staff", email: addr(`ip-${i}`), password: WRONG }, "staff", ip));
         if (last.error) break;
       }
       expect((last.error as Error).message).toMatch(/^__rate_limited__:\d+/);
-      expect(last.lines).toEqual(["[signin] outcome=rate_limited_ip audience=staff portal=unified"]);
+      expect(last.lines).toEqual(["[signin] outcome=rate_limited_ip audience=staff portal=staff"]);
       await rawDb.rateLimitBucket.deleteMany({ where: { key: `login:ip:${ip}` } });
     }, 60000);
   });

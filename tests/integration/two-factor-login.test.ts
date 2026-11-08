@@ -37,7 +37,7 @@ describe("sign-in with two-factor authentication", () => {
     await setUp();
     const email = `plain-${stamp}@x.com`;
     await makeUser(email);
-    const result = await authorizeCredentials({ portal: "unified", email, password }, "staff", "203.0.113.1");
+    const result = await authorizeCredentials({ portal: "staff", email, password }, "staff", "203.0.113.1");
     expect(result?.email).toBe(email);
   });
 
@@ -45,7 +45,7 @@ describe("sign-in with two-factor authentication", () => {
     const email = `midsetup-${stamp}@x.com`;
     const u = await makeUser(email);
     await rawDb.twoFactorSecret.create({ data: { userId: u.id, secret: generateTotpSecret() } }); // no confirmedAt
-    const result = await authorizeCredentials({ portal: "unified", email, password }, "staff", "203.0.113.2");
+    const result = await authorizeCredentials({ portal: "staff", email, password }, "staff", "203.0.113.2");
     expect(result?.email).toBe(email);
   });
 
@@ -55,7 +55,7 @@ describe("sign-in with two-factor authentication", () => {
     const secret = generateTotpSecret();
     await rawDb.twoFactorSecret.create({ data: { userId: u.id, secret, confirmedAt: new Date() } });
 
-    await expect(authorizeCredentials({ portal: "unified", email, password }, "staff", "203.0.113.3")).rejects.toBeInstanceOf(TwoFactorRequiredSignIn);
+    await expect(authorizeCredentials({ portal: "staff", email, password }, "staff", "203.0.113.3")).rejects.toBeInstanceOf(TwoFactorRequiredSignIn);
   });
 
   it("refuses a wrong code with its own message, and signs in with the right one", async () => {
@@ -66,11 +66,11 @@ describe("sign-in with two-factor authentication", () => {
 
     // authorizeCredentials throws a sentinel here, not the English text —
     // translation happens one level up (lib/actions/auth.ts's signInOrError).
-    await expect(authorizeCredentials({ portal: "unified", email, password, totpCode: "000000" }, "staff", "203.0.113.4")).rejects.toThrow(
+    await expect(authorizeCredentials({ portal: "staff", email, password, totpCode: "000000" }, "staff", "203.0.113.4")).rejects.toThrow(
       /__2fa_invalid_code__/,
     );
 
-    const result = await authorizeCredentials({ portal: "unified", email, password, totpCode: totpCode(secret) }, "staff", "203.0.113.4");
+    const result = await authorizeCredentials({ portal: "staff", email, password, totpCode: totpCode(secret) }, "staff", "203.0.113.4");
     expect(result?.email).toBe(email);
   });
 
@@ -82,10 +82,10 @@ describe("sign-in with two-factor authentication", () => {
     const [code] = generateBackupCodes(1);
     await rawDb.twoFactorBackupCode.create({ data: { userId: u.id, codeHash: hashBackupCode(code!) } });
 
-    const result = await authorizeCredentials({ portal: "unified", email, password, totpCode: code }, "staff", "203.0.113.5");
+    const result = await authorizeCredentials({ portal: "staff", email, password, totpCode: code }, "staff", "203.0.113.5");
     expect(result?.email).toBe(email);
 
-    await expect(authorizeCredentials({ portal: "unified", email, password, totpCode: code }, "staff", "203.0.113.5")).rejects.toThrow(
+    await expect(authorizeCredentials({ portal: "staff", email, password, totpCode: code }, "staff", "203.0.113.5")).rejects.toThrow(
       /__2fa_invalid_code__/,
     );
   });
@@ -99,8 +99,8 @@ describe("sign-in with two-factor authentication", () => {
     await rawDb.twoFactorBackupCode.create({ data: { userId: u.id, codeHash: hashBackupCode(code!) } });
 
     const attempts = await Promise.allSettled([
-      authorizeCredentials({ portal: "unified", email, password, totpCode: code }, "staff", "203.0.113.6"),
-      authorizeCredentials({ portal: "unified", email, password, totpCode: code }, "staff", "203.0.113.7"),
+      authorizeCredentials({ portal: "staff", email, password, totpCode: code }, "staff", "203.0.113.6"),
+      authorizeCredentials({ portal: "staff", email, password, totpCode: code }, "staff", "203.0.113.7"),
     ]);
     const wins = attempts.filter((a) => a.status === "fulfilled");
     expect(wins).toHaveLength(1);

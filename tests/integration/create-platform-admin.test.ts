@@ -27,8 +27,18 @@ describe("create-platform-admin script", () => {
     expect(await rawDb.user.count()).toBe(usersBefore + 1);
   });
 
-  it("refuses an email already used by a staff-type account", async () => {
+  it("refuses an email that is already a platform admin", async () => {
     await expect(createPlatformAdmin(db, { email, password: "a-long-enough-password", allowAdditional: true })).rejects.toThrow(/already has a PLATFORM_ADMIN account/);
+  });
+
+  it("accepts an email that is a clinic or client account elsewhere", async () => {
+    // The admin sign-in considers no other kind of account, so this is one
+    // person with two accounts, not a clash (lib/portal-scope.ts).
+    const shared = `owner-${stamp}-shared@example.com`;
+    await rawDb.user.create({ data: { email: shared, passwordHash: "x", role: "TENANT_ADMIN" } });
+    const user = await createPlatformAdmin(db, { email: shared, password: "a-long-enough-password", allowAdditional: true });
+    expect(await rawDb.user.findUniqueOrThrow({ where: { id: user.id } })).toMatchObject({ role: "PLATFORM_ADMIN", tenantId: null });
+    expect(await rawDb.user.count({ where: { email: shared } })).toBe(2);
   });
 
   it("refuses a second platform admin unless asked for one", async () => {

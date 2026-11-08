@@ -36,10 +36,13 @@ export interface AdminRow {
   sessionsRefusedForMs: number;
   /** Other accounts (any role) on the same address, by role. Roles only — nothing that identifies them. */
   otherAccountsWithEmail: { role: string; count: number }[];
-  /** Another staff-type account has this address: sign-in finds two matches and refuses both. */
+  /**
+   * Another *platform admin* has this exact address, which is the one sharing
+   * that still refuses: the admin door finds two equal matches and cannot pick.
+   * A clinic or client account on the same address does not — each door signs
+   * in only its own kind (lib/portal-scope.ts).
+   */
   emailBlocksSignIn: boolean;
-  /** A client account has this address: which sign-in it is sent to is then up to the database. */
-  emailMayReroute: boolean;
   /** Stored with capitals. Sign-in looks up the lowercase address, so this account can never be found. */
   emailNotLowercase: boolean;
 }
@@ -73,8 +76,6 @@ export interface AdminsReport {
   buckets: LoginBucket[];
 }
 
-/** Roles whose accounts sign in through the staff door, where an address must match exactly one. */
-const STAFF_ROLES = new Set(["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF"]);
 
 export async function listPlatformAdmins(db: PrismaClient, now = new Date()): Promise<AdminsReport> {
   // The database's own clock, which is what a session's start and a reset's
@@ -120,8 +121,9 @@ export async function listPlatformAdmins(db: PrismaClient, now = new Date()): Pr
       sessionsRefusedForMs: refusedForMs,
       otherAccountsWithEmail,
       // Exact-address matches only: that is all sign-in looks for.
-      emailBlocksSignIn: otherAccountsWithEmail.some((o) => STAFF_ROLES.has(o.role)) && (await db.user.count({ where: { id: { not: u.id }, email: u.email, role: { in: [...STAFF_ROLES] as never } } })) > 0,
-      emailMayReroute: otherAccountsWithEmail.some((o) => o.role === "CUSTOMER") && (await db.user.count({ where: { id: { not: u.id }, email: u.email, role: "CUSTOMER" } })) > 0,
+      emailBlocksSignIn:
+        otherAccountsWithEmail.some((o) => o.role === "PLATFORM_ADMIN") &&
+        (await db.user.count({ where: { id: { not: u.id }, email: u.email, role: "PLATFORM_ADMIN" } })) > 0,
       emailNotLowercase: u.email !== u.email.toLowerCase(),
     });
   }
@@ -183,13 +185,12 @@ export function adminNotes(a: AdminRow): string[] {
     }
   }
   if (a.emailBlocksSignIn) {
-    notes.push("!! This address is also on another staff-type account. Sign-in finds two matches and refuses both, even with the right password.");
-  }
-  if (a.emailMayReroute) {
-    notes.push("!  This address is also a client account. Which of the two sign-ins it is sent to is left to the database, so it can land on the client one and fail.");
+    notes.push("!! This address is on another platform admin account too. The admin sign-in finds two equal matches and refuses both, even with the right password.");
   }
   if (a.otherAccountsWithEmail.length > 0) {
-    notes.push(`Same address on ${a.otherAccountsWithEmail.map((o) => `${o.count} ${o.role}`).join(", ")} (roles only; nothing else is read).`);
+    // Not a problem: each door signs in only its own kind of account, so one
+    // person can be an admin here, an owner at a clinic and a client of it.
+    notes.push(`Same address also on ${a.otherAccountsWithEmail.map((o) => `${o.count} ${o.role}`).join(", ")} — fine, each sign-in uses its own (roles only; nothing else is read).`);
   }
   if (a.emailNotLowercase) {
     notes.push("!! The address is stored with capital letters. Sign-in looks up the lowercase form, so this account can never be found.");

@@ -11,6 +11,7 @@ import { hashPassword } from "@/lib/password";
 import { rateLimit, retryAfterParts } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request-ip";
 import { resolveDestination, canReach, safeNext } from "@/lib/login-destination";
+import { audienceFor, chooseAccount, isPortal, portalRoles, slugFromNext, type Portal } from "@/lib/portal-scope";
 import { recordActivity } from "@/lib/activity";
 import { currentClientBasePath } from "@/lib/public-clinic";
 import { getTenantDb } from "@/lib/tenant-db";
@@ -19,7 +20,6 @@ import { getEmailProvider } from "@/lib/providers/notifications";
 import { senderFor } from "@/lib/emails/sender";
 import { welcomeClientEmail } from "@/lib/emails/templates";
 import { resolveLocale } from "@/lib/locale";
-import { logSignIn } from "@/lib/signin-log";
 
 export type ActionResult = { error: string } | never;
 
@@ -84,8 +84,16 @@ export async function customerSignInAction(tenantSlug: string, _prevState: unkno
 }
 
 /**
- * The single sign-in used by /login. Role decides the landing page, so no
- * workspace slug or portal picker is asked of the user.
+ * The sign-in used by /login, for whichever of the doors that page was opened
+ * at — admin, clinic, a clinic's client app, or the staff fallback where the
+ * host identifies no surface (lib/portal-scope.ts). The door decides which
+ * accounts are even looked at, so one address holding a platform admin, a
+ * clinic owner and a client account signs in correctly at each of them.
+ *
+ * The door travels on the form, which is safe because it only ever *narrows*
+ * the lookup: naming a door you hold no account at finds nothing and fails the
+ * same way a wrong password does. The page sets it from the host, which the
+ * visitor does not choose.
  */
 export async function unifiedSignInAction(_prevState: unknown, formData: FormData) {
   const email = String(formData.get("email") ?? "");
@@ -96,39 +104,49 @@ export async function unifiedSignInAction(_prevState: unknown, formData: FormDat
   const totpCode = String(formData.get("totpCode") ?? "").trim();
   if (!email || !password) return { error: "Email and password are required." };
 
-  // The same row findFirst would have picked — no order is asked for, so which
-  // one that is is the database's choice. When the address is on more than one
-  // account that choice decides which sign-in (staff or client) is used, so it
-  // is logged: an admin whose email is also a client account may land on the
-  // wrong one.
-  const accounts = await rawDb.user.findMany({
-    where: { email: email.toLowerCase(), role: { in: ["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF", "CUSTOMER"] } },
+  const next = String(formData.get("next") ?? "") || null;
+  const raw = formData.get("portal");
+  const requested: Portal = isPortal(raw) ? raw : "staff";
+  // A client door is only a client door with a clinic: the slug comes from the
+  // destination the page carried, the same place openedDoor() read it from.
+  const tenantSlug = requested === "customer" ? slugFromNext(safeNext(next ?? undefined)) : null;
+  const portal: Portal = requested === "customer" && !tenantSlug ? "staff" : requested;
+
+  const matches = await rawDb.user.findMany({
+    where: { email: email.toLowerCase(), role: { in: portalRoles(portal) }, ...(tenantSlug ? { tenant: { slug: tenantSlug } } : {}) },
     select: { role: true, tenantId: true, tenant: { select: { slug: true } } },
     take: 5,
   });
-  const user = accounts[0] ?? null;
-  if (accounts.length > 1) logSignIn("multiple_accounts_for_email", { roles: accounts.map((a) => a.role) });
-
-  const next = String(formData.get("next") ?? "") || null;
-
-  // Unknown address: still attempt the sign-in so the failure message is the
-  // same either way, rather than leaking which emails exist.
-  let destination = "/login";
-  if (user) {
-    const actor = { role: user.role, tenantId: user.tenantId, tenantSlug: user.tenant?.slug ?? null };
+  const chosen = chooseAccount(matches, portal);
+  let destination: string;
+  if ("account" in chosen) {
+    const { role, tenantId, tenant } = chosen.account;
+    const actor = { role, tenantId, tenantSlug: tenant?.slug ?? null };
     // Signing in at a door this account cannot open — say so, rather than
     // dropping them into a different portal — a clinic admin who signs in at the
     // Admin door used to land silently in the clinic UI. Bounce back to the same door, where the page explains it.
     // Checked only after the password succeeds, so it cannot be used to
     // discover which addresses exist or what role they hold.
     destination = canReach(actor, next) ? resolveDestination(actor, next) : `/login?next=${encodeURIComponent(next!)}`;
+  } else {
+    // No single account of this door's kind — unknown address, or an ambiguous
+    // one. The sign-in is still attempted so the failure reads the same either
+    // way rather than leaking which addresses exist, and this is only where it
+    // would have gone. An ambiguous address is not logged here either:
+    // authorizeCredentials refuses it and writes the one line.
+    destination = tenantSlug ? await currentClientBasePath(tenantSlug) : portal === "admin" ? "/agency" : "/login";
   }
 
-  // Clients get the client app's session; everyone else the staff session.
   return signInOrError(
-    totpCode ? { portal: "unified", email, password, totpCode } : { portal: "unified", email, password },
+    {
+      portal,
+      email,
+      password,
+      ...(tenantSlug ? { tenantSlug } : {}),
+      ...(totpCode ? { totpCode } : {}),
+    },
     destination,
-    user?.role === "CUSTOMER" ? "client" : "staff",
+    audienceFor(portal),
   );
 }
 

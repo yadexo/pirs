@@ -116,7 +116,7 @@ describe("two-factor: setup, gate, and the dead end it used to be", () => {
       // Already set up by the earlier test in this file; a fresh code from
       // the same secret proves the credential actually persisted.
       const secret = (await rawDb.twoFactorSecret.findUnique({ where: { userId: ownerId } }))!.secret;
-      const result = await authorizeCredentials({ portal: "unified", email, password, totpCode: computeTotpCode(secret) }, "staff", "203.0.113.9");
+      const result = await authorizeCredentials({ portal: "clinic", email, password, totpCode: computeTotpCode(secret) }, "staff", "203.0.113.9");
       expect(result?.email).toBe(email);
     });
   });

@@ -8,6 +8,7 @@ import { verifyPassword } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
 import { LOGIN_ATTEMPTS_PER_ACCOUNT, LOGIN_ATTEMPTS_PER_IP, LOGIN_WINDOW_MS } from "@/lib/login-limits";
 import { logSignIn } from "@/lib/signin-log";
+import { audienceFor, chooseAccount, isPortal, portalRoles, type Portal } from "@/lib/portal-scope";
 import { permissionsFor } from "@/lib/live-account";
 import { getTwoFactorStatus, verifyTwoFactorCode } from "@/lib/two-factor";
 import type { SessionPermissions, SessionUserShape } from "@/types/next-auth";
@@ -78,13 +79,6 @@ export function ipFromRequest(req: Request | undefined): string {
  */
 export type Audience = "staff" | "client";
 
-/**
- * "unified" is /login: the email identifies the account. "customer" is a
- * clinic's own client app, where the clinic comes from the URL — the same
- * email may be a client at more than one clinic, so the slug disambiguates.
- */
-type Portal = "customer" | "unified";
-
 const include = {
   staffProfile: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
   customerProfile: true,
@@ -96,7 +90,8 @@ export async function authorizeCredentials(
   audience: Audience,
   ip = "unknown",
 ): Promise<SessionUserShape | null> {
-  const portal = credentials?.portal as Portal | undefined;
+  const rawPortal = credentials?.portal;
+  const portal: Portal | undefined = isPortal(rawPortal) ? rawPortal : undefined;
   const email = (credentials?.email as string | undefined)?.trim().toLowerCase();
   const password = credentials?.password as string | undefined;
   const tenantSlug = credentials?.tenantSlug as string | undefined;
@@ -106,8 +101,24 @@ export async function authorizeCredentials(
   // unchanged: still one generic failure, so the form cannot be used to find
   // out which part was wrong.
   const at = { audience, portal };
+  // A portal that is present but not one of the four doors: a page left open
+  // across a deploy that renamed them posts the old value, and that is worth
+  // telling apart from a field nobody filled in.
+  if (rawPortal !== undefined && rawPortal !== "" && !portal) {
+    logSignIn("invalid_portal", { audience });
+    return null;
+  }
   if (!portal || !email || !password) {
     logSignIn("missing_fields", { audience });
+    return null;
+  }
+
+  // The door and the session kind must agree: the client app's cookie is only
+  // ever issued at a client door, and a staff cookie never at one. Derived from
+  // the portal (lib/portal-scope.ts), not from the role of whichever account
+  // turns up, so the two sessions can never be crossed.
+  if (audienceFor(portal) !== audience) {
+    logSignIn("invalid_portal", at);
     return null;
   }
 
@@ -124,30 +135,12 @@ export async function authorizeCredentials(
     throw new RateLimitedSignIn(limited.retryAfterMs);
   }
 
-  const roles = audience === "client" ? (["CUSTOMER"] as const) : (["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF"] as const);
   let user;
 
-  if (portal === "unified") {
-    const matches = await rawDb.user.findMany({ where: { email, role: { in: [...roles] } }, include });
-    // Same address registered under two clinics is ambiguous — we cannot
-    // guess which, and picking one would be a security bug.
-    const match = matches[0];
-    if (matches.length > 1) {
-      logSignIn("ambiguous_email", { ...at, roles: matches.map((m) => m.role) });
-      return null;
-    }
-    if (!match) {
-      logSignIn("no_such_user", at);
-      return null;
-    }
-    // A suspended clinic must not be reachable through this door.
-    if (match.tenant && match.tenant.status !== "ACTIVE") {
-      logSignIn("clinic_not_active", { ...at, role: match.role });
-      return null;
-    }
-    user = match;
-  } else {
-    if (portal !== "customer" || audience !== "client" || !tenantSlug) {
+  if (portal === "customer") {
+    // A clinic's own app: the clinic is part of the identity, because the same
+    // address may be a client of several clinics.
+    if (!tenantSlug) {
       logSignIn("invalid_portal", at);
       return null;
     }
@@ -157,6 +150,38 @@ export async function authorizeCredentials(
       return null;
     }
     user = await rawDb.user.findFirst({ where: { email, tenantId: tenant.id, role: "CUSTOMER" }, include });
+  } else {
+    // Only the accounts this door is for (lib/portal-scope.ts). An address that
+    // is a platform admin *and* a clinic owner *and* a client is one person
+    // with three accounts: each door signs in its own, instead of all three
+    // refusing each other.
+    const matches = await rawDb.user.findMany({ where: { email, role: { in: portalRoles(portal) } }, include });
+    const chosen = chooseAccount(matches, portal);
+
+    if ("ambiguous" in chosen) {
+      // Two accounts of the same kind on one address — the same person owning
+      // two clinics, say. There is no way to tell which was meant, and picking
+      // one would be a security bug.
+      logSignIn("ambiguous_email", { ...at, roles: chosen.ambiguous });
+      return null;
+    }
+    if ("none" in chosen) {
+      // One extra count, on the failure path only, to tell "no such address"
+      // from "the right address at the wrong door" — the second is what a
+      // clinic owner typing their address into the admin login looks like, and
+      // the two are indistinguishable from the outside on purpose.
+      const elsewhere = await rawDb.user.count({ where: { email } });
+      logSignIn(elsewhere > 0 ? "no_account_of_type" : "no_such_user", at);
+      return null;
+    }
+
+    const match = chosen.account;
+    // A suspended clinic must not be reachable through this door.
+    if (match.tenant && match.tenant.status !== "ACTIVE") {
+      logSignIn("clinic_not_active", { ...at, role: match.role });
+      return null;
+    }
+    user = match;
   }
 
   if (!user) {

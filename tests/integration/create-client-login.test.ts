@@ -45,10 +45,24 @@ describe("create-client-login script", () => {
     expect(await rawDb.user.count({ where: { tenantId: clinic, role: "CUSTOMER" } })).toBe(1);
   });
 
-  it("refuses an unknown clinic, a suspended one, and a staff email", async () => {
+  it("refuses an unknown clinic and a suspended one", async () => {
     await expect(createClientLogin(db, { clinicSlug: "no-such-clinic", email: `x-${stamp}@example.com`, password: "a-long-enough-password" })).rejects.toThrow(/no clinic with the address/);
     await expect(createClientLogin(db, { clinicSlug: `cl-off-${stamp}`, email: `y-${stamp}@example.com`, password: "a-long-enough-password" })).rejects.toThrow(/SUSPENDED/);
-    await expect(createClientLogin(db, { clinicSlug: slug, email: ownerEmail, password: "a-long-enough-password" })).rejects.toThrow(/already a TENANT_ADMIN/);
+  });
+
+  it("refuses an address already used by staff at this clinic — one account per clinic is all there can be", async () => {
+    await expect(createClientLogin(db, { clinicSlug: slug, email: ownerEmail, password: "a-long-enough-password" })).rejects.toThrow(/already a TENANT_ADMIN account at/);
+  });
+
+  it("accepts an address that is a platform admin, or staff at another clinic", async () => {
+    // The person testing production with their own address: a platform admin
+    // who also wants a client login. Each door signs in its own account.
+    const adminEmail = `cl-admin-${stamp}@example.com`;
+    await rawDb.user.create({ data: { email: adminEmail, passwordHash: "x", role: "PLATFORM_ADMIN" } });
+    const result = await createClientLogin(db, { clinicSlug: slug, email: adminEmail, password: "a-long-enough-password" });
+    expect(result.created).toBe(true);
+    expect(await rawDb.user.findFirstOrThrow({ where: { id: result.id } })).toMatchObject({ role: "CUSTOMER", tenantId: clinic });
+    await rawDb.user.deleteMany({ where: { email: adminEmail, role: "PLATFORM_ADMIN" } });
   });
 
   it("rejects short passwords and bad emails before touching the database", async () => {

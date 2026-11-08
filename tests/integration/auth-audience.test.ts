@@ -25,15 +25,27 @@ describe("staff and client sign-in are separate", () => {
   afterAll(() => deleteTenantCompletely(tenantId));
 
   it("the staff session accepts clinic accounts only", async () => {
-    expect(await authorizeCredentials({ portal: "unified", email: admin, password }, "staff")).toMatchObject({ role: "TENANT_ADMIN", tenantSlug: slug });
-    expect(await authorizeCredentials({ portal: "unified", email: client, password }, "staff")).toBeNull();
+    expect(await authorizeCredentials({ portal: "clinic", email: admin, password }, "staff")).toMatchObject({ role: "TENANT_ADMIN", tenantSlug: slug });
+    expect(await authorizeCredentials({ portal: "staff", email: admin, password }, "staff")).toMatchObject({ role: "TENANT_ADMIN", tenantSlug: slug });
+    // No staff door looks at a client account, whichever one is used.
+    for (const portal of ["clinic", "staff", "admin"]) {
+      expect(await authorizeCredentials({ portal, email: client, password }, "staff")).toBeNull();
+    }
+    // And a client door can never issue a staff session.
     expect(await authorizeCredentials({ portal: "customer", tenantSlug: slug, email: client, password }, "staff")).toBeNull();
   });
 
-  it("the client session accepts clients only, from /login or the clinic's app", async () => {
-    expect(await authorizeCredentials({ portal: "unified", email: client, password }, "client")).toMatchObject({ role: "CUSTOMER", tenantSlug: slug });
-    expect(await authorizeCredentials({ portal: "customer", tenantSlug: slug, email: client, password }, "client")).toMatchObject({ customerProfileId: expect.any(String) });
-    expect(await authorizeCredentials({ portal: "unified", email: admin, password }, "client")).toBeNull();
+  it("the client session accepts clients only, at a client door", async () => {
+    expect(await authorizeCredentials({ portal: "customer", tenantSlug: slug, email: client, password }, "client")).toMatchObject({
+      role: "CUSTOMER",
+      tenantSlug: slug,
+      customerProfileId: expect.any(String),
+    });
+    expect(await authorizeCredentials({ portal: "customer", tenantSlug: slug, email: admin, password }, "client")).toBeNull();
     expect(await authorizeCredentials({ portal: "customer", tenantSlug: slug, email: client, password: "wrong-password" }, "client")).toBeNull();
+    // A staff door can never issue a client session, even for a real client.
+    for (const portal of ["clinic", "staff", "admin"]) {
+      expect(await authorizeCredentials({ portal, email: client, password }, "client")).toBeNull();
+    }
   });
 });

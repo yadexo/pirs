@@ -27,8 +27,6 @@ import { DEFAULT_LOCALE } from "@/lib/locale-cookie";
  * prisma/create-platform-admin.ts's last-admin-count transaction.
  */
 
-const STAFF_ROLES = ["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF"] as const;
-
 const fieldError = (field: string, message: string) =>
   new z.ZodError([{ code: "custom", path: [field], message }]);
 
@@ -103,12 +101,11 @@ export async function inviteAdminAction(
       email: fd.get("email"),
     });
 
-    if (
-      await rawDb.user.findFirst({
-        where: { email: data.email, role: { in: [...STAFF_ROLES] } },
-      })
-    ) {
-      throw fieldError("email", "That email already has an account.");
+    // Only another platform admin clashes. A clinic owner, a staff member or a
+    // client may share this address: each door signs in its own kind of account
+    // (lib/portal-scope.ts), so the same person can be all of them.
+    if (await rawDb.user.findFirst({ where: { email: data.email, role: "PLATFORM_ADMIN" } })) {
+      throw fieldError("email", "That email is already a platform admin.");
     }
 
     const admin = await rawDb.user.create({

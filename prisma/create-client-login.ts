@@ -9,7 +9,10 @@
  * so a forgotten test login is never a dead end.
  *
  * Refuses, changing nothing, when the clinic doesn't exist or isn't active, or
- * when the email already belongs to a clinic's own staff account.
+ * when the address is already a staff account *at this clinic* — one address
+ * can hold only one account per clinic. A platform admin, or staff at another
+ * clinic, on the same address is fine: each door signs in its own kind of
+ * account (lib/portal-scope.ts).
  */
 import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
@@ -30,8 +33,14 @@ export async function createClientLogin(
   if (!clinic) throw new AdminSetupError(`There is no clinic with the address "${slug}". Nothing was changed.`);
   if (clinic.status !== "ACTIVE") throw new AdminSetupError(`${clinic.name} is ${clinic.status}, so its clients can't sign in. Nothing was changed.`);
 
-  const staff = await db.user.findFirst({ where: { email, role: { in: ["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF"] } }, select: { role: true } });
-  if (staff) throw new AdminSetupError(`${email} is already a ${staff.role} account. Use a different address for a client. Nothing was changed.`);
+  // A staff or admin account on the same address is no longer a problem: each
+  // door signs in only its own kind of account (lib/portal-scope.ts), so one
+  // person can run the platform, own a clinic and be a client of one. The one
+  // thing that cannot exist is a second account at *this* clinic on this
+  // address — User's @@unique([tenantId, email]) — which is why an existing
+  // client here is updated rather than added below.
+  const clash = await db.user.findFirst({ where: { tenantId: clinic.id, email, NOT: { role: "CUSTOMER" } }, select: { role: true } });
+  if (clash) throw new AdminSetupError(`${email} is already a ${clash.role} account at ${clinic.name}, and one address can hold only one account per clinic. Nothing was changed.`);
 
   const passwordHash = await hashPassword(input.password);
 

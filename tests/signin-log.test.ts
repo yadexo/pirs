@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { formatSignInLine, logSignIn, type SignInOutcome } from "@/lib/signin-log";
+import { formatSignInLine, logReset, logSignIn, type SignInOutcome } from "@/lib/signin-log";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -15,12 +15,14 @@ describe("the sign-in log line", () => {
   });
 
   it("lists the roles an address is on, sorted, so the same case always reads the same", () => {
-    expect(formatSignInLine("multiple_accounts_for_email", { roles: ["CUSTOMER", "PLATFORM_ADMIN"] })).toBe(
-      "[signin] outcome=multiple_accounts_for_email roles=CUSTOMER+PLATFORM_ADMIN",
-    );
-    expect(formatSignInLine("multiple_accounts_for_email", { roles: ["PLATFORM_ADMIN", "CUSTOMER"] })).toBe(
-      "[signin] outcome=multiple_accounts_for_email roles=CUSTOMER+PLATFORM_ADMIN",
-    );
+    expect(formatSignInLine("ambiguous_email", { roles: ["STAFF", "TENANT_ADMIN"] })).toBe("[signin] outcome=ambiguous_email roles=STAFF+TENANT_ADMIN");
+    expect(formatSignInLine("ambiguous_email", { roles: ["TENANT_ADMIN", "STAFF"] })).toBe("[signin] outcome=ambiguous_email roles=STAFF+TENANT_ADMIN");
+  });
+
+  it("names the door a sign-in was tried at", () => {
+    for (const portal of ["admin", "clinic", "customer", "staff"]) {
+      expect(formatSignInLine("no_account_of_type", { portal })).toBe(`[signin] outcome=no_account_of_type portal=${portal}`);
+    }
   });
 
   it("shows how far ahead a refused session's cut-off was, in whole seconds", () => {
@@ -79,8 +81,8 @@ describe("logging a sign-in", () => {
   it("only informs for what is expected in normal use", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
-    for (const outcome of ["success", "two_factor_required", "multiple_accounts_for_email"] as SignInOutcome[]) logSignIn(outcome);
-    expect(info).toHaveBeenCalledTimes(3);
+    for (const outcome of ["success", "two_factor_required"] as SignInOutcome[]) logSignIn(outcome);
+    expect(info).toHaveBeenCalledTimes(2);
     expect(warn).not.toHaveBeenCalled();
   });
 
@@ -96,5 +98,34 @@ describe("logging a sign-in", () => {
       throw new Error("the log sink is down");
     });
     expect(() => logSignIn("wrong_password")).not.toThrow();
+  });
+});
+
+describe("logging a password-reset request", () => {
+  it("writes its own tag, so it cannot be mistaken for a sign-in", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    logReset("sent", { portal: "admin", role: "PLATFORM_ADMIN" });
+    expect(info).toHaveBeenCalledWith("[reset] outcome=sent portal=admin role=PLATFORM_ADMIN");
+  });
+
+  it("warns for a request that reached nobody, though the person is told it was sent", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    logReset("no_account_of_type", { portal: "admin" });
+    logReset("ambiguous_email", { portal: "clinic", roles: ["TENANT_ADMIN", "TENANT_ADMIN"] });
+    expect(warn).toHaveBeenNthCalledWith(1, "[reset] outcome=no_account_of_type portal=admin");
+    expect(warn).toHaveBeenNthCalledWith(2, "[reset] outcome=ambiguous_email portal=clinic roles=TENANT_ADMIN+TENANT_ADMIN");
+  });
+
+  it("holds an address back exactly as the sign-in line does", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    logReset("no_such_user", { portal: "someone@example.com" });
+    expect(warn).toHaveBeenCalledWith("[reset] outcome=no_such_user portal=?");
+  });
+
+  it("never lets logging be the reason a reset fails", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {
+      throw new Error("the log sink is down");
+    });
+    expect(() => logReset("no_such_user")).not.toThrow();
   });
 });

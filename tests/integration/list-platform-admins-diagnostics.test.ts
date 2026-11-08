@@ -22,6 +22,7 @@ describe("prod:admins diagnostics", () => {
     past: tag("past"),
     sharedStaff: tag("shared-staff"),
     sharedClient: tag("shared-client"),
+    sharedAdmin: tag("shared-admin"),
     mixed: `lpd-Mixed-${stamp}@Example.com`,
   };
   let clinicId: string;
@@ -43,6 +44,12 @@ describe("prod:admins diagnostics", () => {
 
     await admin(emails.sharedClient);
     await rawDb.user.create({ data: { tenantId: clinicId, email: emails.sharedClient, passwordHash, role: "CUSTOMER" } });
+
+    // Two platform admins on one address. A platform admin has no clinic, and
+    // the unique index is on (tenantId, email), so Postgres allows it — and it
+    // is the one sharing that still stops the admin sign-in.
+    await admin(emails.sharedAdmin);
+    await admin(emails.sharedAdmin);
   });
 
   afterAll(async () => {
@@ -102,18 +109,33 @@ describe("prod:admins diagnostics", () => {
   });
 
   describe("the same address on another account", () => {
-    it("flags another staff-type account, which makes sign-in refuse both", async () => {
-      const row = (await byEmail())[emails.sharedStaff]!;
-      expect(row.otherAccountsWithEmail).toEqual([{ role: "TENANT_ADMIN", count: 1 }]);
-      expect(row).toMatchObject({ emailBlocksSignIn: true, emailMayReroute: false });
-      expect(adminNotes(row).join(" ")).toMatch(/refuses both/);
+    it("flags a second platform admin, which is what still makes the admin sign-in refuse both", async () => {
+      const row = (await byEmail())[emails.sharedAdmin]!;
+      expect(row.otherAccountsWithEmail).toEqual([{ role: "PLATFORM_ADMIN", count: 1 }]);
+      expect(row.emailBlocksSignIn).toBe(true);
+      const notes = adminNotes(row).join(" ");
+      expect(notes).toMatch(/refuses both/);
+      expect(notes).toContain("!!");
     });
 
-    it("flags a client account separately — it can reroute sign-in, not block it", async () => {
+    it("reports a clinic account on the same address as information, not a problem", async () => {
+      // Each door signs in only its own kind now, so this no longer blocks
+      // anything: the admin door never looks at the clinic account.
+      const row = (await byEmail())[emails.sharedStaff]!;
+      expect(row.otherAccountsWithEmail).toEqual([{ role: "TENANT_ADMIN", count: 1 }]);
+      expect(row.emailBlocksSignIn).toBe(false);
+      const notes = adminNotes(row).join(" ");
+      expect(notes).toMatch(/TENANT_ADMIN/);
+      expect(notes).not.toContain("!!");
+    });
+
+    it("reports a client account on the same address the same way", async () => {
       const row = (await byEmail())[emails.sharedClient]!;
       expect(row.otherAccountsWithEmail).toEqual([{ role: "CUSTOMER", count: 1 }]);
-      expect(row).toMatchObject({ emailBlocksSignIn: false, emailMayReroute: true });
-      expect(adminNotes(row).join(" ")).toMatch(/client account/);
+      expect(row.emailBlocksSignIn).toBe(false);
+      const notes = adminNotes(row).join(" ");
+      expect(notes).toMatch(/CUSTOMER/);
+      expect(notes).not.toContain("!!");
     });
 
     it("reports roles and counts only — nothing that identifies the other account", async () => {
@@ -125,7 +147,7 @@ describe("prod:admins diagnostics", () => {
     });
 
     it("has nothing to say about an address that is on one account only", async () => {
-      expect((await byEmail())[emails.plain]).toMatchObject({ otherAccountsWithEmail: [], emailBlocksSignIn: false, emailMayReroute: false });
+      expect((await byEmail())[emails.plain]).toMatchObject({ otherAccountsWithEmail: [], emailBlocksSignIn: false });
     });
   });
 
@@ -158,7 +180,6 @@ describe("prod:admins diagnostics", () => {
       sessionsRefusedForMs: 0,
       otherAccountsWithEmail: [],
       emailBlocksSignIn: false,
-      emailMayReroute: false,
       emailNotLowercase: false,
     };
     expect(adminNotes(clean)).toEqual([]);
