@@ -46,6 +46,58 @@ describe("reset-platform-admin-password script", () => {
     expect(other.sessionsValidAfter).toBeNull();
   });
 
+  describe("which clock stamps the sign-out", () => {
+    /**
+     * The same database, but its clock reads 2031. If the script took the time
+     * from the computer it runs on, the stamp would be today's; it takes it
+     * from the database, so it is 2031. That is the whole point: the app
+     * compares this stamp with the moment a later sign-in began, measured on
+     * the server next to the database, so a PC clock that ran ahead would have
+     * every sign-in for the next while refused as "from before the reset".
+     */
+    const databaseSays = new Date("2031-01-02T03:04:05.000Z");
+    function withDatabaseClock(real: PrismaClient, clock: Date): PrismaClient {
+      const bound = (target: object, prop: string | symbol) => {
+        const value = (target as Record<string | symbol, unknown>)[prop];
+        return typeof value === "function" ? value.bind(target) : value;
+      };
+      return new Proxy(real, {
+        get(target, prop) {
+          if (prop !== "$transaction") return bound(target, prop);
+          return (run: (tx: unknown) => Promise<unknown>) =>
+            target.$transaction((tx) =>
+              run(
+                new Proxy(tx, {
+                  get: (t, p) => (p === "$queryRaw" ? async () => [{ now: clock }] : bound(t, p)),
+                }),
+              ),
+            );
+        },
+      });
+    }
+
+    it("is the database's, not the computer's", async () => {
+      await resetPlatformAdminPassword(withDatabaseClock(db, databaseSays), { email: adminEmail, password: "another-new-password-1" });
+      const admin = await rawDb.user.findFirstOrThrow({ where: { email: adminEmail } });
+      expect(admin.sessionsValidAfter?.toISOString()).toBe(databaseSays.toISOString());
+    });
+
+    it("reads the real database's clock when nothing is injected", async () => {
+      const dbNow = (await rawDb.$queryRaw<{ now: Date }[]>`SELECT now() AS now`)[0]!.now;
+      await resetPlatformAdminPassword(db, { email: adminEmail, password: "yet-another-new-password-1" });
+      const stamped = (await rawDb.user.findFirstOrThrow({ where: { email: adminEmail } })).sessionsValidAfter!;
+      // Within seconds of the database's own now(), on whichever side of it.
+      expect(Math.abs(stamped.getTime() - dbNow.getTime())).toBeLessThan(10_000);
+    });
+
+    it("is never later than the database's clock a moment afterwards — so a sign-in that follows is never refused", async () => {
+      await resetPlatformAdminPassword(db, { email: adminEmail, password: "one-more-new-password-1" });
+      const stamped = (await rawDb.user.findFirstOrThrow({ where: { email: adminEmail } })).sessionsValidAfter!;
+      const later = (await rawDb.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`)[0]!.now;
+      expect(stamped.getTime()).toBeLessThanOrEqual(later.getTime());
+    });
+  });
+
   it("refuses clinic accounts, unknown emails and disabled admins, changing nothing", async () => {
     const owner = await rawDb.user.findFirstOrThrow({ where: { email: clinicOwnerEmail } });
     await expect(resetPlatformAdminPassword(db, { email: clinicOwnerEmail, password: "a-brand-new-password" })).rejects.toThrow(/TENANT_ADMIN account, not a platform admin/);

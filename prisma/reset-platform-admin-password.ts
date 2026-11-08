@@ -6,7 +6,11 @@
  * Changes exactly one row: that admin's user record gets
  *   - the new password (bcrypt, as everywhere else in the app), and
  *   - sessionsValidAfter = now, which signs out every session that account had,
- *     the same as the app's own "forgot password" reset.
+ *     the same as the app's own "forgot password" reset. "Now" is the database's
+ *     clock, not the computer this runs on: the app compares it with the moment
+ *     a later sign-in began, measured on the server, so a PC clock that runs
+ *     ahead would make every sign-in for the next few minutes (or hours) look
+ *     like it came from before the reset, and be refused.
  * No other account, clinic or setting is touched.
  *
  * Refuses (changing nothing) when the email is not a platform admin — clinic
@@ -25,7 +29,8 @@ import { AdminSetupError, arg, ask, checkPassword, confirmOrCancel, exitWith, fl
 export async function resetPlatformAdminPassword(
   db: PrismaClient,
   input: { email: string; password: string; clearLockout?: boolean },
-  now = new Date(),
+  /** For tests. Left out, the database's own clock is used. */
+  now?: Date,
 ): Promise<{ id: string; email: string; lockoutCleared: number }> {
   const email = input.email.trim().toLowerCase();
   checkPassword(input.password);
@@ -49,10 +54,11 @@ export async function resetPlatformAdminPassword(
   const passwordHash = await hashPassword(input.password);
 
   return db.$transaction(async (tx) => {
+    const sessionsValidAfter = now ?? (await tx.$queryRaw<{ now: Date }[]>`SELECT now() AS now`)[0]!.now;
     // Conditional on still being an active platform admin, in case that changed meanwhile.
     const updated = await tx.user.updateMany({
       where: { id: admin.id, role: "PLATFORM_ADMIN", status: "ACTIVE" },
-      data: { passwordHash, sessionsValidAfter: now },
+      data: { passwordHash, sessionsValidAfter },
     });
     if (updated.count !== 1) throw new AdminSetupError(`${email} changed while this ran. Nothing was changed.`);
 
