@@ -118,7 +118,12 @@ describe("list-platform-admins script", () => {
 
     it("never reports a lock longer than the window", async () => {
       const report = await listPlatformAdmins(db, now);
-      for (const b of report.buckets) expect(b.remainingMs).toBeLessThanOrEqual(LOGIN_WINDOW_MS);
+      // Only this test's own counters: the clock here is fixed, so a counter
+      // another test left running (set against the real clock) would measure
+      // as hours long and fail this on the time of day.
+      const mine = report.buckets.filter((b) => b.subject.includes(`-${stamp}@`) || b.subject === `203.0.113.${stamp % 250}`);
+      expect(mine.length).toBeGreaterThan(0);
+      for (const b of mine) expect(b.remainingMs).toBeLessThanOrEqual(LOGIN_WINDOW_MS);
     });
   });
 
@@ -146,7 +151,10 @@ describe("list-platform-admins script", () => {
         .replace(/\/\*[\s\S]*?\*\//g, "")
         .replace(/^\s*\/\/.*$/gm, "");
       expect(source).not.toMatch(/\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\(/);
-      expect(source).not.toMatch(/\$(executeRaw|queryRaw|transaction)/);
+      expect(source).not.toMatch(/\$(executeRaw|executeRawUnsafe|queryRawUnsafe|transaction)/);
+      // The one raw call is the database's clock: a SELECT, and the only one.
+      expect(source.match(/\$queryRaw/g)).toHaveLength(1);
+      expect(source).toMatch(/\$queryRaw<[^>]*>`SELECT now\(\) AS now`/);
       expect(source).not.toMatch(/passwordHash|secret\s*:/);
     });
   });
