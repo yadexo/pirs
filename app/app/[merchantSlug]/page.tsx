@@ -1,6 +1,7 @@
 import { getClientAppContext } from "@/lib/client-app-context";
 import { getClientSummary } from "@/lib/client-app-data";
 import { getHomeSections } from "@/lib/client-app-home";
+import { getPromptHistory } from "@/lib/notification-prompt-data";
 import { HomeView } from "./home-view";
 
 export default async function ClientHomePage({ params }: { params: Promise<{ merchantSlug: string }> }) {
@@ -10,9 +11,10 @@ export default async function ClientHomePage({ params }: { params: Promise<{ mer
   // layout in parallel — so this page must guard independently.
   if (!ctx.customerProfileId) return null;
 
-  const [summary, sections] = await Promise.all([
+  const [summary, sections, promptHistory] = await Promise.all([
     getClientSummary(ctx.db, ctx.customerProfileId),
     getHomeSections(ctx.db, { tenantId: ctx.merchant.id, customerProfileId: ctx.customerProfileId }),
+    getPromptHistory(ctx.db, ctx.customerProfileId),
   ]);
   if (!summary) return null;
 
@@ -24,6 +26,7 @@ export default async function ClientHomePage({ params }: { params: Promise<{ mer
       currency={ctx.merchant.currency}
       summary={summary}
       sections={sections}
+      promptHistory={promptHistory}
     />
   );
 }

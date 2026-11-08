@@ -37,6 +37,23 @@ export function isIos() {
 const dismissKey = (slug: string) => `install-dismissed:${slug}`;
 
 /**
+ * "Tap Share, then Add to Home Screen" — the one sentence of iPhone install
+ * steps, shared so the install nudge and the notifications card can't drift
+ * into saying different things.
+ */
+export function IosInstallSteps() {
+  const t = useTranslations("clientApp.install");
+  return (
+    <>
+      {t.rich("iosInstructions", {
+        icon: () => <Icon name="share" size={15} />,
+        b: (chunks) => <b>{chunks}</b>,
+      })}
+    </>
+  );
+}
+
+/**
  * "Add {clinic} to your Home Screen". Chrome and Android install in one tap;
  * iPhone has no install API, so it explains the Share-sheet steps. Shown on
  * Home only, never when already installed, and gone for 30 days once closed.
@@ -93,10 +110,7 @@ export function InstallPrompt({ base, merchantSlug, merchantName }: { base: stri
         <p className="ca-install-title">{title}</p>
         {mode === "ios" ? (
           <p className="ca-install-body">
-            {t.rich("iosInstructions", {
-              icon: () => <Icon name="share" size={15} />,
-              b: (chunks) => <b>{chunks}</b>,
-            })}
+            <IosInstallSteps />
           </p>
         ) : (
           <p className="ca-install-body">{t("openLikeAnApp")}</p>

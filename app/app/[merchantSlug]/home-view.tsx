@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useBasePath } from "./base-path";
 import { Icon, money, useToast } from "@/components/client-app/ui";
-import { NotificationCard } from "@/components/client-app/push";
+import { NotificationPrompt } from "@/components/client-app/push";
 import { Button, ProductCard, Tag } from "@/components/client-app/v2";
 import { useCart } from "./cart-context";
 import { clientAddToCartAction } from "@/lib/actions/client-app";
 import type { HomeSections, ShopCard } from "@/lib/client-app-home";
 import { homeOrder } from "@/lib/home-layout";
+import type { PromptHistory } from "@/lib/notification-prompt";
 import type { ClientSummary } from "@/lib/client-app-data";
 import { formatShortDay } from "@/lib/client-format";
 import { useClinicTimeZone } from "./base-path";
@@ -32,6 +33,7 @@ export function HomeView({
   currency,
   summary,
   sections,
+  promptHistory,
 }: {
   merchantSlug: string;
   merchantName: string;
@@ -39,6 +41,7 @@ export function HomeView({
   currency: string;
   summary: ClientSummary;
   sections: HomeSections;
+  promptHistory: PromptHistory;
 }) {
   const router = useRouter();
   const base = useBasePath();
@@ -297,7 +300,7 @@ export function HomeView({
       </div>
 
       <div className="v2-notify">
-        <NotificationCard clinicName={merchantName} />
+        <NotificationPrompt merchantSlug={merchantSlug} clinicName={merchantName} history={promptHistory} />
       </div>
 
       {homeOrder(sections.returning).map((key) => blocks[key])}

@@ -1,27 +1,24 @@
 "use client";
 
 import * as React from "react";
-import { Icon } from "@/components/client-app/ui";
-import { isIos, isStandalone } from "@/components/client-app/pwa";
+import { useTranslations } from "next-intl";
+import { Icon, Sheet } from "@/components/client-app/ui";
+import { Button } from "@/components/client-app/v2";
+import { IosInstallSteps, isIos, isStandalone } from "@/components/client-app/pwa";
+import { clientRecordNotificationPromptAction } from "@/lib/actions/client-app";
+import { choosePrompt, type PromptHistory, type PromptSurface, type PushState } from "@/lib/notification-prompt";
 
 /**
- * Turning notifications on, and the two places a client can do it: a card on
- * Home and a row in Profile → Settings.
+ * Turning notifications on, and the places a client can do it: a bottom sheet
+ * on their first Home visit, a smaller card that comes back after a "Not now",
+ * and a row in Profile → Settings. When to show which is decided by
+ * lib/notification-prompt.ts, which is pure and has its own tests.
  *
  * Permission is only ever asked for after a tap. Browsers hold it against a
  * site that asks on load — and iOS refuses outright unless the request comes
  * from a gesture inside an installed app, which is why a Safari tab is told to
  * install the app rather than shown a button that cannot work.
  */
-
-type State =
-  | "loading"
-  | "unsupported" // no push in this browser at all
-  | "install-first" // iPhone, but running in a Safari tab
-  | "unconfigured" // the platform has no VAPID keys
-  | "denied" // the client said no, and only iOS Settings can undo it
-  | "off"
-  | "on";
 
 /** The push service wants the key as bytes, not the base64url the server sends. */
 function urlBase64ToUint8Array(base64: string): Uint8Array {
@@ -44,8 +41,15 @@ async function post(action: string, extra: Record<string, unknown> = {}): Promis
   return { ok: res.ok, error: data.error, message: data.message };
 }
 
+/** Where a tap happened, for the clinic's tally. */
+type TapSurface = "SHEET" | "CARD" | "SETTINGS";
+/** What asking the device for permission came to. */
+type EnableResult = "on" | "denied" | "dismissed" | "error";
+
 export function usePush() {
-  const [state, setState] = React.useState<State>("loading");
+  const t = useTranslations("clientApp.notifications");
+  const [state, setState] = React.useState<PushState>("loading");
+  const [permission, setPermission] = React.useState<NotificationPermission | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
   const keyRef = React.useRef<string | null>(null);
@@ -73,6 +77,7 @@ export function usePush() {
       setState("unconfigured");
       return;
     }
+    setPermission(Notification.permission);
     if (Notification.permission === "denied") {
       setState("denied");
       return;
@@ -86,39 +91,46 @@ export function usePush() {
     void read();
   }, [read]);
 
-  const enable = React.useCallback(async () => {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const permission = await Notification.requestPermission();
-      if (permission === "denied") {
-        setState("denied");
-        return;
-      }
-      if (permission !== "granted") return;
+  const enable = React.useCallback(
+    async (surface: TapSurface = "SETTINGS"): Promise<EnableResult> => {
+      setBusy(true);
+      setMessage(null);
+      try {
+        const answer = await Notification.requestPermission();
+        setPermission(answer);
+        if (answer === "denied") {
+          setState("denied");
+          return "denied";
+        }
+        // Closed without choosing: nothing was decided, so nothing changes.
+        if (answer !== "granted") return "dismissed";
 
-      const registration = await navigator.serviceWorker.ready;
-      const subscription =
-        (await registration.pushManager.getSubscription()) ??
-        (await registration.pushManager.subscribe({
-          // Required by the browser, and true here: every push shows something.
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(keyRef.current!) as BufferSource,
-        }));
+        const registration = await navigator.serviceWorker.ready;
+        const subscription =
+          (await registration.pushManager.getSubscription()) ??
+          (await registration.pushManager.subscribe({
+            // Required by the browser, and true here: every push shows something.
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(keyRef.current!) as BufferSource,
+          }));
 
-      const json = subscription.toJSON() as { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
-      const res = await post("subscribe", { endpoint: json.endpoint, keys: json.keys });
-      if (!res.ok) {
-        setMessage(res.error ?? "That didn't work. Try again in a moment.");
-        return;
+        const json = subscription.toJSON() as { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
+        const res = await post("subscribe", { endpoint: json.endpoint, keys: json.keys, surface });
+        if (!res.ok) {
+          setMessage(res.error ?? t("failed"));
+          return "error";
+        }
+        setState("on");
+        return "on";
+      } catch {
+        setMessage(t("deviceFailed"));
+        return "error";
+      } finally {
+        setBusy(false);
       }
-      setState("on");
-    } catch {
-      setMessage("This device wouldn't turn notifications on. Try again in a moment.");
-    } finally {
-      setBusy(false);
-    }
-  }, []);
+    },
+    [t],
+  );
 
   const disable = React.useCallback(async () => {
     setBusy(true);
@@ -132,80 +144,229 @@ export function usePush() {
       }
       setState("off");
     } catch {
-      setMessage("Couldn't turn them off here. Try again in a moment.");
+      setMessage(t("disableFailed"));
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [t]);
 
   const sendTest = React.useCallback(async () => {
     setBusy(true);
     setMessage(null);
     const res = await post("test");
-    setMessage(res.ok ? (res.message ?? "Sent — it should arrive in a second.") : (res.error ?? "That didn't send."));
+    setMessage(res.ok ? (res.message ?? t("testSent")) : (res.error ?? t("testFailed")));
     setBusy(false);
-  }, []);
+  }, [t]);
 
-  return { state, busy, message, enable, disable, sendTest };
+  return { state, permission, busy, message, enable, disable, sendTest };
 }
 
-const DENIED_HELP =
-  "Notifications are blocked for this app. To allow them: iPhone Settings, then Notifications, then this app, then Allow Notifications.";
+const SURFACE: Record<PromptSurface, "SHEET" | "CARD" | "INSTALL" | "SETTINGS_HELP"> = {
+  sheet: "SHEET",
+  card: "CARD",
+  install: "INSTALL",
+  "settings-help": "SETTINGS_HELP",
+};
 
-/** Home: a card offering notifications, gone once they are on. */
-export function NotificationCard({ clinicName }: { clinicName: string }) {
-  const { state, busy, message, enable } = usePush();
-  const [dismissed, setDismissed] = React.useState(false);
+const installClosedKey = (slug: string) => `notify-install-closed:${slug}`;
 
-  if (dismissed || state === "loading" || state === "on" || state === "unsupported" || state === "unconfigured") return null;
+/**
+ * Home: asks a client who hasn't decided to turn notifications on, in the
+ * shape that fits — a sheet on the first visit in the installed app, a card
+ * after that, a how-to when the device said no, an install hint in a browser.
+ * Renders nothing the rest of the time, and never for a client who already
+ * granted or denied the device's own permission.
+ */
+export function NotificationPrompt({ merchantSlug, clinicName, history }: { merchantSlug: string; clinicName: string; history: PromptHistory }) {
+  const t = useTranslations("clientApp.notifications");
+  const { state, permission, busy, message, enable } = usePush();
+  const [standalone, setStandalone] = React.useState(false);
+  const [installClosedAt, setInstallClosedAt] = React.useState<number | null>(null);
+  // Closed by the client just now. The server catches up on the next render.
+  const [closed, setClosed] = React.useState(false);
+  // The device just said no to the prompt we put up: say how to undo it, in place.
+  const [blockedOn, setBlockedOn] = React.useState<"sheet" | "card" | null>(null);
+  const [sheetReady, setSheetReady] = React.useState(false);
+  const [stepsOpen, setStepsOpen] = React.useState(false);
+  const reported = React.useRef(new Set<string>());
 
-  return (
-    <div className="ca-pushcard">
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p className="ca-pushcard-title">{state === "install-first" ? "Install the app to get notifications" : "Turn on notifications"}</p>
-        <p className="ca-pushcard-body">
-          {state === "install-first"
-            ? `Add ${clinicName} to your Home Screen first — iPhone only allows notifications inside an installed app.`
-            : state === "denied"
-              ? DENIED_HELP
-              : `Order and appointment updates, plus offers and news from ${clinicName}. You can turn offers off any time in Settings.`}
-        </p>
-        {message && <p className="ca-pushcard-body">{message}</p>}
-      </div>
-      {state === "off" && (
-        <button className="btn-black" type="button" onClick={enable} disabled={busy} style={{ whiteSpace: "nowrap", width: "auto", padding: "0 18px" }}>
-          {busy ? "One moment…" : "Turn on"}
-        </button>
-      )}
-      <button type="button" className="press" aria-label="Dismiss" onClick={() => setDismissed(true)} style={{ color: "var(--muted)" }}>
-        <Icon name="close" size={18} />
-      </button>
-    </div>
+  React.useEffect(() => {
+    setStandalone(isStandalone());
+    try {
+      setInstallClosedAt(Number(localStorage.getItem(installClosedKey(merchantSlug))) || null);
+    } catch {
+      /* storage blocked: the card is simply shown */
+    }
+  }, [merchantSlug]);
+
+  const choice = closed ? null : choosePrompt({ state, permission, standalone, history, installClosedAt, now: Date.now() });
+  const surface = choice?.surface;
+  const stage = choice?.stage ?? 0;
+
+  const report = React.useCallback(
+    (kind: "SHOWN" | "NOT_NOW" | "BLOCKED", on: PromptSurface, at: number) => {
+      void clientRecordNotificationPromptAction(merchantSlug, { kind, surface: SURFACE[on], stage: at }).catch(() => {
+        // The tally is a courtesy; it must never get in the client's way.
+      });
+    },
+    [merchantSlug],
   );
+
+  // Let the launch screen finish before a sheet comes up over it.
+  const wantsSheet = surface === "sheet";
+  React.useEffect(() => {
+    if (!wantsSheet) return;
+    const id = window.setTimeout(() => setSheetReady(true), 900);
+    return () => window.clearTimeout(id);
+  }, [wantsSheet]);
+
+  // Once per step of the schedule, and only when the client could actually see it.
+  React.useEffect(() => {
+    if (!surface || (surface === "sheet" && !sheetReady)) return;
+    const key = `${surface}:${stage}`;
+    if (reported.current.has(key)) return;
+    reported.current.add(key);
+    report("SHOWN", surface, stage);
+  }, [surface, stage, sheetReady, report]);
+
+  const notNow = (on: PromptSurface) => {
+    setClosed(true);
+    report("NOT_NOW", on, stage);
+  };
+
+  const turnOn = async (on: "sheet" | "card") => {
+    const result = await enable(on === "sheet" ? "SHEET" : "CARD");
+    if (result === "denied") {
+      report("BLOCKED", on, stage);
+      setBlockedOn(on);
+    }
+  };
+
+  const closeHelp = () => {
+    setBlockedOn(null);
+    setClosed(true);
+  };
+
+  const closeInstall = () => {
+    const at = Date.now();
+    setInstallClosedAt(at);
+    try {
+      localStorage.setItem(installClosedKey(merchantSlug), String(at));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const offers = history.offersDecided ? t("offersDecided") : t("offersDefault");
+
+  // --- the sheet -----------------------------------------------------------
+  if (blockedOn === "sheet" || (surface === "sheet" && !blockedOn)) {
+    const blocked = blockedOn === "sheet";
+    return (
+      <Sheet
+        open={blocked || sheetReady}
+        onClose={blocked ? closeHelp : () => notNow("sheet")}
+        title={blocked ? t("deniedTitle") : t("sheetTitle")}
+        cta={
+          blocked ? (
+            <Button variant="primary" onClick={closeHelp}>
+              {t("gotIt")}
+            </Button>
+          ) : (
+            <div className="ca-pushsheet-actions">
+              <Button variant="primary" disabled={busy} onClick={() => void turnOn("sheet")}>
+                {busy ? t("working") : t("turnOn")}
+              </Button>
+              <Button variant="grey" disabled={busy} onClick={() => notNow("sheet")}>
+                {t("notNow")}
+              </Button>
+            </div>
+          )
+        }
+      >
+        <div className="ca-pushsheet">
+          <span className="ca-pushsheet-icon" aria-hidden="true">
+            <Icon name="bell" size={28} />
+          </span>
+          <p className="ca-pushsheet-body">{blocked ? t("deniedSteps") : t("sheetBody", { name: clinicName })}</p>
+          {!blocked && <p className="ca-pushsheet-note">{offers}</p>}
+          {message && (
+            <p className="ca-pushsheet-note" role="alert">
+              {message}
+            </p>
+          )}
+        </div>
+      </Sheet>
+    );
+  }
+
+  // --- the cards -----------------------------------------------------------
+  if (blockedOn === "card" || surface === "card" || surface === "settings-help" || surface === "install") {
+    const help = blockedOn === "card" || surface === "settings-help";
+    const install = !help && surface === "install";
+
+    const title = help ? t("deniedTitle") : install ? t("installTitle") : t("cardTitle");
+    const onClose = help ? (blockedOn ? closeHelp : () => notNow("settings-help")) : install ? closeInstall : () => notNow("card");
+
+    return (
+      <div className="ca-pushcard" role="region" aria-label={title}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p className="ca-pushcard-title">{title}</p>
+          <p className="ca-pushcard-body">{help ? t("deniedSteps") : install ? t("installBody") : `${t("sheetBody", { name: clinicName })} ${offers}`}</p>
+          {install && stepsOpen && (
+            <p className="ca-pushcard-body ca-pushcard-steps">
+              <IosInstallSteps />
+            </p>
+          )}
+          {message && (
+            <p className="ca-pushcard-body" role="alert">
+              {message}
+            </p>
+          )}
+          {install && (
+            <button type="button" className="press ca-pushcard-link" aria-expanded={stepsOpen} onClick={() => setStepsOpen((open) => !open)}>
+              {stepsOpen ? t("hideSteps") : t("howToInstall")}
+            </button>
+          )}
+          {!help && !install && (
+            <button className="btn-black ca-pushcard-action" type="button" onClick={() => void turnOn("card")} disabled={busy}>
+              {busy ? t("working") : t("turnOn")}
+            </button>
+          )}
+        </div>
+        <button type="button" className="ca-iconbtn ca-pushcard-close" aria-label={t("close")} onClick={onClose}>
+          <Icon name="close" size={18} />
+        </button>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 /** Profile → Settings: the switch, and a way to prove it works. */
 export function NotificationSettings() {
+  const t = useTranslations("clientApp.notifications");
   const { state, busy, message, enable, disable, sendTest } = usePush();
 
   const explanation =
     state === "on"
-      ? "On for this device: order and appointment updates, plus offers and news. Turning offers off below keeps the rest."
+      ? t("settingsOn")
       : state === "install-first"
-        ? "Add this app to your Home Screen to get notifications on iPhone."
+        ? t("settingsInstallFirst")
         : state === "denied"
-          ? DENIED_HELP
+          ? t("deniedSteps")
           : state === "unsupported"
-            ? "This browser can't show notifications."
+            ? t("settingsUnsupported")
             : state === "unconfigured"
-              ? "Notifications aren't available yet."
-              : "Off for this device.";
+              ? t("settingsUnconfigured")
+              : t("settingsOff");
 
   return (
     <div className="ca-pushsettings">
       <div className="row">
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p className="ca-pushcard-title">Notification preferences</p>
+          <p className="ca-pushcard-title">{t("settingsTitle")}</p>
           <p className="ca-pushcard-body">{explanation}</p>
         </div>
         {(state === "off" || state === "on") && (
@@ -213,9 +374,9 @@ export function NotificationSettings() {
             type="button"
             role="switch"
             aria-checked={state === "on"}
-            aria-label="Notifications"
+            aria-label={t("switchLabel")}
             className={state === "on" ? "ca-switch on" : "ca-switch"}
-            onClick={state === "on" ? disable : enable}
+            onClick={state === "on" ? () => void disable() : () => void enable("SETTINGS")}
             disabled={busy}
           >
             <span className="knob" />
@@ -223,8 +384,8 @@ export function NotificationSettings() {
         )}
       </div>
       {state === "on" && (
-        <button type="button" className="press ca-pushtest" onClick={sendTest} disabled={busy}>
-          {busy ? "Sending…" : "Send test notification"}
+        <button type="button" className="press ca-pushtest" onClick={() => void sendTest()} disabled={busy}>
+          {busy ? t("sending") : t("sendTest")}
         </button>
       )}
       {message && <p className="ca-pushcard-body">{message}</p>}
