@@ -4,6 +4,7 @@ import { requireCustomerContext } from "@/lib/rbac";
 import { rawDb } from "@/lib/db";
 import { rateLimit } from "@/lib/rate-limit";
 import { notifyClientQuietly, sendToClient, vapidConfigured, vapidPublicKey } from "@/lib/web-push";
+import { recordPromptEvent } from "@/lib/notification-prompt-data";
 
 /**
  * The client app's own push endpoint: subscribe, unsubscribe, send yourself a
@@ -27,6 +28,8 @@ const subscribe = z.object({
   action: z.literal("subscribe"),
   endpoint: z.string().url().max(2000),
   keys: z.object({ p256dh: z.string().min(1).max(500), auth: z.string().min(1).max(500) }),
+  /** Where the client tapped, for the clinic's tally. Not trusted for anything else. */
+  surface: z.enum(["SHEET", "CARD", "SETTINGS"]).optional(),
 });
 const unsubscribe = z.object({ action: z.literal("unsubscribe"), endpoint: z.string().url().max(2000) });
 const test = z.object({ action: z.literal("test") });
@@ -40,7 +43,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { user } = await requireCustomerContext();
+  const { db, user } = await requireCustomerContext();
   if (!vapidConfigured()) {
     return NextResponse.json({ error: "Push notifications aren't set up on this platform yet." }, { status: 501 });
   }
@@ -96,6 +99,10 @@ export async function POST(req: Request) {
   // The endpoint identifies the device, so re-subscribing the same one moves
   // it to this account rather than leaving a second row pointing at it.
   const userAgent = req.headers.get("user-agent")?.slice(0, 300) ?? null;
+  // A device this client had not subscribed before. Re-sending the same
+  // subscription — a page that re-registers, a second tap — is not "turned on"
+  // again, or the clinic's tally would count one person several times.
+  const alreadyThisClients = await rawDb.pushSubscription.count({ where: { endpoint: input.endpoint, userId: user.id } });
   await rawDb.pushSubscription.upsert({
     where: { endpoint: input.endpoint },
     create: {
@@ -115,6 +122,21 @@ export async function POST(req: Request) {
       lastUsedAt: new Date(),
     },
   });
+
+  if (alreadyThisClients === 0 && user.customerProfileId) {
+    const declinesSoFar = await db.notificationPromptEvent.count({
+      where: { customerProfileId: user.customerProfileId, kind: { in: ["NOT_NOW", "BLOCKED"] } },
+    });
+    await recordPromptEvent(db, {
+      tenantId: user.tenantId!,
+      customerProfileId: user.customerProfileId,
+      kind: "TURNED_ON",
+      surface: input.surface ?? "SETTINGS",
+      stage: declinesSoFar,
+    }).catch(() => {
+      // The tally is a courtesy; a device that just subscribed must not be told it failed.
+    });
+  }
 
   // Turning notifications on means saying yes to what the app said it would
   // send: the order and appointment updates, and the clinic's offers. But a

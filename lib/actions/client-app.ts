@@ -30,6 +30,8 @@ import {
   ensureStripePrice,
 } from "@/lib/memberships-billing";
 import { setLocaleCookie, type AppLocale } from "@/lib/locale-cookie";
+import { recordPromptEvent } from "@/lib/notification-prompt-data";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * Every mutating action the client app can perform.
@@ -1406,6 +1408,37 @@ export async function clientSaveConsentAction(
     },
   });
   revalidateClient(slug);
+  return { ok: true };
+}
+
+/**
+ * What the browser may tell us about the notifications prompt: that it was
+ * shown, and that the answer was no. "Turned on" is deliberately not here —
+ * it is written by /api/push when a device actually subscribes, so it can't be
+ * claimed without a subscription to show for it.
+ */
+const promptEvent = z.object({
+  kind: z.enum(["SHOWN", "NOT_NOW", "BLOCKED"]),
+  surface: z.enum(["SHEET", "CARD", "INSTALL", "SETTINGS_HELP"]),
+  stage: z.number().int().min(0).max(5),
+});
+
+export async function clientRecordNotificationPromptAction(
+  slug: string,
+  input: z.input<typeof promptEvent>,
+): Promise<{ ok: true } | { error: string }> {
+  const parsed = promptEvent.safeParse(input);
+  if (!parsed.success) return { error: "invalid" };
+
+  const { db, user } = await requireCustomerContext();
+  // Cheap, and fine for a person; the cap is for a script. A whole schedule is
+  // a handful of events, so this is generous.
+  const { ok } = await rateLimit(`prompt-event:${user.id}`, 30, 60 * 60 * 1000);
+  if (!ok) return { error: "rate-limited" };
+
+  await recordPromptEvent(db, { tenantId: user.tenantId!, customerProfileId: user.customerProfileId!, ...parsed.data });
+  // A no changes what Home should show next, so Home reads it again.
+  if (parsed.data.kind !== "SHOWN") revalidateClient(slug);
   return { ok: true };
 }
 

@@ -75,50 +75,51 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  branding               TenantBranding?
-  settings               TenantSettings?
-  locations              Location[]
-  users                  User[]
-  staffProfiles          StaffProfile[]
-  customerProfiles       CustomerProfile[]
-  customerTags           CustomerTag[]
-  catalogTags            CatalogTag[]
-  clientResults          ClientResult[]
-  leads                  Lead[]
-  roles                  Role[]
-  serviceCategories      ServiceCategory[]
-  services               Service[]
-  productCategories      ProductCategory[]
-  products               Product[]
-  packages               Package[]
-  customerPackages       CustomerPackage[]
-  membershipPlans        MembershipPlan[]
-  customerMemberships    CustomerMembership[]
-  membershipPriceChanges MembershipPriceChange[]
-  priceHistory           PriceHistory[]
-  packageSessionUses     PackageSessionUse[]
-  loyaltyProgramme       LoyaltyProgramme?
-  loyaltyTransactions    LoyaltyTransaction[]
-  accountCreditTx        AccountCreditTransaction[]
-  promotions             Promotion[]
-  baskets                Basket[]
-  orders                 Order[]
-  payments               Payment[]
-  refunds                Refund[]
-  appointments           Appointment[]
-  blockedTimes           BlockedTime[]
-  conversations          Conversation[]
-  messages               Message[]
-  notifications          Notification[]
-  notificationCampaigns  NotificationCampaign[]
-  notificationDeliveries NotificationDelivery[]
-  auditLogs              AuditLog[]
-  inventoryTransactions  InventoryTransaction[]
-  impersonationSessions  ImpersonationSession[]
-  activityEvents         ActivityEvent[]
-  pushSubscriptions      PushSubscription[]
-  redeemableItems        RedeemableItem[]
-  birthdayGreetings      BirthdayGreeting[]
+  branding                 TenantBranding?
+  settings                 TenantSettings?
+  locations                Location[]
+  users                    User[]
+  staffProfiles            StaffProfile[]
+  customerProfiles         CustomerProfile[]
+  customerTags             CustomerTag[]
+  catalogTags              CatalogTag[]
+  clientResults            ClientResult[]
+  leads                    Lead[]
+  roles                    Role[]
+  serviceCategories        ServiceCategory[]
+  services                 Service[]
+  productCategories        ProductCategory[]
+  products                 Product[]
+  packages                 Package[]
+  customerPackages         CustomerPackage[]
+  membershipPlans          MembershipPlan[]
+  customerMemberships      CustomerMembership[]
+  membershipPriceChanges   MembershipPriceChange[]
+  priceHistory             PriceHistory[]
+  packageSessionUses       PackageSessionUse[]
+  loyaltyProgramme         LoyaltyProgramme?
+  loyaltyTransactions      LoyaltyTransaction[]
+  accountCreditTx          AccountCreditTransaction[]
+  promotions               Promotion[]
+  baskets                  Basket[]
+  orders                   Order[]
+  payments                 Payment[]
+  refunds                  Refund[]
+  appointments             Appointment[]
+  blockedTimes             BlockedTime[]
+  conversations            Conversation[]
+  messages                 Message[]
+  notifications            Notification[]
+  notificationCampaigns    NotificationCampaign[]
+  notificationDeliveries   NotificationDelivery[]
+  auditLogs                AuditLog[]
+  inventoryTransactions    InventoryTransaction[]
+  impersonationSessions    ImpersonationSession[]
+  activityEvents           ActivityEvent[]
+  pushSubscriptions        PushSubscription[]
+  notificationPromptEvents NotificationPromptEvent[]
+  redeemableItems          RedeemableItem[]
+  birthdayGreetings        BirthdayGreeting[]
 
   @@index([status])
 }
@@ -128,16 +129,16 @@ model TenantBranding {
   tenantId String @unique
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  businessName   String
-  logoUrl        String?
-  appIconUrl     String?
-  primaryColor   String  @default("#0f766e")
-  secondaryColor String  @default("#0891b2")
-  accentColor    String  @default("#f59e0b")
-  coverImageUrl  String?
+  businessName     String
+  logoUrl          String?
+  appIconUrl       String?
+  primaryColor     String  @default("#0f766e")
+  secondaryColor   String  @default("#0891b2")
+  accentColor      String  @default("#f59e0b")
+  coverImageUrl    String?
   /// The launch screen's background, behind the app icon: the brand colour
   /// above, or white when that reads better against the logo. "brand" | "white".
-  launchBackground String @default("brand")
+  launchBackground String  @default("brand")
 
   contactEmail String?
   contactPhone String?
@@ -178,7 +179,7 @@ model TenantSettings {
   /// Profile > Account > Language. Set in App Builder > Settings > General.
   defaultClientLocale String    @default("nl")
   /// "je" vs "u" in the client app's Dutch copy — see Formality above.
-  clientFormality      Formality @default(INFORMAL)
+  clientFormality     Formality @default(INFORMAL)
 
   /// Deprecated. This was a sales-tax rate added on top of the price. Prices
   /// are now VAT-inclusive and nothing is added at checkout, so nothing reads
@@ -410,6 +411,50 @@ model PushSubscription {
   @@index([userId])
 }
 
+/// What happened each time the app asked a client to turn notifications on.
+/// Append-only: the schedule for when to ask again is worked out from these
+/// rows (see lib/notification-prompt.ts) rather than kept as a second counter
+/// that could drift from them, and the same rows are the per-clinic tally of
+/// prompts shown, accepted and declined.
+model NotificationPromptEvent {
+  id                String                    @id @default(cuid())
+  tenantId          String
+  tenant            Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId String
+  customerProfile   CustomerProfile           @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  kind              NotificationPromptKind
+  surface           NotificationPromptSurface
+  /// How many times this client had already declined when it happened, so
+  /// "shown" can be counted once per step of the schedule, not once per visit.
+  stage             Int                       @default(0)
+  createdAt         DateTime                  @default(now())
+
+  @@index([tenantId, kind, createdAt])
+  @@index([customerProfileId, kind, createdAt])
+}
+
+enum NotificationPromptKind {
+  SHOWN
+  TURNED_ON
+  /// The client tapped "Not now", or closed the prompt without choosing.
+  NOT_NOW
+  /// The device's own permission prompt was answered with no.
+  BLOCKED
+}
+
+enum NotificationPromptSurface {
+  /// The first-visit bottom sheet in the installed app.
+  SHEET
+  /// The smaller card on Home that follows a "Not now".
+  CARD
+  /// "Install the app to get notifications", in a browser tab.
+  INSTALL
+  /// How to allow notifications in iPhone Settings, after a no.
+  SETTINGS_HELP
+  /// The switch in Profile → Settings.
+  SETTINGS
+}
+
 model Permission {
   id       String @id @default(cuid())
   key      String @unique
@@ -591,26 +636,27 @@ model CustomerProfile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tags                   CustomerProfileTag[]
-  notes                  CustomerNote[]
-  leads                  Lead[]
-  packages               CustomerPackage[]
-  packagesGiven          CustomerPackage[]          @relation("PackageGiver")
-  memberships            CustomerMembership[]
-  loyaltyTx              LoyaltyTransaction[]
-  creditTx               AccountCreditTransaction[]
-  promotionRedemptions   PromotionRedemption[]
-  baskets                Basket[]
-  orders                 Order[]
-  appointments           Appointment[]
-  conversations          Conversation[]
-  notifications          Notification[]
-  notificationDeliveries NotificationDelivery[]
-  activityEvents         ActivityEvent[]
-  redeemableItems        RedeemableItem[]
-  personalPromotions     Promotion[]
-  personalCampaigns      NotificationCampaign[]
-  birthdayGreetings      BirthdayGreeting[]
+  tags                     CustomerProfileTag[]
+  notes                    CustomerNote[]
+  leads                    Lead[]
+  packages                 CustomerPackage[]
+  packagesGiven            CustomerPackage[]          @relation("PackageGiver")
+  memberships              CustomerMembership[]
+  loyaltyTx                LoyaltyTransaction[]
+  creditTx                 AccountCreditTransaction[]
+  promotionRedemptions     PromotionRedemption[]
+  baskets                  Basket[]
+  orders                   Order[]
+  appointments             Appointment[]
+  conversations            Conversation[]
+  notifications            Notification[]
+  notificationDeliveries   NotificationDelivery[]
+  activityEvents           ActivityEvent[]
+  notificationPromptEvents NotificationPromptEvent[]
+  redeemableItems          RedeemableItem[]
+  personalPromotions       Promotion[]
+  personalCampaigns        NotificationCampaign[]
+  birthdayGreetings        BirthdayGreeting[]
 
   @@index([tenantId])
   @@index([tenantId, lastName, firstName])
