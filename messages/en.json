@@ -99,6 +99,12 @@
       "sendNewLink": "Send a new link"
     }
   },
+  "register": {
+    "errors": {
+      "closed": "Registration is closed.",
+      "invalidCode": "That code is not valid."
+    }
+  },
   "clientApp": {
     "nav": {
       "home": "Home",

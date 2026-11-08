@@ -120,3 +120,32 @@ export function logReset(outcome: ResetOutcome, fields: SignInFields = {}): void
     /* ignore */
   }
 }
+
+/**
+ * Outcomes of self-registration (lib/actions/register.ts). The registration
+ * code itself is never a field here and never could be: `clean` would print it
+ * as "?" if it were, and the outcomes say only whether one was given and
+ * whether it matched.
+ */
+export type RegisterOutcome =
+  | "success"
+  /** REGISTRATION_CODE is not set, so registration is off entirely. */
+  | "disabled"
+  | "code_missing"
+  | "code_wrong"
+  | "rate_limited_ip"
+  | "rate_limited_email"
+  /** An account of this kind already exists on the address. */
+  | "email_taken"
+  | "invalid_input";
+
+const REGISTER_INFO: ReadonlySet<RegisterOutcome> = new Set<RegisterOutcome>(["success"]);
+
+/** Search for `[register]`. `portal` carries which register page it was: admin or clinic. */
+export function logRegister(outcome: RegisterOutcome, fields: SignInFields = {}): void {
+  try {
+    write(format("register", outcome, fields), REGISTER_INFO.has(outcome));
+  } catch {
+    /* ignore */
+  }
+}
