@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { Icon, ToastProvider, money } from "@/components/client-app/ui";
-import { BasePathProvider, ClinicTimeZoneProvider, useBasePath } from "./base-path";
+import { BasePathProvider, ClinicTimeZoneProvider, useBasePath, useHomePath } from "./base-path";
 import { isStandalone } from "@/components/client-app/pwa";
 import { PaymentResult } from "./payment-result";
 import { CartProvider, useCart } from "./cart-context";
@@ -118,6 +118,7 @@ function Frame({
   const pathname = usePathname();
   const router = useRouter();
   const base = useBasePath();
+  const home = useHomePath();
   // A payment that redirected away comes back with ?order=…; the result is
   // shown wherever that lands, including a Safari view outside the app.
   const search = useSearchParams();
@@ -148,7 +149,7 @@ function Frame({
   const active = tappedTab ?? routeTab;
   const showHeader = active !== "scan";
 
-  const hrefFor = React.useCallback((key: string) => (key === "home" ? base : `${base}/${key}`), [base]);
+  const hrefFor = React.useCallback((key: string) => (key === "home" ? home : `${base}/${key}`), [base, home]);
 
   // Load every tab ahead of time so switching is instant in production.
   React.useEffect(() => {

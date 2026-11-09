@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { authConfig } from "@/auth.config";
 import { LAST_CLINIC_COOKIE, slugFromAppPath } from "@/lib/clinic-link";
 import { legacyRedirectUrl } from "@/lib/legacy-domain";
-import { clientAppPath, isClientHost, loginRedirectForHost, shortClientAppPath } from "@/lib/portal-hosts";
+import { CLINIC_HOST_HEADER, ROOT_DOMAIN, clientAppPath, clinicDomainRoute, isClientHost, loginForHost, loginRedirectForHost, normaliseHost, shortClientAppPath } from "@/lib/portal-hosts";
 import { applySecurityHeaders } from "@/lib/security-headers";
 
 const { auth } = NextAuth(authConfig);
@@ -45,18 +45,62 @@ const AGENCY_REDIRECTS: Record<string, string> = {
   "/platform/tenants/new": "/agency",
 };
 
-function withPathnameHeaders(req: NextRequest, nonce: string) {
+function withPathnameHeaders(req: NextRequest, nonce: string, clinicHostSlug?: string) {
   // Server layouts have no direct access to the pathname; pass it down. The
   // nonce travels the same way, so a server component (the launch-screen
   // splash is the one that needs it) can put it on its own inline <script>.
   const headers = new Headers(req.headers);
   headers.set("x-pathname", req.nextUrl.pathname);
   headers.set("x-nonce", nonce);
+  // Set only when this request arrived on a clinic's own domain. The server
+  // needs it to build links and the app's scope as "/" rather than
+  // "/<slug>", and it is the middleware — not a page — that knows the host
+  // belongs to that clinic. A request cannot set this itself: Headers built
+  // from the incoming request are replaced here, not merged.
+  if (clinicHostSlug) headers.set(CLINIC_HOST_HEADER, clinicHostSlug);
+  else headers.delete(CLINIC_HOST_HEADER);
   return headers;
 }
 
-function withPathname(req: NextRequest, nonce: string) {
-  return NextResponse.next({ request: { headers: withPathnameHeaders(req, nonce) } });
+function withPathname(req: NextRequest, nonce: string, clinicHostSlug?: string) {
+  return NextResponse.next({ request: { headers: withPathnameHeaders(req, nonce, clinicHostSlug) } });
+}
+
+/**
+ * Which clinic answers on a host of its own, cached in this instance.
+ *
+ * Middleware runs on the Edge runtime and cannot reach the database, so the
+ * map comes from /api/internal/clinic-hosts — which is Node, and can. One
+ * fetch per instance per minute, never on the request path of a host we
+ * already recognise (see `route`, which only asks for unknown hosts).
+ *
+ * Three deliberate properties: a failure keeps serving the last good copy,
+ * because one bad read should not take every clinic's domain offline; a
+ * failure with nothing cached yet answers "not a clinic domain", which shows
+ * the landing page rather than a crash; and after a failure the next attempt
+ * is seconds away, not a minute, so recovery is quick without hammering.
+ */
+const CLINIC_HOSTS_TTL_MS = 60_000;
+const CLINIC_HOSTS_RETRY_MS = 5_000;
+const CLINIC_HOSTS_PATH = "/api/internal/clinic-hosts";
+
+let hostMap: { hosts: Record<string, string>; freshUntil: number } | null = null;
+
+async function clinicSlugForHost(req: NextRequest, host: string): Promise<string | null> {
+  const now = Date.now();
+  if (!hostMap || now >= hostMap.freshUntil) {
+    try {
+      const response = await fetch(new URL(CLINIC_HOSTS_PATH, req.nextUrl.origin), { cache: "no-store" });
+      if (!response.ok) throw new Error(`host map responded ${response.status}`);
+      const body = (await response.json()) as { hosts?: Record<string, string> };
+      hostMap = { hosts: body.hosts ?? {}, freshUntil: now + CLINIC_HOSTS_TTL_MS };
+    } catch (err) {
+      console.warn("[domain] could not read the host map:", err instanceof Error ? err.message : err);
+      if (!hostMap) return null;
+      hostMap = { hosts: hostMap.hosts, freshUntil: now + CLINIC_HOSTS_RETRY_MS };
+    }
+  }
+  return Object.prototype.hasOwnProperty.call(hostMap.hosts, host) ? (hostMap.hosts[host] ?? null) : null;
 }
 
 /** Remembers the clinic being viewed, so /app (and login.deza.ai) reopens it next time. */
@@ -67,8 +111,23 @@ function rememberClinic(req: NextRequest, res: NextResponse, appPath: string) {
   }
 }
 
+/**
+ * Hosts this deployment already knows, so an unknown one can be looked up as
+ * a clinic's domain without asking about every ordinary request. Covers the
+ * three platform hosts and everything that is not a real domain: localhost,
+ * a LAN address for phone testing, preview URLs, staging.
+ */
+function isKnownPlatformHost(host: string): boolean {
+  if (!host) return true;
+  if (isClientHost(host) || loginForHost(host)) return true;
+  if (host === ROOT_DOMAIN || host === `www.${ROOT_DOMAIN}` || host === `staging.${ROOT_DOMAIN}`) return true;
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".vercel.app")) return true;
+  // A bare address: localhost by another name, or a LAN phone test.
+  return /^[\d.]+$/.test(host) || host.includes(":");
+}
+
 /** Everything that decides where a request goes. Headers are applied once, after, to whatever this returns. */
-function route(req: NextAuthRequest, nonce: string): NextResponse {
+async function route(req: NextAuthRequest, nonce: string): Promise<NextResponse> {
   const { pathname } = req.nextUrl;
   const user = req.auth?.user;
   const isAgencyAdmin = user?.role === "PLATFORM_ADMIN";
@@ -85,6 +144,40 @@ function route(req: NextAuthRequest, nonce: string): NextResponse {
   // old API path must not quietly become a GET.
   const legacy = legacyRedirectUrl(host, pathname, req.nextUrl.search);
   if (legacy) return NextResponse.redirect(legacy, 308);
+
+  // --- a clinic's own domain ---------------------------------------------
+  // app.clinicname.nl is that one clinic's app and nothing else: "/" is its
+  // home, "/shop" its shop, and the slug never appears. Looked up only for a
+  // host this deployment does not already know, so ordinary traffic never
+  // waits on it — and never for the endpoint that serves the map itself,
+  // which would be a request calling itself.
+  const normalisedHost = normaliseHost(host);
+  if (pathname !== CLINIC_HOSTS_PATH && !isKnownPlatformHost(normalisedHost)) {
+    const slug = await clinicSlugForHost(req, normalisedHost);
+    if (slug) {
+      // An /app/<slug> link still works but sits outside the installed app's
+      // scope, so it goes to the short address — the same reasoning as the
+      // shared client host below.
+      const short = shortClientAppPath(pathname);
+      if (short) {
+        const url = req.nextUrl.clone();
+        url.pathname = short.startsWith(`/${slug}`) ? short.slice(`/${slug}`.length) || "/" : short;
+        return NextResponse.redirect(url, 308);
+      }
+
+      const target = clinicDomainRoute(pathname);
+      // The staff portal and the admin console never run on a clinic's host.
+      if (target.kind === "deny") return NextResponse.rewrite(new URL("/not-found", req.url));
+      if (target.kind === "app") {
+        const url = req.nextUrl.clone();
+        url.pathname = `/app/${slug}${pathname === "/" ? "" : pathname}`;
+        const res = NextResponse.rewrite(url, { request: { headers: withPathnameHeaders(req, nonce, slug) } });
+        rememberClinic(req, res, url.pathname);
+        return res;
+      }
+      return withPathname(req, nonce, slug);
+    }
+  }
 
   // --- the client host is the client app ---------------------------------
   // login.deza.ai/<clinic>/... serves /app/<clinic>/... without the client
@@ -171,13 +264,13 @@ function route(req: NextAuthRequest, nonce: string): NextResponse {
   return withPathname(req, nonce);
 }
 
-export default auth((req) => {
+export default auth(async (req) => {
   // One nonce per request, carried two ways: on the response's CSP (so the
   // browser will run a script that names it) and on the request headers via
   // withPathnameHeaders (so the one page that needs it, the launch-screen
   // splash, can read it back with next/headers and put it on its script tag).
   const nonce = crypto.randomUUID();
-  const res = route(req, nonce);
+  const res = await route(req, nonce);
   // The service worker's own script response is not a page and registers no
   // nonce of its own to satisfy a nonce-based script-src — Chrome refuses the
   // registration outright ("An unknown error occurred when fetching the

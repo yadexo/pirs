@@ -116,6 +116,51 @@ export const RESERVED_SLUGS = new Set([
 ]);
 
 /**
+ * First segments that belong to the platform, not to a clinic's app. On a
+ * clinic's own host these are refused rather than served: the staff portal
+ * and the admin console never run on a clinic's domain, and a sign-in page
+ * on it would set a cookie for the wrong origin.
+ */
+const PLATFORM_ONLY_SEGMENTS = new Set(["login", "logout", "m", "agency", "admin", "register", "account"]);
+
+/**
+ * Files that really do sit at the root of every host, as opposed to pages of
+ * a clinic's app that merely have a dot in the name.
+ */
+const ROOT_FILES = new Set(["client-sw.js", "favicon.ico", "robots.txt", "sitemap.xml"]);
+
+/**
+ * What a clinic's own host should do with a path.
+ *
+ * On that host the clinic is the whole site, so the first segment is a page
+ * of its app — "/shop" is the shop, not a clinic slug. Three outcomes:
+ *
+ *  - "app": serve the clinic's app at this path (the usual case)
+ *  - "as-is": the app's own plumbing, which is the same everywhere — /api,
+ *    Next's assets, uploads, and the shared /set-password and
+ *    /forgot-password pages, which a client reaches from an emailed link on
+ *    this very host
+ *  - "deny": the platform's own surfaces, which this host must not serve
+ *
+ * Another clinic's slug needs no rule of its own: "/other-clinic" becomes
+ * "/app/<thisclinic>/other-clinic", which is not a page, so it is a 404.
+ */
+export function clinicDomainRoute(pathname: string): { kind: "app" } | { kind: "as-is" } | { kind: "deny" } {
+  // Callers pass a pathname, but a query or fragment left on the end must not
+  // be able to turn "/login" into something that is not "login".
+  const [, first = ""] = pathname.split(/[?#]/)[0]!.split("/");
+  const segment = first.toLowerCase();
+  if (PLATFORM_ONLY_SEGMENTS.has(segment)) return { kind: "deny" };
+  if (!segment) return { kind: "app" };
+  if (RESERVED_SLUGS.has(segment) || ROOT_FILES.has(segment)) return { kind: "as-is" };
+  // Deliberately not "anything with a dot". On the shared client host the
+  // first segment is the clinic slug, so a dot there means a real file at the
+  // root; here the first segment is a page of the app, and
+  // /manifest.webmanifest is the clinic's manifest, not a root file.
+  return { kind: "app" };
+}
+
+/**
  * The installed app's scope on this host. Always ends in "/", which is what
  * iOS treats as a directory — a scope of "/riverside" has Safari open every
  * deeper page (the Shop tab, say) in a browser view with an address bar
@@ -178,3 +223,15 @@ export function loginRedirectForHost(host: string | null | undefined): string | 
   const login = loginForHost(host);
   return login ? `https://${normaliseHost(host)}${login}` : null;
 }
+
+/**
+ * The request header the middleware sets when a request arrived on a clinic's
+ * own domain, carrying that clinic's slug.
+ *
+ * It is how the server side knows to build links and the installed app's
+ * scope as "/" rather than "/<slug>": only the middleware knows the host
+ * belongs to that clinic, and only it can say so. Nothing outside can forge
+ * it — the middleware rebuilds the header set on every request and deletes
+ * this one unless it set it.
+ */
+export const CLINIC_HOST_HEADER = "x-clinic-host";

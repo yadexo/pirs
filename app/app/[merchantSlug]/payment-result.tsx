@@ -6,7 +6,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { Icon, Sheet, money } from "@/components/client-app/ui";
 import { Button, Tag } from "@/components/client-app/v2";
 import { clientOrderStatusAction, clientOrderReceiptAction } from "@/lib/actions/client-app";
-import { useBasePath } from "./base-path";
+import { useBasePath, useHomePath } from "./base-path";
 import { phaseFor, shouldAskAgain, POLL_MS, type Phase } from "./payment-phase";
 
 /**
@@ -55,6 +55,7 @@ export function PaymentResult({
 }) {
   const router = useRouter();
   const base = useBasePath();
+  const home = useHomePath();
   const t = useTranslations("clientApp.paymentResult");
   const locale = useLocale();
   const fmtMoney = React.useCallback((cents: number) => money(cents, currency, locale === "nl" ? "nl" : "en"), [currency, locale]);
@@ -253,7 +254,7 @@ export function PaymentResult({
             </div>
           )}
 
-          <Button variant="outline" className="home" onClick={() => (onClose ? onClose() : router.push(base))}>
+          <Button variant="outline" className="home" onClick={() => (onClose ? onClose() : router.push(home))}>
             {t("backToHome")}
           </Button>
         </>

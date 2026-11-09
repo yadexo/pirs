@@ -1,8 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { getClientAppContext } from "@/lib/client-app-context";
 import { headers } from "next/headers";
-import { clientBasePath, currentClientBasePath, getPublicClinic, shortAppName } from "@/lib/public-clinic";
-import { clientAppScope } from "@/lib/portal-hosts";
+import { currentClientAppPaths, getPublicClinic, shortAppName } from "@/lib/public-clinic";
 import { InstallPrompt, ServiceWorker } from "@/components/client-app/pwa";
 import { LaunchImageLinks, Splash } from "@/components/client-app/splash";
 import { SplashDismiss } from "@/components/client-app/splash-dismiss";
@@ -24,8 +23,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { merchantSlug } = await params;
   const clinic = await getPublicClinic(merchantSlug);
   if (!clinic) return {};
-  const requestHeaders = await headers();
-  const base = clientBasePath(clinic.slug, requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"));
+  const { base } = await currentClientAppPaths(clinic.slug);
   const v = `?v=${clinic.version}`;
   return {
     title: clinic.name,
@@ -57,11 +55,10 @@ export default async function ClientAppLayout({
   const { merchantSlug } = await params;
   const ctx = await getClientAppContext(merchantSlug);
   // Every link in the app hangs off this.
-  const base = await currentClientBasePath(merchantSlug);
   // The worker controls the whole app, home page included — the same scope the
   // installed app has, so the two can't disagree about what is inside it.
+  const { base, scope } = await currentClientAppPaths(merchantSlug);
   const requestHeaders = await headers();
-  const scope = clientAppScope(requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"));
   const nonce = requestHeaders.get("x-nonce") ?? "";
 
   // The merchant's own brand colour is the only colour the client app takes

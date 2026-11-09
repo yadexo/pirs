@@ -385,13 +385,18 @@ export function ProfileView({
           <div className="group">
             <AccountRow icon="bell" label={tp("notifications")} onClick={() => setSheet("notifications")} />
             <AccountRow icon="users" label={tp("referralLink")} onClick={() => setSheet("referral")} />
-            <Link className="row" href={`${finder}?switch=1`} prefetch={false}>
-              <span className="ic" aria-hidden="true">
-                <Icon name="pin" size={20} />
-              </span>
-              <span className="txt">{tp("switchClinic")}</span>
-              <Icon name="chevR" size={20} />
-            </Link>
+            {/* No finder on the clinic's own domain: that host is this one
+                clinic, and a list of others would walk the client out of the
+                app they installed. */}
+            {finder && (
+              <Link className="row" href={`${finder}?switch=1`} prefetch={false}>
+                <span className="ic" aria-hidden="true">
+                  <Icon name="pin" size={20} />
+                </span>
+                <span className="txt">{tp("switchClinic")}</span>
+                <Icon name="chevR" size={20} />
+              </Link>
+            )}
           </div>
 
           <h2>{tp("clinicHeading")}</h2>

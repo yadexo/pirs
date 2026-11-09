@@ -86,6 +86,28 @@ describe("find your clinic + installable clinic app", () => {
     });
   });
 
+  it("installs at the root of the clinic's own domain, with no slug in sight", async () => {
+    // The middleware says which clinic a host belongs to; nothing else can.
+    const res = await manifestRoute.GET(new Request("http://x", { headers: { "x-clinic-host": slug("pwa-hidden") } }), {
+      params: Promise.resolve({ merchantSlug: slug("pwa-hidden") }),
+    });
+    expect(res.status).toBe(200);
+    const manifest = await res.json();
+    expect(manifest).toMatchObject({ id: "/", start_url: "/", scope: "/" });
+    // The icons hang off an empty base, so they must still be single-slashed:
+    // "//app-icon/..." is a URL on a host called "app-icon".
+    for (const icon of manifest.icons) expect(icon.src).toMatch(/^\/app-icon\//);
+  });
+
+  it("ignores the clinic header when it names a different clinic", async () => {
+    // Belt and braces: the header is the middleware's, but the manifest is
+    // for the clinic in the path, and the two have to agree to mean anything.
+    const res = await manifestRoute.GET(new Request("http://x", { headers: { "x-clinic-host": "some-other-clinic", "x-forwarded-host": CLIENT } }), {
+      params: Promise.resolve({ merchantSlug: slug("pwa-hidden") }),
+    });
+    expect(await res.json()).toMatchObject({ start_url: `/${slug("pwa-hidden")}` });
+  });
+
   /**
    * The apex is a separate marketing site. Were it ever attached to this app
    * again, the manifest must not claim the whole origin — a scope of "/" there

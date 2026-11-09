@@ -48,7 +48,12 @@ describe("what the reset would delete", () => {
     await rawDb.tenant.update({ where: { id: plainClinicId }, data: { createdByUserId: adminId } });
     await rawDb.auditLog.create({ data: { tenantId: null, actorUserId: adminId, actorType: "PLATFORM_ADMIN", action: `rp.test.${stamp}`, entityType: "User", entityId: adminId } });
     await rawDb.twoFactorSecret.create({ data: { userId: adminId, secret: `SECRET${stamp}`, confirmedAt: new Date() } });
-    // A sign-in counter for that admin, and one for somebody else.
+    // A sign-in counter for that admin, and one for somebody else. The
+    // address is the clock modulo 200, so sooner or later it is one another
+    // file already used and left behind — and createMany on an existing
+    // primary key would take this whole file down. Files run one at a time
+    // (vitest.config.ts), so nothing live can be holding it.
+    await rawDb.rateLimitBucket.deleteMany({ where: { key: `login:ip:203.0.113.${stamp % 200}` } });
     await rawDb.rateLimitBucket.createMany({
       data: [
         { key: `login:admin:rp-admin-${stamp}@example.com`, count: 11, resetAt: new Date(Date.now() + 600_000) },

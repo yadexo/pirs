@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { clientBasePath, getPublicClinic, shortAppName } from "@/lib/public-clinic";
-import { clientAppScope } from "@/lib/portal-hosts";
+import { clientAppPathsFor, getPublicClinic, shortAppName } from "@/lib/public-clinic";
 
 /**
  * Each clinic's app installs as its own home-screen app: its name, its scope,
@@ -11,15 +10,19 @@ export async function GET(req: Request, { params }: { params: Promise<{ merchant
   const clinic = await getPublicClinic(merchantSlug);
   if (!clinic) return new NextResponse("Not found", { status: 404 });
 
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
-  const base = clientBasePath(clinic.slug, host);
+  const { base, scope } = clientAppPathsFor(clinic.slug, new Headers(req.headers));
   const icon = (file: string) => `${base}/app-icon/${file}?v=${clinic.version}`;
+  // These two are URLs, not prefixes. On the clinic's own domain the base is
+  // "" — right for building "/shop", wrong here: an empty start_url resolves
+  // to the manifest's own address, so the installed app would open on the
+  // manifest instead of the clinic's home.
+  const home = base || "/";
   const manifest = {
-    id: base,
+    id: home,
     name: clinic.name,
     short_name: shortAppName(clinic.name),
-    start_url: base,
-    scope: clientAppScope(host),
+    start_url: home,
+    scope,
     display: "standalone",
     background_color: "#f4f5f7",
     theme_color: "#f4f5f7",
