@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { auth } from "@/auth";
 import { openedDoor } from "@/lib/portal-scope";
+import { registrationEnabled } from "@/lib/registration-code";
 import { rawDb } from "@/lib/db";
 import { LoginForm } from "./login-form";
 import { loadLiveAccount } from "@/lib/live-account";
@@ -42,6 +43,13 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   // so one address can be a platform admin, a clinic owner and a client at once.
   const requestHeaders = await headers();
   const door = openedDoor(requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"), target);
+
+  // "Register your clinic", offered where the clinic login is — the clinic
+  // host, and the staff fallback — and only while registration is open at all
+  // (REGISTRATION_CODE set). With it unset the page is a 404, so a link to it
+  // would be a dead end.
+  const tr = await getTranslations("register");
+  const registerHref = registrationEnabled() && (door.portal === "clinic" || door.portal === "staff") ? "/register/clinic" : null;
 
   // A session whose account was deactivated since is treated as signed out;
   // otherwise the portals send it here and this page would send it back.
@@ -145,6 +153,13 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <div className="mt-5">
             <LoginForm next={target} portal={door.portal} clinic={door.tenantSlug} />
           </div>
+          {registerHref && (
+            <p className="mt-4 border-t border-border pt-4 text-center text-[12.5px] text-ink-muted">
+              <Link href={registerHref} className="font-medium text-primary underline underline-offset-2">
+                {tr("clinic.linkFromLogin")}
+              </Link>
+            </p>
+          )}
         </div>
 
         <p className="mt-4 text-center text-[12.5px] text-ink-muted">

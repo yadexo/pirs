@@ -61,6 +61,13 @@ export function AddMerchantDrawer({ open, onClose }: { open: boolean; onClose: (
               <input id="name" name="name" required className={field} />
             </div>
             <div>
+              <label htmlFor="ownerName" className={label}>
+                Owner name
+              </label>
+              <input id="ownerName" name="ownerName" className={field} />
+              <p className="mt-1 text-[11px] text-ink-muted">Optional. Left blank, the business name stands in for it.</p>
+            </div>
+            <div>
               <label htmlFor="contactEmail" className={label}>
                 Contact email
               </label>

@@ -72,6 +72,14 @@ model Tenant {
   /// different deal from a one-off purchase.
   membershipFeePercent Float?
 
+  /// The platform admin who created this clinic, when one did. Null when the
+  /// clinic registered itself — which is most of them once the register page
+  /// is in use, so this answers "did we set this up, or did they?".
+  /// SetNull, not Cascade: deleting the admin who onboarded a clinic must
+  /// never take the clinic with it.
+  createdByUserId String?
+  createdBy       User?   @relation("ClinicsCreated", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -122,6 +130,7 @@ model Tenant {
   birthdayGreetings        BirthdayGreeting[]
 
   @@index([status])
+  @@index([createdByUserId])
 }
 
 model TenantBranding {
@@ -336,6 +345,8 @@ model User {
   impersonationSessions ImpersonationSession[]
   twoFactor             TwoFactorSecret?
   twoFactorBackupCodes  TwoFactorBackupCode[]
+
+  clinicsCreated Tenant[] @relation("ClinicsCreated")
 
   @@unique([tenantId, email])
   @@index([role])

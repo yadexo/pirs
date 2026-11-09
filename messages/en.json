@@ -102,7 +102,31 @@
   "register": {
     "errors": {
       "closed": "Registration is closed.",
-      "invalidCode": "That code is not valid."
+      "invalidCode": "That code is not valid.",
+      "checkTheForm": "Please check the highlighted fields.",
+      "clinicEmailTaken": "That email already works at a clinic. Sign in instead, or use another address."
+    },
+    "clinic": {
+      "section": "New clinic",
+      "title": "Register your clinic",
+      "subtitle": "Creates the clinic and your owner account. You will choose your password from a link we email you.",
+      "clinicName": "Clinic name",
+      "yourName": "Your name",
+      "email": "Your email",
+      "emailHint": "This becomes your sign-in for the clinic portal.",
+      "language": "Language",
+      "currency": "Currency",
+      "code": "Registration code",
+      "codeHint": "The code you were given. Without it, registration is closed.",
+      "submit": "Create clinic",
+      "passwordNote": "We never ask for a password here, and never email one. You set your own from a one-time link, and then set up two-factor authentication.",
+      "haveAnAccount": "Already have an account? Sign in",
+      "done": {
+        "emailed": "Clinic created. We emailed a link to {email} — open it to set your password. It works once, for 7 days.",
+        "notEmailed": "Clinic created, but the email could not be sent. Open this link to set your password. It works once, for 7 days.",
+        "signIn": "Go to sign in"
+      },
+      "linkFromLogin": "Register your clinic"
     }
   },
   "clientApp": {

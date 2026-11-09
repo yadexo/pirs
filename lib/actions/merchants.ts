@@ -1,28 +1,25 @@
 "use server";
 
 import { z } from "zod";
-import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { rawDb } from "@/lib/db";
 import { requireRole } from "@/lib/rbac";
-import { slugify } from "@/lib/utils";
 import { writeAuditLog } from "@/lib/audit";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
-import { issuePasswordToken, INVITE_TTL_MS } from "@/lib/password-tokens";
-import { appUrl } from "@/lib/app-url";
-import { getEmailProvider } from "@/lib/providers/notifications";
-import { senderFor } from "@/lib/emails/sender";
-import { welcomeClinicOwnerEmail } from "@/lib/emails/templates";
-import { DEFAULT_LOCALE } from "@/lib/locale-cookie";
+import { createClinicWithOwner } from "@/lib/clinic-create";
+import { SUPPORTED_LOCALES } from "@/lib/locale-cookie";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
 
 const createSchema = z.object({
   name: z.string().min(2, "Business name is required").max(120),
+  /** The owner's own name. Optional: the form has only ever asked for the clinic's. */
+  ownerName: z.string().max(120).optional(),
   contactEmail: z.string().email("Enter a valid email"),
   phone: z.string().max(40).optional(),
   country: z.string().max(80).optional(),
   currency: z.enum(SUPPORTED_CURRENCIES).default("EUR"),
   timezone: z.string().min(1).default("Europe/Amsterdam"),
+  locale: z.enum(SUPPORTED_LOCALES).optional(),
 });
 
 export async function createMerchantAction(_prevState: unknown, formData: FormData) {
@@ -30,122 +27,48 @@ export async function createMerchantAction(_prevState: unknown, formData: FormDa
 
   const parsed = createSchema.safeParse({
     name: formData.get("name"),
+    ownerName: formData.get("ownerName") || undefined,
     contactEmail: formData.get("contactEmail"),
     phone: formData.get("phone") || undefined,
     country: formData.get("country") || undefined,
     currency: formData.get("currency") || "EUR",
     timezone: formData.get("timezone") || "Europe/Amsterdam",
+    locale: formData.get("locale") || undefined,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
 
-  const logoUrl = String(formData.get("logoUrl") ?? "") || undefined;
-
-  // Slugs stay unique even when two merchants share a trading name.
-  let slug = slugify(parsed.data.name);
-  if (await rawDb.tenant.findUnique({ where: { slug } })) {
-    slug = `${slug}-${randomBytes(3).toString("hex")}`;
-  }
-
-  const merchant = await rawDb.$transaction(async (tx) => {
-    const created = await tx.tenant.create({
-      data: {
-        slug,
-        name: parsed.data.name,
-        status: "ACTIVE",
-        subscriptionStatus: "TRIAL",
-        branding: {
-          create: {
-            businessName: parsed.data.name,
-            logoUrl,
-            contactEmail: parsed.data.contactEmail,
-            contactPhone: parsed.data.phone,
-            country: parsed.data.country,
-            currency: parsed.data.currency,
-            timeZone: parsed.data.timezone,
-          },
-        },
-        settings: { create: { publiclyListed: true } },
-        // Seed defaults so App Builder is usable the moment they log in.
-        loyaltyProgramme: { create: { pointsPerCents: 0.01, pointsPerVisit: 0 } },
-      },
-    });
-
-    await tx.location.create({
-      data: { tenantId: created.id, name: `${parsed.data.name} — Main`, isPrimary: true },
-    });
-
-    const owner = await tx.user.create({
-      data: {
-        tenantId: created.id,
-        email: parsed.data.contactEmail.toLowerCase(),
-        // Not a hash any password can match; set from the welcome link below.
-        passwordHash: "!invited",
-        status: "INVITED",
-        role: "TENANT_ADMIN",
-      },
-    });
-
-    const [firstName, ...rest] = parsed.data.name.split(" ");
-    await tx.staffProfile.create({
-      data: {
-        tenantId: created.id,
-        userId: owner.id,
-        firstName: firstName || parsed.data.name,
-        lastName: rest.join(" ") || "Owner",
-        active: true,
-        activatedAt: new Date(),
-      },
-    });
-
-    return { tenant: created, ownerId: owner.id };
+  // The clinic, its owner, the one-time link and the welcome email — the same
+  // code the clinic register page runs (lib/clinic-create.ts), so the two ways
+  // a clinic comes into being cannot drift apart.
+  const clinic = await createClinicWithOwner({
+    name: parsed.data.name,
+    ownerName: parsed.data.ownerName,
+    contactEmail: parsed.data.contactEmail,
+    phone: parsed.data.phone,
+    country: parsed.data.country,
+    currency: parsed.data.currency,
+    timezone: parsed.data.timezone,
+    locale: parsed.data.locale,
+    logoUrl: String(formData.get("logoUrl") ?? "") || undefined,
+    createdByUserId: user.id,
   });
 
   await writeAuditLog({
-    tenantId: merchant.tenant.id,
+    tenantId: clinic.tenantId,
     actorUserId: user.id,
     actorType: "PLATFORM_ADMIN",
     action: "merchant.created",
     entityType: "Tenant",
-    entityId: merchant.tenant.id,
-  });
-
-  // A login link, not a password shown on screen or mailed in the clear —
-  // the owner sets their own, the same way a staff invite works.
-  const token = await issuePasswordToken(merchant.ownerId, INVITE_TTL_MS);
-  const loginUrl = `${appUrl()}/set-password?token=${encodeURIComponent(token)}`;
-
-  const agency = await rawDb.agencySettings.findFirst({
-    select: { name: true, senderName: true, logoLightUrl: true, primaryColor: true },
-  });
-  const agencyName = agency?.senderName || agency?.name || "Deza";
-  // Same derivation as the owner's own staff profile above — the form has no
-  // separate "your name" field, only the clinic's.
-  const [ownerFirstName] = parsed.data.name.split(" ");
-  const template = welcomeClinicOwnerEmail({
-    branding: { name: agencyName, logoUrl: agency?.logoLightUrl ?? null, color: agency?.primaryColor ?? null },
-    ownerName: ownerFirstName || parsed.data.name,
-    clinicName: parsed.data.name,
-    loginUrl,
-    // The owner hasn't been invited yet, let alone signed in or chosen a
-    // language — there's no signal to go on, so this matches the platform
-    // default the same way their first page load would.
-    locale: DEFAULT_LOCALE,
-  });
-  const result = await getEmailProvider().send({
-    to: parsed.data.contactEmail,
-    subject: template.subject,
-    body: template.text,
-    html: template.html,
-    from: senderFor(agencyName),
+    entityId: clinic.tenantId,
   });
 
   revalidatePath("/agency");
   return {
     success: true as const,
-    merchantId: merchant.tenant.id,
-    email: parsed.data.contactEmail,
-    loginUrl,
-    emailed: result.status === "SENT",
+    merchantId: clinic.tenantId,
+    email: clinic.email,
+    loginUrl: clinic.loginUrl,
+    emailed: clinic.emailed,
   };
 }
 

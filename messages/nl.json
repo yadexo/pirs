@@ -102,7 +102,31 @@
   "register": {
     "errors": {
       "closed": "Registratie is gesloten.",
-      "invalidCode": "Die code is niet geldig."
+      "invalidCode": "Die code is niet geldig.",
+      "checkTheForm": "Controleer de gemarkeerde velden.",
+      "clinicEmailTaken": "Dit e-mailadres werkt al bij een kliniek. Meld je aan, of gebruik een ander adres."
+    },
+    "clinic": {
+      "section": "Nieuwe kliniek",
+      "title": "Registreer je kliniek",
+      "subtitle": "Hiermee maak je de kliniek en je eigenaarsaccount aan. Je kiest je wachtwoord via een link die we je mailen.",
+      "clinicName": "Naam kliniek",
+      "yourName": "Jouw naam",
+      "email": "Jouw e-mailadres",
+      "emailHint": "Hiermee meld je je aan bij het klinieksysteem.",
+      "language": "Taal",
+      "currency": "Valuta",
+      "code": "Registratiecode",
+      "codeHint": "De code die je hebt gekregen. Zonder code is registratie gesloten.",
+      "submit": "Kliniek aanmaken",
+      "passwordNote": "We vragen hier nooit om een wachtwoord en mailen er nooit een. Je stelt zelf een wachtwoord in via een eenmalige link en daarna tweestapsverificatie.",
+      "haveAnAccount": "Heb je al een account? Meld je aan",
+      "done": {
+        "emailed": "Kliniek aangemaakt. We hebben een link gemaild naar {email} — open die om je wachtwoord in te stellen. De link werkt eenmalig, 7 dagen.",
+        "notEmailed": "Kliniek aangemaakt, maar de e-mail kon niet worden verzonden. Open deze link om je wachtwoord in te stellen. De link werkt eenmalig, 7 dagen.",
+        "signIn": "Naar aanmelden"
+      },
+      "linkFromLogin": "Registreer je kliniek"
     }
   },
   "clientApp": {
