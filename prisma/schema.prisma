@@ -126,6 +126,7 @@ model Tenant {
   activityEvents           ActivityEvent[]
   pushSubscriptions        PushSubscription[]
   notificationPromptEvents NotificationPromptEvent[]
+  domains                  ClinicDomain[]
   redeemableItems          RedeemableItem[]
   birthdayGreetings        BirthdayGreeting[]
 
@@ -346,7 +347,8 @@ model User {
   twoFactor             TwoFactorSecret?
   twoFactorBackupCodes  TwoFactorBackupCode[]
 
-  clinicsCreated Tenant[] @relation("ClinicsCreated")
+  clinicsCreated Tenant[]       @relation("ClinicsCreated")
+  domainsCreated ClinicDomain[] @relation("ClinicDomainsCreated")
 
   @@unique([tenantId, email])
   @@index([role])
@@ -2252,4 +2254,63 @@ enum ActivityType {
   MEMBERSHIP_CANCELLED
   REFERRAL
   REVIEW
+}
+
+/// What a clinic's own domain is for.
+///
+/// Only CLIENT exists in the routing today. PORTAL is declared now because
+/// adding a value to a Postgres enum later is a migration against a live
+/// table, and because it makes `@@unique([tenantId, type])` mean what it
+/// should: one client domain per clinic, with room for a second kind beside
+/// it rather than a second row of the same kind.
+enum ClinicDomainType {
+  /// The clinic's client app, served at the root of its own host.
+  CLIENT
+  /// Reserved: a clinic's own staff portal host. Nothing serves this yet, and
+  /// middleware refuses it — see lib/clinic-domain.ts.
+  PORTAL
+}
+
+enum ClinicDomainStatus {
+  /// Added to the project; DNS has not been seen yet.
+  PENDING
+  /// Vercel has verified it and it is routable.
+  VERIFIED
+  /// Vercel refused it, or it stopped verifying. `lastError` says why.
+  FAILED
+}
+
+/// A domain of the clinic's own, pointed at this deployment.
+///
+/// The host is unique platform-wide: two clinics cannot share one, and the
+/// middleware host map (lib/clinic-hosts.ts) depends on that being true in
+/// the database rather than only in the code that writes it.
+model ClinicDomain {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  type ClinicDomainType   @default(CLIENT)
+  host String             @unique
+  status ClinicDomainStatus @default(PENDING)
+
+  /// Vercel's own verification challenges, stored as it returns them so the
+  /// screen can print exactly the records to add. Shape is Vercel's, not ours.
+  verification Json?
+  /// Why the last check failed, for the admin to read. Never a token.
+  lastError    String?
+
+  lastCheckedAt DateTime?
+  verifiedAt    DateTime?
+
+  /// The platform admin who attached it. SetNull: removing an admin must not
+  /// take a clinic's domain with them.
+  createdByUserId String?
+  createdBy       User?   @relation("ClinicDomainsCreated", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, type])
+  @@index([status])
 }
