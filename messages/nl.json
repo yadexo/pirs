@@ -125,9 +125,12 @@
       "done": {
         "emailed": "Kliniek aangemaakt. We hebben een link gemaild naar {email} — open die om je wachtwoord in te stellen. De link werkt eenmalig, 7 dagen.",
         "notEmailed": "Kliniek aangemaakt, maar de e-mail kon niet worden verzonden. Open deze link om je wachtwoord in te stellen. De link werkt eenmalig, 7 dagen.",
-        "signIn": "Naar aanmelden"
+        "signIn": "Naar aanmelden",
+        "ready": "Kliniek aangemaakt. Meld je aan met het wachtwoord dat je net hebt gekozen — daarna stel je tweestapsverificatie in."
       },
-      "linkFromLogin": "Registreer je kliniek"
+      "linkFromLogin": "Registreer je kliniek",
+      "twoFactorNote": "Je wachtwoord stel je hier in en wordt nooit gemaild. Na het aanmelden stel je tweestapsverificatie in.",
+      "subtitleDirect": "Hiermee maak je de kliniek en je eigenaarsaccount aan. Je kiest hieronder zelf een wachtwoord en kunt meteen aanmelden."
     },
     "admin": {
       "section": "Platformbeheerder",
@@ -144,8 +147,16 @@
       "done": {
         "emailed": "Account aangemaakt. We hebben een link gemaild naar {email} — open die om je wachtwoord in te stellen. De link werkt eenmalig, 24 uur.",
         "notEmailed": "Account aangemaakt, maar de e-mail kon niet worden verzonden. Open deze link om je wachtwoord in te stellen. De link werkt eenmalig, 24 uur.",
-        "signIn": "Naar aanmelden"
-      }
+        "signIn": "Naar aanmelden",
+        "ready": "Account aangemaakt. Meld je aan met het wachtwoord dat je net hebt gekozen — je stelt eerst tweestapsverificatie in voordat de console opengaat."
+      },
+      "twoFactorNote": "Je wachtwoord stel je hier in en wordt nooit gemaild. Tweestapsverificatie is verplicht voordat je iets in de console ziet.",
+      "subtitleDirect": "Een beheerdersaccount dat alle klinieken ziet. Je kiest hieronder zelf een wachtwoord en kunt meteen aanmelden."
+    },
+    "password": {
+      "label": "Kies een wachtwoord",
+      "confirmLabel": "Herhaal wachtwoord",
+      "hint": "Minimaal {min} tekens."
     }
   },
   "clientApp": {

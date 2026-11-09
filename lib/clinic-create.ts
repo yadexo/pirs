@@ -1,6 +1,7 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { rawDb } from "@/lib/db";
+import { hashPassword } from "@/lib/password";
 import { slugify } from "@/lib/utils";
 import { RESERVED_SLUGS } from "@/lib/portal-hosts";
 import { issuePasswordToken, INVITE_TTL_MS } from "@/lib/password-tokens";
@@ -20,9 +21,11 @@ import type { Currency } from "@/lib/currency";
  * validation and audit logging belong to each caller; what happens to the
  * database and the owner's mailbox belongs here, once.
  *
- * The owner never gets a password — not typed into a form, not generated, not
- * emailed. They get a one-time link and choose their own, and because their
- * role is TENANT_ADMIN, two-factor setup is then forced on their first page
+ * No password is ever generated here, shown or emailed. Normally the owner
+ * gets a one-time link and chooses their own; under the temporary
+ * REGISTRATION_SET_PASSWORD_DIRECTLY flag they choose it on the register form
+ * instead, and `password` arrives already validated. Either way, because
+ * their role is TENANT_ADMIN, two-factor setup is forced on their first page
  * (lib/two-factor.ts's TWO_FACTOR_REQUIRED_ROLES).
  */
 
@@ -41,6 +44,14 @@ export interface NewClinic {
   logoUrl?: string;
   /** The platform admin who created it, when one did. Null for self-registration. */
   createdByUserId?: string | null;
+  /**
+   * A password the owner chose for themselves, which makes the account usable
+   * at once instead of INVITED-until-the-link-is-used. Only ever set by the
+   * register page under REGISTRATION_SET_PASSWORD_DIRECTLY — see
+   * lib/registration-code.ts. Validated by the caller; hashed here and never
+   * returned, logged or emailed.
+   */
+  password?: string;
 }
 
 export interface CreatedClinic {
@@ -48,9 +59,15 @@ export interface CreatedClinic {
   slug: string;
   ownerId: string;
   email: string;
-  /** The one-time link, returned so a caller can show it when email is not configured. */
+  /**
+   * Where the owner goes next: the one-time link that sets their password,
+   * or — when they chose one on the form — the sign-in page. Returned so a
+   * caller can show it when email is not configured. Never a password.
+   */
   loginUrl: string;
   emailed: boolean;
+  /** True when the account is already usable, because its owner set a password. */
+  readyToSignIn: boolean;
 }
 
 /** First word as the first name, the rest as the last. "Owner" when there is no rest. */
@@ -85,6 +102,7 @@ export async function createClinicWithOwner(input: NewClinic): Promise<CreatedCl
   const locale = input.locale ?? DEFAULT_LOCALE;
   const owner = splitName(input.ownerName?.trim() || input.name);
   const slug = await availableSlug(input.name);
+  const chosenHash = input.password ? await hashPassword(input.password) : null;
 
   const created = await rawDb.$transaction(async (tx) => {
     const tenant = await tx.tenant.create({
@@ -120,9 +138,11 @@ export async function createClinicWithOwner(input: NewClinic): Promise<CreatedCl
       data: {
         tenantId: tenant.id,
         email,
-        // Not a hash any password can match; set from the welcome link below.
-        passwordHash: "!invited",
-        status: "INVITED",
+        // Normally not a hash any password can match, set from the welcome
+        // link below. With a password the owner chose on the form, the
+        // account is theirs and usable from this moment.
+        passwordHash: chosenHash ?? "!invited",
+        status: chosenHash ? "ACTIVE" : "INVITED",
         role: "TENANT_ADMIN",
         locale,
       },
@@ -144,9 +164,15 @@ export async function createClinicWithOwner(input: NewClinic): Promise<CreatedCl
   });
 
   // A login link, not a password shown on screen or mailed in the clear —
-  // the owner sets their own, the same way a staff invite works.
-  const token = await issuePasswordToken(created.ownerId, INVITE_TTL_MS);
-  const loginUrl = `${appUrl()}/set-password?token=${encodeURIComponent(token)}`;
+  // the owner sets their own, the same way a staff invite works. When they
+  // already set one on the form there is nothing to set, so the email points
+  // at the sign-in page instead and no token is issued: an unused one would
+  // be a second, quieter way into the account.
+  let loginUrl = `${appUrl()}/login`;
+  if (!chosenHash) {
+    const token = await issuePasswordToken(created.ownerId, INVITE_TTL_MS);
+    loginUrl = `${appUrl()}/set-password?token=${encodeURIComponent(token)}`;
+  }
 
   const agency = await rawDb.agencySettings.findFirst({ select: { name: true, senderName: true, logoLightUrl: true, primaryColor: true } });
   const agencyName = agency?.senderName || agency?.name || "Deza";
@@ -165,5 +191,5 @@ export async function createClinicWithOwner(input: NewClinic): Promise<CreatedCl
     from: senderFor(agencyName),
   });
 
-  return { tenantId: created.tenantId, slug, ownerId: created.ownerId, email, loginUrl, emailed: result.status === "SENT" };
+  return { tenantId: created.tenantId, slug, ownerId: created.ownerId, email, loginUrl, emailed: result.status === "SENT", readyToSignIn: chosenHash !== null };
 }

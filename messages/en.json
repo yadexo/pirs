@@ -125,9 +125,12 @@
       "done": {
         "emailed": "Clinic created. We emailed a link to {email} — open it to set your password. It works once, for 7 days.",
         "notEmailed": "Clinic created, but the email could not be sent. Open this link to set your password. It works once, for 7 days.",
-        "signIn": "Go to sign in"
+        "signIn": "Go to sign in",
+        "ready": "Clinic created. Sign in with the password you just chose — you will be asked to set up two-factor authentication."
       },
-      "linkFromLogin": "Register your clinic"
+      "linkFromLogin": "Register your clinic",
+      "twoFactorNote": "Your password is set here and never emailed. After signing in you will be asked to set up two-factor authentication.",
+      "subtitleDirect": "Creates the clinic and your owner account. You choose your password below and can sign in straight away."
     },
     "admin": {
       "section": "Platform admin",
@@ -144,8 +147,16 @@
       "done": {
         "emailed": "Account created. We emailed a link to {email} — open it to set your password. It works once, for 24 hours.",
         "notEmailed": "Account created, but the email could not be sent. Open this link to set your password. It works once, for 24 hours.",
-        "signIn": "Go to sign in"
-      }
+        "signIn": "Go to sign in",
+        "ready": "Account created. Sign in with the password you just chose — you will be asked to set up two-factor authentication before the console opens."
+      },
+      "twoFactorNote": "Your password is set here and never emailed. Two-factor authentication is required before the console will show you anything.",
+      "subtitleDirect": "An admin account that sees every clinic. You choose your password below and can sign in straight away."
+    },
+    "password": {
+      "label": "Choose a password",
+      "confirmLabel": "Repeat password",
+      "hint": "At least {min} characters."
     }
   },
   "clientApp": {

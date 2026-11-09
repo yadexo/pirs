@@ -74,7 +74,8 @@ describe("registerPlatformAdminAction", () => {
   it("takes no password, returns none, and leaves the account unusable until the link is used", async () => {
     const result = ok(await register());
     const admin = await rawDb.user.findFirstOrThrow({ where: { email: result.email } });
-    expect(Object.keys(result).sort()).toEqual(["email", "emailed", "loginUrl", "ok"]);
+    expect(Object.keys(result).sort()).toEqual(["email", "emailed", "loginUrl", "ok", "readyToSignIn"]);
+    expect(result.readyToSignIn).toBe(false);
     expect(admin.passwordHash).toBe("!invited");
     const token = await rawDb.passwordResetToken.findFirstOrThrow({ where: { userId: admin.id, usedAt: null } });
     // A platform admin is higher-privilege than a clinic invite, so 24 hours.

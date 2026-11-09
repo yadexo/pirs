@@ -1,5 +1,6 @@
 import "server-only";
 import { rawDb } from "@/lib/db";
+import { hashPassword } from "@/lib/password";
 import { issuePasswordToken, ADMIN_INVITE_TTL_MS } from "@/lib/password-tokens";
 import { appUrl } from "@/lib/app-url";
 import { getEmailProvider } from "@/lib/providers/notifications";
@@ -17,10 +18,13 @@ import { DEFAULT_LOCALE, type AppLocale } from "@/lib/locale-cookie";
  * Authorisation and audit logging belong to each caller; the account, the
  * one-time link and the email belong here.
  *
- * No password is ever accepted, generated or emailed, and the account stays
- * INVITED until the link is used. Two-factor setup is then forced on the first
- * page of /agency — requireAgencyContext checks it fresh on every request, so
- * there is no window in which a new admin is browsing without it.
+ * No password is ever generated or emailed. Normally none is accepted either
+ * and the account stays INVITED until the link is used; under the temporary
+ * REGISTRATION_SET_PASSWORD_DIRECTLY flag the person chooses one on the
+ * register form and it arrives here already validated. Two-factor setup is
+ * forced either way on the first page of /agency — requireAgencyContext
+ * checks it fresh on every request, so there is no window in which a new
+ * admin is browsing without it.
  */
 
 /**
@@ -42,14 +46,28 @@ export interface NewPlatformAdmin {
   lastName: string;
   locale?: AppLocale;
   scope?: AdminScope;
+  /**
+   * A password the person chose for themselves, which makes the account
+   * usable at once instead of INVITED-until-the-link-is-used. Only ever set
+   * by the register page under REGISTRATION_SET_PASSWORD_DIRECTLY — see
+   * lib/registration-code.ts. Validated by the caller; hashed here and never
+   * returned, logged or emailed.
+   */
+  password?: string;
 }
 
 export interface CreatedPlatformAdmin {
   id: string;
   email: string;
-  /** The one-time link, returned so a caller can show it when email is not configured. */
+  /**
+   * Where they go next: the one-time link that sets their password, or — when
+   * they chose one on the form — the sign-in page. Returned so a caller can
+   * show it when email is not configured. Never a password.
+   */
   loginUrl: string;
   emailed: boolean;
+  /** True when the account is already usable, because its holder set a password. */
+  readyToSignIn: boolean;
 }
 
 /** The address already holds a platform admin account, so a second one could not sign in. */
@@ -63,6 +81,7 @@ export class PlatformAdminExistsError extends Error {
 export async function createPlatformAdminInvite(input: NewPlatformAdmin): Promise<CreatedPlatformAdmin> {
   const email = input.email.trim().toLowerCase();
   const locale = input.locale ?? DEFAULT_LOCALE;
+  const chosenHash = input.password ? await hashPassword(input.password) : null;
 
   // Serializable, so two people registering the same address at the same
   // moment cannot both pass the check. Only another *platform admin* clashes:
@@ -75,9 +94,11 @@ export async function createPlatformAdminInvite(input: NewPlatformAdmin): Promis
         data: {
           tenantId: null,
           email,
-          // Not a hash any password can match; the account is INVITED until the link is used.
-          passwordHash: "!invited",
-          status: "INVITED",
+          // Normally not a hash any password can match, and INVITED until the
+          // link is used. With a password chosen on the form, the account is
+          // theirs and usable from this moment.
+          passwordHash: chosenHash ?? "!invited",
+          status: chosenHash ? "ACTIVE" : "INVITED",
           role: "PLATFORM_ADMIN",
           firstName: input.firstName,
           lastName: input.lastName,
@@ -89,8 +110,13 @@ export async function createPlatformAdminInvite(input: NewPlatformAdmin): Promis
     { isolationLevel: "Serializable" },
   );
 
-  const token = await issuePasswordToken(admin.id, ADMIN_INVITE_TTL_MS);
-  const loginUrl = `${appUrl()}/set-password?token=${encodeURIComponent(token)}`;
+  // No token when there is nothing to set: an unused one would be a second,
+  // quieter way into an account that already has a password.
+  let loginUrl = `${appUrl()}/login?next=${encodeURIComponent("/agency")}`;
+  if (!chosenHash) {
+    const token = await issuePasswordToken(admin.id, ADMIN_INVITE_TTL_MS);
+    loginUrl = `${appUrl()}/set-password?token=${encodeURIComponent(token)}`;
+  }
 
   const agency = await rawDb.agencySettings.findFirst({ select: { name: true, senderName: true, logoLightUrl: true, primaryColor: true } });
   const agencyName = agency?.senderName || agency?.name || "Deza";
@@ -108,5 +134,5 @@ export async function createPlatformAdminInvite(input: NewPlatformAdmin): Promis
     from: senderFor(agencyName),
   });
 
-  return { id: admin.id, email: admin.email, loginUrl, emailed: result.status === "SENT" };
+  return { id: admin.id, email: admin.email, loginUrl, emailed: result.status === "SENT", readyToSignIn: chosenHash !== null };
 }

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { rawDb } from "@/lib/db";
-import { registrationEnabled } from "@/lib/registration-code";
+import { registrationEnabled, setPasswordDirectly } from "@/lib/registration-code";
 import { resolveLocale } from "@/lib/locale";
 import { GuestLocaleSwitcher } from "@/components/auth/guest-locale-switcher";
 import { RegisterAdminForm } from "./register-admin-form";
@@ -19,6 +19,8 @@ export default async function RegisterAdminPage() {
   if (!registrationEnabled()) notFound();
 
   const t = await getTranslations("register.admin");
+  // Same reason as the clinic page: no emailed link to promise in this mode.
+  const choosePassword = setPasswordDirectly();
   const locale = await resolveLocale();
   const agency = await rawDb.agencySettings.findFirst({ select: { name: true } });
 
@@ -37,9 +39,9 @@ export default async function RegisterAdminPage() {
             {t("section")}
           </p>
           <h1 className="mt-1 text-[18px] font-semibold">{t("title")}</h1>
-          <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">{t("subtitle")}</p>
+          <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">{t(choosePassword ? "subtitleDirect" : "subtitle")}</p>
           <div className="mt-5">
-            <RegisterAdminForm />
+            <RegisterAdminForm choosePassword={choosePassword} />
           </div>
         </div>
 

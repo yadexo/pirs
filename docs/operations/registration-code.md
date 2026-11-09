@@ -58,6 +58,50 @@ To swap in a real invitation system:
 
 Nothing else reads the variable, so there is no other call site to find.
 
+## Setting a password on the form instead (temporary)
+
+```
+REGISTRATION_SET_PASSWORD_DIRECTLY=1
+```
+
+With this set to exactly `1`, both register pages ask for a password (twice,
+minimum 12 characters) and the account is **active the moment the form is
+submitted**. No one-time link is issued and none is emailed; the welcome email
+points at the sign-in page instead.
+
+Anything else — including unset, which is the default — keeps the normal flow:
+a one-time link, and an account that stays `INVITED` until it is used.
+
+Everything else is unchanged. The registration code is still required, the
+rate limits still apply, and two-factor setup is still forced for owners and
+platform admins on their first page.
+
+**What you give up by turning it on.** The link flow proves the person holds
+the address before the account exists. Without it, anyone who knows the
+registration code can create a working account against *someone else's* email
+address — and that account is active immediately, not waiting on a mailbox
+nobody is watching. Audit rows record which way each account was opened
+(`passwordSetOnForm` in the metadata of `clinic.self_registered` and
+`admin.self_registered`), so this is answerable after the fact.
+
+It exists for setting a deployment up by hand when waiting on an inbox is in
+the way. Turn it off again afterwards.
+
+### Removing it
+
+Unset the variable and redeploy — that alone restores the link flow
+everywhere. To take the code out:
+
+1. Delete `setPasswordDirectly()` from `lib/registration-code.ts` and
+   `readChosenPassword()` from `lib/actions/register.ts`, along with the two
+   `password:` fields they feed in `lib/clinic-create.ts` and
+   `lib/platform-admin-create.ts` (each of those falls back to the `"!invited"`
+   sentinel and the one-time link with nothing passed).
+2. Delete `app/register/password-fields.tsx`, the `choosePassword` prop on both
+   register forms and pages, and `lib/registration-constants.ts`.
+3. Drop the `register.password.*`, `*.twoFactorNote` and `*.done.ready`
+   message keys, and the variable from `.env.example` and from Vercel.
+
 ## What it is not
 
 - **Not a substitute for the account checks.** A clinic owner still sets their

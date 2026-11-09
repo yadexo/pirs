@@ -109,7 +109,8 @@ describe("registerClinicAction", () => {
 
     // The only "password" anywhere in the answer is the path of the link the
     // owner uses to choose one; no field carries a password or a hash.
-    expect(Object.keys(result).sort()).toEqual(["email", "emailed", "loginUrl", "ok"]);
+    expect(Object.keys(result).sort()).toEqual(["email", "emailed", "loginUrl", "ok", "readyToSignIn"]);
+    expect(result.readyToSignIn).toBe(false);
     expect(result.loginUrl).toMatch(/^https?:\/\/[^\s]+\/set-password\?token=[\w-]+$/);
     // Not a hash anything can match, so no password works until the link is used.
     expect(owner.passwordHash).toBe("!invited");

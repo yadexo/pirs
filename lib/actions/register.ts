@@ -10,6 +10,7 @@ import { createPlatformAdminInvite, PlatformAdminExistsError } from "@/lib/platf
 import { loadLiveAccount } from "@/lib/live-account";
 import { writeAuditLog } from "@/lib/audit";
 import { logRegister } from "@/lib/signin-log";
+import { REGISTRATION_MIN_PASSWORD_LENGTH, setPasswordDirectly } from "@/lib/registration-code";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
 import { SUPPORTED_LOCALES } from "@/lib/locale-cookie";
 
@@ -18,12 +19,44 @@ import { SUPPORTED_LOCALES } from "@/lib/locale-cookie";
  *
  * Both actions start at guardRegistration (lib/registration-guard.ts) — the
  * registration code, its rate limits and its reason-coded logging — and only
- * then look at what the form said. Neither ever accepts a password: the person
- * gets a one-time link and chooses their own, and two-factor setup is forced
- * afterwards for both roles.
+ * then look at what the form said. Normally neither accepts a password: the
+ * person gets a one-time link and chooses their own. Under the temporary
+ * REGISTRATION_SET_PASSWORD_DIRECTLY flag they choose it here instead and the
+ * account works at once. Two-factor setup is forced for both roles either way.
  */
 
-export type RegisterResult = { ok: true; email: string; emailed: boolean; loginUrl: string } | { error: string; fieldErrors?: Record<string, string> };
+export type RegisterResult =
+  | { ok: true; email: string; emailed: boolean; loginUrl: string; readyToSignIn: boolean }
+  | { error: string; fieldErrors?: Record<string, string> };
+
+/**
+ * The password fields, but only while the flag is on — so a password posted
+ * to an instance that is not in that mode is ignored rather than honoured,
+ * and cannot quietly activate an account that was meant to be invited.
+ *
+ * Confirmed twice, because nothing checks this one afterwards: a typo would
+ * leave a working account nobody can open, and the only way back would be the
+ * reset they were trying to avoid.
+ */
+const passwordSchema = z
+  .object({
+    password: z.string().min(REGISTRATION_MIN_PASSWORD_LENGTH, `Use at least ${REGISTRATION_MIN_PASSWORD_LENGTH} characters`).max(200, "Keep it under 200 characters"),
+    confirm: z.string(),
+  })
+  .refine((v) => v.password === v.confirm, { path: ["confirm"], message: "Those passwords don't match" });
+
+type ChosenPassword = { password?: string } | { error: string; fieldErrors: Record<string, string> };
+
+async function readChosenPassword(kind: "admin" | "clinic", fd: FormData): Promise<ChosenPassword> {
+  if (!setPasswordDirectly()) return {};
+  const parsed = passwordSchema.safeParse({ password: String(fd.get("password") ?? ""), confirm: String(fd.get("confirm") ?? "") });
+  if (!parsed.success) {
+    // A reason code, never the password, never its length.
+    logRegister("invalid_input", { portal: kind });
+    return { error: (await getTranslations("register.errors"))("checkTheForm"), fieldErrors: fieldErrors(parsed.error) };
+  }
+  return { password: parsed.data.password };
+}
 
 /** The first ZodError message per field, under the form's own field names. */
 function fieldErrors(error: z.ZodError): Record<string, string> {
@@ -71,6 +104,9 @@ export async function registerClinicAction(_prev: unknown, fd: FormData): Promis
   }
   const data = parsed.data;
 
+  const chosen = await readChosenPassword("clinic", fd);
+  if ("error" in chosen) return chosen;
+
   // One account per address per clinic is all there can be, and a clinic's
   // owner is created with the clinic — so the only clash worth refusing is an
   // address that already owns or works at some clinic, which would make the
@@ -89,6 +125,7 @@ export async function registerClinicAction(_prev: unknown, fd: FormData): Promis
     locale: data.locale,
     timezone: "Europe/Amsterdam",
     createdByUserId,
+    password: chosen.password,
   });
 
   await writeAuditLog({
@@ -101,11 +138,13 @@ export async function registerClinicAction(_prev: unknown, fd: FormData): Promis
     action: "clinic.self_registered",
     entityType: "Tenant",
     entityId: clinic.tenantId,
-    metadata: { slug: clinic.slug, ownerUserId: clinic.ownerId, byPlatformAdmin: !!createdByUserId },
+    // Worth recording which way the account was opened: an owner who was
+    // active from the first second never proved they hold the address.
+    metadata: { slug: clinic.slug, ownerUserId: clinic.ownerId, byPlatformAdmin: !!createdByUserId, passwordSetOnForm: clinic.readyToSignIn },
   });
 
   logRegister("success", { portal: "clinic", role: "TENANT_ADMIN" });
-  return { ok: true, email: clinic.email, emailed: clinic.emailed, loginUrl: clinic.loginUrl };
+  return { ok: true, email: clinic.email, emailed: clinic.emailed, loginUrl: clinic.loginUrl, readyToSignIn: clinic.readyToSignIn };
 }
 
 const adminSchema = z.object({
@@ -131,9 +170,12 @@ export async function registerPlatformAdminAction(_prev: unknown, fd: FormData):
   }
   const { firstName, lastName } = splitName(parsed.data.name);
 
+  const chosen = await readChosenPassword("admin", fd);
+  if ("error" in chosen) return chosen;
+
   let admin;
   try {
-    admin = await createPlatformAdminInvite({ email: parsed.data.email, firstName, lastName, scope: "ALL" });
+    admin = await createPlatformAdminInvite({ email: parsed.data.email, firstName, lastName, scope: "ALL", password: chosen.password });
   } catch (err) {
     if (err instanceof PlatformAdminExistsError) {
       logRegister("email_taken", { portal: "admin" });
@@ -150,9 +192,9 @@ export async function registerPlatformAdminAction(_prev: unknown, fd: FormData):
     action: "admin.self_registered",
     entityType: "User",
     entityId: admin.id,
-    metadata: { scope: "ALL" },
+    metadata: { scope: "ALL", passwordSetOnForm: admin.readyToSignIn },
   });
 
   logRegister("success", { portal: "admin", role: "PLATFORM_ADMIN" });
-  return { ok: true, email: admin.email, emailed: admin.emailed, loginUrl: admin.loginUrl };
+  return { ok: true, email: admin.email, emailed: admin.emailed, loginUrl: admin.loginUrl, readyToSignIn: admin.readyToSignIn };
 }

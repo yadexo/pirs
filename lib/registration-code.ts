@@ -29,6 +29,31 @@ export function registrationEnabled(env: NodeJS.ProcessEnv = process.env): boole
   return registrationCode(env) !== null;
 }
 
+/**
+ * Temporary: let someone choose their password on the register form itself,
+ * instead of being emailed a one-time link, and have the account work
+ * immediately.
+ *
+ * Off unless REGISTRATION_SET_PASSWORD_DIRECTLY is exactly "1". Off is the
+ * normal way round, and the link flow is the one to keep: a link proves the
+ * address exists before the account does, cannot be replayed, and leaves no
+ * password anywhere it could be read later. This exists for setting a
+ * deployment up by hand when waiting on an inbox is in the way.
+ *
+ * What it does *not* change: the registration code is still required, the
+ * rate limits still apply, and two-factor setup is still forced for owners
+ * and platform admins on their first page. It only replaces "we email you a
+ * link" with "you type a password here".
+ *
+ * Removing it: see docs/operations/registration-code.md.
+ */
+export function setPasswordDirectly(env: NodeJS.ProcessEnv = process.env): boolean {
+  return (env.REGISTRATION_SET_PASSWORD_DIRECTLY ?? "").trim() === "1";
+}
+
+/** Re-exported so server code has one place to look; the value lives in a client-safe module. */
+export { REGISTRATION_MIN_PASSWORD_LENGTH } from "@/lib/registration-constants";
+
 const digest = (value: string) => createHash("sha256").update(value, "utf8").digest();
 
 /**

@@ -47,8 +47,11 @@ describe("nobody is ever handed a password", () => {
   });
 
   it("the only passwordHash an account is created with is the one that matches nothing", () => {
-    // Every create path writes the "!invited" sentinel; a real hash at
-    // creation time would mean a password existed before its owner chose it.
+    // A literal hash would be a password somebody else decided on. The two
+    // register paths can now write a real hash under
+    // REGISTRATION_SET_PASSWORD_DIRECTLY, but it is always derived from what
+    // the person typed, never a literal and never generated — which is what
+    // the check above covers.
     for (const f of files) {
       for (const [, value] of code(f.text).matchAll(/passwordHash:\s*("(?:[^"]*)")/g)) {
         expect(value, `${f.path} creates an account with ${value}`).toBe('"!invited"');

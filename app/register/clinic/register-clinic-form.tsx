@@ -6,11 +6,12 @@ import { useTranslations } from "next-intl";
 import { registerClinicAction } from "@/lib/actions/register";
 import { Button } from "@/components/ui/button";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
+import { PasswordFields } from "../password-fields";
 
 const field = "h-10 w-full rounded-[10px] border border-border bg-surface px-3 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-primary";
 const label = "mb-1.5 block text-[12px] font-medium";
 
-export function RegisterClinicForm({ defaultLocale }: { defaultLocale: string }) {
+export function RegisterClinicForm({ defaultLocale, choosePassword = false }: { defaultLocale: string; choosePassword?: boolean }) {
   const t = useTranslations("register.clinic");
   const [state, action, pending] = useActionState(registerClinicAction, undefined);
 
@@ -21,9 +22,9 @@ export function RegisterClinicForm({ defaultLocale }: { defaultLocale: string })
     return (
       <div className="space-y-4">
         <p role="status" className="rounded-[10px] bg-primary-soft px-3 py-3 text-[13px] leading-relaxed text-ink">
-          {state.emailed ? t("done.emailed", { email: state.email }) : t("done.notEmailed")}
+          {state.readyToSignIn ? t("done.ready") : state.emailed ? t("done.emailed", { email: state.email }) : t("done.notEmailed")}
         </p>
-        {!state.emailed && (
+        {!state.emailed && !state.readyToSignIn && (
           <div className="rounded-[10px] bg-app p-3">
             <p className="break-all font-mono text-[12px]">{state.loginUrl}</p>
           </div>
@@ -82,6 +83,7 @@ export function RegisterClinicForm({ defaultLocale }: { defaultLocale: string })
           </select>
         </div>
       </div>
+      {choosePassword && <PasswordFields errors={errors} />}
       <div>
         <label htmlFor="code" className={label}>
           {t("code")}
@@ -97,7 +99,7 @@ export function RegisterClinicForm({ defaultLocale }: { defaultLocale: string })
       <Button type="submit" loading={pending} className="w-full">
         {t("submit")}
       </Button>
-      <p className="text-[11px] leading-relaxed text-ink-muted">{t("passwordNote")}</p>
+      <p className="text-[11px] leading-relaxed text-ink-muted">{choosePassword ? t("twoFactorNote") : t("passwordNote")}</p>
     </form>
   );
 }
