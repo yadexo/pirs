@@ -144,10 +144,18 @@ export async function setAdminActiveAction(
       throw new ActionError("You can't deactivate your own account.");
 
     if (!active) {
-      // Serializable, so two deactivations racing against the same last-two
-      // admins cannot both read "one will be left" and both proceed.
       await rawDb.$transaction(
         async (tx) => {
+          // Lock every active platform admin before counting them.
+          //
+          // Serializable alone did not hold this: two admins deactivating
+          // each other both counted two, both passed, and the platform was
+          // left with nobody — the two transactions simply never overlapped
+          // in a way Postgres could call a conflict. The explicit row lock
+          // makes the second one wait for the first to commit and then count
+          // again, where it sees one and refuses.
+          await tx.$queryRaw`SELECT id FROM "User" WHERE role = 'PLATFORM_ADMIN' AND status = 'ACTIVE' FOR UPDATE`;
+
           const target = await tx.user.findFirst({
             where: { id: userId, role: "PLATFORM_ADMIN" },
           });

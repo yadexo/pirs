@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeAll, vi } from "vitest";
 import { rawDb } from "@/lib/db";
 
 const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
@@ -21,6 +21,18 @@ const { setAdminActiveAction } = await import("@/lib/actions/platform-admins");
  */
 describe("setAdminActiveAction", () => {
   const createdUserIds: string[] = [];
+
+  beforeAll(async () => {
+    // "At least one active platform admin must remain" is counted across the
+    // whole database, so any admin this file did not create makes the rules
+    // below vacuous — and silently. That is not hypothetical: the test this
+    // file used to have skipped itself whenever it found extra active admins,
+    // which is why a real hole in the guard went unnoticed. app_test holds
+    // only what tests create and files run one at a time
+    // (vitest.config.ts, fileParallelism: false), so anything still here is
+    // debris from a run that crashed.
+    await rawDb.user.deleteMany({ where: { role: "PLATFORM_ADMIN" } });
+  });
 
   afterEach(async () => {
     impersonatingMerchantId = null;
@@ -79,26 +91,39 @@ describe("setAdminActiveAction", () => {
     expect((await rawDb.user.findUnique({ where: { id: actor } }))!.status).toBe("ACTIVE");
   });
 
-  it("refuses to deactivate the last active admin", async () => {
+  it("cannot be talked into leaving no admin at all, one call at a time", async () => {
+    // Reaching the last-admin check by hand is impossible, and that is the
+    // point rather than an oversight: an actor has to be an active admin to
+    // act at all, so deactivating somebody else always leaves at least the
+    // actor — and deactivating yourself is refused before the count is even
+    // looked at. Both doors shut, in that order.
     const actor = await makeAdmin({ twoFactorConfirmed: true });
     const other = await makeAdmin({ twoFactorConfirmed: true });
     asUser(actor);
 
-    // Bring it down to exactly one active admin first (actor deactivating "other").
-    const first = await setAdminActiveAction(other, false);
-    expect("ok" in first).toBe(true);
+    expect("ok" in (await setAdminActiveAction(other, false))).toBe(true);
+    expect(await rawDb.user.count({ where: { role: "PLATFORM_ADMIN", status: "ACTIVE" } })).toBeGreaterThanOrEqual(1);
 
-    // Now only "actor" is active among the two seeded here (other PLATFORM_ADMIN
-    // rows may exist from prior test runs, so this assumes the suite's own two
-    // are the only ones active — acceptable for this seeded-pair scenario since
-    // the check counts globally; if it's flaky in a shared dev DB, that's the
-    // same design the production last-admin check lives with).
-    const activeCount = await rawDb.user.count({ where: { role: "PLATFORM_ADMIN", status: "ACTIVE" } });
-    if (activeCount > 1) return; // other active admins exist in this DB; skip the strict single-admin assertion
-
-    const second = await setAdminActiveAction(actor, false);
-    expect("error" in second && second.error).toMatch(/at least one/i);
+    const self = await setAdminActiveAction(actor, false);
+    expect("error" in self && self.error).toMatch(/own account/i);
     expect((await rawDb.user.findUnique({ where: { id: actor } }))!.status).toBe("ACTIVE");
+  });
+
+  it("holds when two admins deactivate each other at the same moment", async () => {
+    // The one case the count check is really for. Both read "one will be
+    // left" and both would be right on their own; Serializable makes one of
+    // them lose, whether that surfaces as the refusal or as a write conflict.
+    const a = await makeAdmin({ twoFactorConfirmed: true });
+    const b = await makeAdmin({ twoFactorConfirmed: true });
+    const actors = [a, b];
+    authMock.auth.mockImplementation(async () => ({ user: { id: actors.shift() ?? a, email: "x@example.com", name: "x", authTime: Date.now() } }));
+
+    const results = await Promise.all([setAdminActiveAction(b, false), setAdminActiveAction(a, false)]);
+    const disabled = await rawDb.user.count({ where: { id: { in: [a, b] }, status: "DISABLED" } });
+
+    expect(results.filter((r) => "ok" in r).length).toBeLessThanOrEqual(1);
+    // Whatever the two calls were told, the invariant is the row count.
+    expect(disabled).toBeLessThanOrEqual(1);
   });
 
   it("deactivates another admin, signs them out, and audits it", async () => {

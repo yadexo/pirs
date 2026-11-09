@@ -105,6 +105,40 @@ describe("team accounts", () => {
       await restore();
     });
 
+    it("holds when two owners switch each other off at the same moment", async () => {
+      // The case the count is really for. Both read "one will be left" and
+      // both are right until the other commits, so the check has to lock the
+      // clinic's active owners and hold that lock through the write.
+      const actors = [ownerId, coOwnerId];
+      authMock.auth.mockImplementation(async () => ({
+        user: {
+          id: actors.shift() ?? ownerId,
+          email: "o@x.com",
+          name: "o",
+          role: "TENANT_ADMIN",
+          tenantId: clinic,
+          tenantSlug: null,
+          staffProfileId: null,
+          customerProfileId: null,
+          permissions: "ALL",
+          authTime: Date.now(),
+        },
+      }));
+
+      const results = await Promise.all([
+        S.setStaffActiveAction(clinic, coOwnerProfileId, false),
+        S.setStaffActiveAction(clinic, ownerProfileId, false),
+      ]);
+
+      expect(results.filter((r) => "ok" in r).length).toBeLessThanOrEqual(1);
+      // Whatever either call was told, this is the invariant.
+      const ownersLeft = await rawDb.user.count({
+        where: { tenantId: clinic, role: "TENANT_ADMIN", status: "ACTIVE", staffProfile: { active: true } },
+      });
+      expect(ownersLeft).toBeGreaterThanOrEqual(1);
+      await restore();
+    });
+
     it("leaves the session cut-off alone when switching back on", async () => {
       await S.setStaffActiveAction(clinic, staffProfileId, false);
       const after = (await rawDb.user.findUniqueOrThrow({ where: { id: staffId } })).sessionsValidAfter;

@@ -21,9 +21,16 @@ to delete and nothing that could be committed by accident.
   npm run prod:push-debug -- --clinic testclinic     # why notifications did or didn't arrive
   npm run prod:membership-debug -- --clinic testclinic --item "Bleken Sessie"   # why a member price did or didn't apply
   npm run prod:storage-check                         # why uploads say storage isn't set up
+  npm run prod:reset-all                             # DRY RUN: what a full reset would delete
+  npm run prod:reset-all -- --include-admins         # the real thing: every clinic AND every admin
 
 .PARAMETER Task
-status | migrate | stripe | apple-pay | items | admin | reset-admin | client | clinic-login | push-debug | membership-debug | storage-check
+status | migrate | stripe | apple-pay | items | admin | reset-admin | admins | client | clinic-login | push-debug |
+membership-debug | storage-check | reset-all
+
+reset-all is the destructive one: on its own it only prints what it would
+delete, and it deletes nothing unless --include-admins is passed and the
+phrase it asks for is typed. See prisma/reset-platform.ts.
 
 .PARAMETER Url
 The connection string, for automation. Prefer the prompt: an argument is saved
@@ -35,7 +42,7 @@ Skip the confirmation. Intended for scripts, not for day-to-day use.
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("status", "migrate", "stripe", "apple-pay", "items", "admin", "reset-admin", "client", "clinic-login", "push-debug", "membership-debug", "storage-check", "admins")]
+  [ValidateSet("status", "migrate", "stripe", "apple-pay", "items", "admin", "reset-admin", "client", "clinic-login", "push-debug", "membership-debug", "storage-check", "admins", "reset-all")]
   [string]$Task = "status",
 
   [string]$Url,
@@ -89,17 +96,27 @@ $commands = @{
   "push-debug"   = @("npx", "tsx", "prisma/push-debug.ts")
   "membership-debug" = @("npx", "tsx", "prisma/membership-debug.ts")
   "admins"       = @("npx", "tsx", "prisma/list-platform-admins.ts")
+  "reset-all"    = @("npx", "tsx", "prisma/reset-platform.ts")
 }
 $command = $commands[$Task]
 $exe = $command[0]
 # npm passes extra arguments through, so `npm run prod:client -- --clinic x` works.
 $commandArgs = @($command[1..($command.Length - 1)]) + @($Rest | Where-Object { $_ })
 
-# "stripe" only writes when asked to store what Stripe says.
-$readOnly = $Task -in @("status", "push-debug", "membership-debug", "admins") -or ($Task -eq "stripe" -and -not ($Rest -contains "--sync"))
+# "stripe" only writes when asked to store what Stripe says, and "reset-all"
+# only when asked to include the admins — without that flag it just counts rows.
+$readOnly = $Task -in @("status", "push-debug", "membership-debug", "admins") `
+  -or ($Task -eq "stripe" -and -not ($Rest -contains "--sync")) `
+  -or ($Task -eq "reset-all" -and -not ($Rest -contains "--include-admins"))
 Write-Host ""
 Write-Host "Task:     $Task" -ForegroundColor Cyan
 Write-Host "Database: $target" -ForegroundColor Cyan
+if ($Task -eq "reset-all" -and -not $readOnly) {
+  Write-Host ""
+  Write-Host "This DELETES every clinic and every platform admin on the database above," -ForegroundColor Red
+  Write-Host "leaving nobody who can sign in. It keeps only the platform settings." -ForegroundColor Red
+  Write-Host "The script will then ask you to type a phrase naming that database host." -ForegroundColor Red
+}
 if (-not $readOnly -and -not $Yes) {
   $answer = Read-Host 'Type "yes" to continue'
   if ($answer.Trim().ToLower() -ne "yes") { Write-Host "Cancelled. Nothing was changed."; exit 1 }

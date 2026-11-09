@@ -37,6 +37,7 @@
     "prod:membership-debug": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 membership-debug",
     "prod:admins": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 admins",
     "prod:storage-check": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 storage-check",
+    "prod:reset-all": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prod.ps1 reset-all",
     "stg:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/staging.ps1 status",
     "stg:migrate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/staging.ps1 migrate",
     "stg:wipe": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/staging.ps1 wipe",

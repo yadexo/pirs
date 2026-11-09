@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { rawDb } from "@/lib/db";
 import { ActionError, formBool, formText, requireMerchantAction, runAction, type ActionResult } from "@/lib/merchant-action";
@@ -347,20 +348,23 @@ async function findTeamMember(merchantId: string, staffProfileId: string) {
 /**
  * Refuses when this would leave the clinic with no owner who can sign in.
  *
- * Serializable, so two deactivations racing against the same last two owners
- * cannot both read "one will be left" and both go ahead — the same reasoning
- * as the platform admin guard in lib/actions/platform-admins.ts.
+ * The lock is the load-bearing part, not the isolation level: two owners
+ * deactivating each other at the same moment both count "one will be left"
+ * and both are right until the other commits. Locking this clinic's active
+ * owners first makes the second caller wait, count again, and refuse. The
+ * platform-admin guard in lib/actions/platform-admins.ts learned the same
+ * lesson the same way.
  */
-async function assertNotLastOwner(merchantId: string, userId: string) {
-  await rawDb.$transaction(
-    async (tx) => {
-      const others = await tx.user.count({
-        where: { tenantId: merchantId, role: "TENANT_ADMIN", status: "ACTIVE", id: { not: userId }, staffProfile: { active: true } },
-      });
-      if (others === 0) throw new ActionError("At least one active owner must remain at this clinic.");
-    },
-    { isolationLevel: "Serializable" },
-  );
+async function assertNotLastOwner(tx: Prisma.TransactionClient, merchantId: string, userId: string) {
+  await tx.$queryRaw`
+    SELECT u.id FROM "User" u
+    JOIN "StaffProfile" s ON s."userId" = u.id
+    WHERE u."tenantId" = ${merchantId} AND u.role = 'TENANT_ADMIN' AND u.status = 'ACTIVE' AND s.active = true
+    FOR UPDATE OF u`;
+  const others = await tx.user.count({
+    where: { tenantId: merchantId, role: "TENANT_ADMIN", status: "ACTIVE", id: { not: userId }, staffProfile: { active: true } },
+  });
+  if (others === 0) throw new ActionError("At least one active owner must remain at this clinic.");
 }
 
 export async function resendInviteAction(merchantId: string, staffProfileId: string): Promise<ActionResult<{ inviteLink: string; emailed: boolean }>> {
@@ -408,15 +412,20 @@ export async function setStaffActiveAction(merchantId: string, staffProfileId: s
     const ctx = await requireMerchantAction(merchantId, "owner");
     await limitTeamWrites(ctx.user.id);
     const profile = await findTeamMember(merchantId, staffProfileId);
-    if (!active) {
-      // Locking yourself out of your own clinic is never what was meant.
-      if (profile.userId === ctx.user.id) throw new ActionError("You can't remove your own access.");
-      if (profile.user.role === "TENANT_ADMIN") await assertNotLastOwner(merchantId, profile.userId);
-    }
-    await rawDb.$transaction([
-      rawDb.staffProfile.update({ where: { id: profile.id }, data: { active, deactivatedAt: active ? null : new Date() } }),
-      ...(active ? [] : [rawDb.user.update({ where: { id: profile.userId }, data: { sessionsValidAfter: new Date() } })]),
-    ]);
+    // Locking yourself out of your own clinic is never what was meant.
+    if (!active && profile.userId === ctx.user.id) throw new ActionError("You can't remove your own access.");
+
+    await rawDb.$transaction(
+      async (tx) => {
+        // Inside the transaction that does the write, so the lock it takes is
+        // still held when the row changes. Checking in a transaction of its
+        // own would release it first and prove nothing.
+        if (!active && profile.user.role === "TENANT_ADMIN") await assertNotLastOwner(tx, merchantId, profile.userId);
+        await tx.staffProfile.update({ where: { id: profile.id }, data: { active, deactivatedAt: active ? null : new Date() } });
+        if (!active) await tx.user.update({ where: { id: profile.userId }, data: { sessionsValidAfter: new Date() } });
+      },
+      { isolationLevel: "Serializable" },
+    );
     await ctx.audit(active ? "staff.reactivated" : "staff.deactivated", "StaffProfile", profile.id, { userId: profile.userId, role: profile.user.role });
     await revalidateMerchant(merchantId);
     return {};
