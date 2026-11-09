@@ -5,7 +5,8 @@ import { getTranslations } from "next-intl/server";
 import { auth } from "@/auth";
 import { rawDb } from "@/lib/db";
 import { guardRegistration } from "@/lib/registration-guard";
-import { createClinicWithOwner } from "@/lib/clinic-create";
+import { createClinicWithOwner, splitName } from "@/lib/clinic-create";
+import { createPlatformAdminInvite, PlatformAdminExistsError } from "@/lib/platform-admin-create";
 import { loadLiveAccount } from "@/lib/live-account";
 import { writeAuditLog } from "@/lib/audit";
 import { logRegister } from "@/lib/signin-log";
@@ -105,4 +106,53 @@ export async function registerClinicAction(_prev: unknown, fd: FormData): Promis
 
   logRegister("success", { portal: "clinic", role: "TENANT_ADMIN" });
   return { ok: true, email: clinic.email, emailed: clinic.emailed, loginUrl: clinic.loginUrl };
+}
+
+const adminSchema = z.object({
+  name: z.string().trim().min(2, "Enter your name").max(120),
+  email: z.string().trim().toLowerCase().email("Enter a valid email").max(254),
+});
+
+/**
+ * Registers a full platform admin: every clinic, the same as every platform
+ * admin today. The scope is passed explicitly rather than assumed, so a
+ * narrower kind of admin becomes a new value in AdminScope and a column to
+ * store it — see lib/platform-admin-create.ts.
+ */
+export async function registerPlatformAdminAction(_prev: unknown, fd: FormData): Promise<RegisterResult> {
+  const refused = await guardRegistration("admin", fd);
+  if (refused) return refused;
+
+  const t = await getTranslations("register.errors");
+  const parsed = adminSchema.safeParse({ name: fd.get("name"), email: fd.get("email") });
+  if (!parsed.success) {
+    logRegister("invalid_input", { portal: "admin" });
+    return { error: t("checkTheForm"), fieldErrors: fieldErrors(parsed.error) };
+  }
+  const { firstName, lastName } = splitName(parsed.data.name);
+
+  let admin;
+  try {
+    admin = await createPlatformAdminInvite({ email: parsed.data.email, firstName, lastName, scope: "ALL" });
+  } catch (err) {
+    if (err instanceof PlatformAdminExistsError) {
+      logRegister("email_taken", { portal: "admin" });
+      return { error: t("adminEmailTaken"), fieldErrors: { email: t("adminEmailTaken") } };
+    }
+    throw err;
+  }
+
+  await writeAuditLog({
+    tenantId: null,
+    // Nobody is signed in, so the platform itself is the actor.
+    actorUserId: null,
+    actorType: "SYSTEM",
+    action: "admin.self_registered",
+    entityType: "User",
+    entityId: admin.id,
+    metadata: { scope: "ALL" },
+  });
+
+  logRegister("success", { portal: "admin", role: "PLATFORM_ADMIN" });
+  return { ok: true, email: admin.email, emailed: admin.emailed, loginUrl: admin.loginUrl };
 }

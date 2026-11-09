@@ -104,7 +104,8 @@
       "closed": "Registratie is gesloten.",
       "invalidCode": "Die code is niet geldig.",
       "checkTheForm": "Controleer de gemarkeerde velden.",
-      "clinicEmailTaken": "Dit e-mailadres werkt al bij een kliniek. Meld je aan, of gebruik een ander adres."
+      "clinicEmailTaken": "Dit e-mailadres werkt al bij een kliniek. Meld je aan, of gebruik een ander adres.",
+      "adminEmailTaken": "Dit e-mailadres is al een platformbeheerder. Meld je aan."
     },
     "clinic": {
       "section": "Nieuwe kliniek",
@@ -127,6 +128,24 @@
         "signIn": "Naar aanmelden"
       },
       "linkFromLogin": "Registreer je kliniek"
+    },
+    "admin": {
+      "section": "Platformbeheerder",
+      "title": "Maak een platformbeheerder",
+      "subtitle": "Een beheerdersaccount dat alle klinieken ziet. Je kiest je wachtwoord via een link die we je mailen.",
+      "yourName": "Jouw naam",
+      "email": "Jouw e-mailadres",
+      "code": "Registratiecode",
+      "codeHint": "De code die je hebt gekregen. Zonder code is registratie gesloten.",
+      "submit": "Beheerdersaccount aanmaken",
+      "securityNote": "We vragen hier nooit om een wachtwoord en mailen er nooit een. Je stelt zelf een wachtwoord in via een eenmalige link, en tweestapsverificatie is verplicht voordat je iets in de console ziet.",
+      "haveAnAccount": "Heb je al een account? Meld je aan",
+      "linkFromLogin": "Maak een platformbeheerder",
+      "done": {
+        "emailed": "Account aangemaakt. We hebben een link gemaild naar {email} — open die om je wachtwoord in te stellen. De link werkt eenmalig, 24 uur.",
+        "notEmailed": "Account aangemaakt, maar de e-mail kon niet worden verzonden. Open deze link om je wachtwoord in te stellen. De link werkt eenmalig, 24 uur.",
+        "signIn": "Naar aanmelden"
+      }
     }
   },
   "clientApp": {

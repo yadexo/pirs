@@ -44,12 +44,14 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const requestHeaders = await headers();
   const door = openedDoor(requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"), target);
 
-  // "Register your clinic", offered where the clinic login is — the clinic
-  // host, and the staff fallback — and only while registration is open at all
-  // (REGISTRATION_CODE set). With it unset the page is a 404, so a link to it
-  // would be a dead end.
+  // The register page this door leads to: the admin login offers the admin
+  // one, the clinic login (and the staff fallback) the clinic one. A client
+  // door offers neither — clients sign up inside their clinic's own app.
+  // Only while registration is open at all (REGISTRATION_CODE set): with it
+  // unset both pages are a 404, so a link would be a dead end.
   const tr = await getTranslations("register");
-  const registerHref = registrationEnabled() && (door.portal === "clinic" || door.portal === "staff") ? "/register/clinic" : null;
+  const registerTo = door.portal === "admin" ? "admin" : door.portal === "clinic" || door.portal === "staff" ? "clinic" : null;
+  const registerHref = registrationEnabled() && registerTo ? `/register/${registerTo}` : null;
 
   // A session whose account was deactivated since is treated as signed out;
   // otherwise the portals send it here and this page would send it back.
@@ -156,7 +158,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           {registerHref && (
             <p className="mt-4 border-t border-border pt-4 text-center text-[12.5px] text-ink-muted">
               <Link href={registerHref} className="font-medium text-primary underline underline-offset-2">
-                {tr("clinic.linkFromLogin")}
+                {tr(`${registerTo}.linkFromLogin`)}
               </Link>
             </p>
           )}

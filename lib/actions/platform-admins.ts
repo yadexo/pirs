@@ -13,12 +13,7 @@ import {
 import { getImpersonatedMerchantId } from "@/lib/actions/impersonation";
 import { rateLimit } from "@/lib/rate-limit";
 import { writeAuditLog } from "@/lib/audit";
-import { issuePasswordToken, ADMIN_INVITE_TTL_MS } from "@/lib/password-tokens";
-import { appUrl } from "@/lib/app-url";
-import { getEmailProvider } from "@/lib/providers/notifications";
-import { senderFor } from "@/lib/emails/sender";
-import { platformAdminInviteEmail } from "@/lib/emails/templates";
-import { DEFAULT_LOCALE } from "@/lib/locale-cookie";
+import { createPlatformAdminInvite, PlatformAdminExistsError } from "@/lib/platform-admin-create";
 
 /**
  * Inviting and deactivating platform admins — the agency's own "Team" page,
@@ -101,56 +96,19 @@ export async function inviteAdminAction(
       email: fd.get("email"),
     });
 
-    // Only another platform admin clashes. A clinic owner, a staff member or a
-    // client may share this address: each door signs in its own kind of account
-    // (lib/portal-scope.ts), so the same person can be all of them.
-    if (await rawDb.user.findFirst({ where: { email: data.email, role: "PLATFORM_ADMIN" } })) {
-      throw fieldError("email", "That email is already a platform admin.");
+    // The account, its one-time link and the invitation email — the same code
+    // the admin register page runs (lib/platform-admin-create.ts), so an admin
+    // created either way is the same account. It refuses inside a Serializable
+    // transaction when the address already holds a platform admin; a clinic
+    // owner, staff member or client may share it, because each door signs in
+    // its own kind of account (lib/portal-scope.ts).
+    let admin;
+    try {
+      admin = await createPlatformAdminInvite({ email: data.email, firstName: data.firstName, lastName: data.lastName, scope: "ALL" });
+    } catch (err) {
+      if (err instanceof PlatformAdminExistsError) throw fieldError("email", "That email is already a platform admin.");
+      throw err;
     }
-
-    const admin = await rawDb.user.create({
-      data: {
-        tenantId: null,
-        email: data.email,
-        // Not a hash any password can match; the account is INVITED until the link is used.
-        passwordHash: "!invited",
-        status: "INVITED",
-        role: "PLATFORM_ADMIN",
-        firstName: data.firstName,
-        lastName: data.lastName,
-      },
-    });
-
-    const token = await issuePasswordToken(admin.id, ADMIN_INVITE_TTL_MS);
-    const loginUrl = `${appUrl()}/set-password?token=${encodeURIComponent(token)}`;
-
-    const agency = await rawDb.agencySettings.findFirst({
-      select: {
-        name: true,
-        senderName: true,
-        logoLightUrl: true,
-        primaryColor: true,
-      },
-    });
-    const agencyName = agency?.senderName || agency?.name || "Deza";
-    const template = platformAdminInviteEmail({
-      branding: {
-        name: agencyName,
-        logoUrl: agency?.logoLightUrl ?? null,
-        color: agency?.primaryColor ?? null,
-      },
-      firstName: data.firstName,
-      loginUrl,
-      // The invitee hasn't signed in yet, so there's no locale preference to go on.
-      locale: DEFAULT_LOCALE,
-    });
-    const result = await getEmailProvider().send({
-      to: data.email,
-      subject: template.subject,
-      body: template.text,
-      html: template.html,
-      from: senderFor(agencyName),
-    });
 
     await writeAuditLog({
       tenantId: null,
@@ -163,7 +121,7 @@ export async function inviteAdminAction(
     });
 
     revalidatePath("/agency/settings");
-    return { email: data.email, loginUrl, emailed: result.status === "SENT" };
+    return { email: admin.email, loginUrl: admin.loginUrl, emailed: admin.emailed };
   });
 }
 

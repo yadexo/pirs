@@ -104,7 +104,8 @@
       "closed": "Registration is closed.",
       "invalidCode": "That code is not valid.",
       "checkTheForm": "Please check the highlighted fields.",
-      "clinicEmailTaken": "That email already works at a clinic. Sign in instead, or use another address."
+      "clinicEmailTaken": "That email already works at a clinic. Sign in instead, or use another address.",
+      "adminEmailTaken": "That email is already a platform admin. Sign in instead."
     },
     "clinic": {
       "section": "New clinic",
@@ -127,6 +128,24 @@
         "signIn": "Go to sign in"
       },
       "linkFromLogin": "Register your clinic"
+    },
+    "admin": {
+      "section": "Platform admin",
+      "title": "Create a platform admin",
+      "subtitle": "An admin account that sees every clinic. You will choose your password from a link we email you.",
+      "yourName": "Your name",
+      "email": "Your email",
+      "code": "Registration code",
+      "codeHint": "The code you were given. Without it, registration is closed.",
+      "submit": "Create admin account",
+      "securityNote": "We never ask for a password here, and never email one. You set your own from a one-time link, and two-factor authentication is required before the console will show you anything.",
+      "haveAnAccount": "Already have an account? Sign in",
+      "linkFromLogin": "Create a platform admin",
+      "done": {
+        "emailed": "Account created. We emailed a link to {email} — open it to set your password. It works once, for 24 hours.",
+        "notEmailed": "Account created, but the email could not be sent. Open this link to set your password. It works once, for 24 hours.",
+        "signIn": "Go to sign in"
+      }
     }
   },
   "clientApp": {
