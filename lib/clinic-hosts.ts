@@ -81,3 +81,14 @@ export async function clinicSlugForHost(host: string | null | undefined): Promis
   const { hosts } = await clinicHostMap();
   return Object.prototype.hasOwnProperty.call(hosts, normalised) ? hosts[normalised]! : null;
 }
+
+/**
+ * The clinic's own host, if it has a verified one. The reverse of the map
+ * above, and it shares the same cached copy — so a link built during a
+ * request costs nothing extra.
+ */
+export async function clinicHostForSlug(slug: string): Promise<string | null> {
+  const { hosts } = await clinicHostMap();
+  for (const [host, mapped] of Object.entries(hosts)) if (mapped === slug) return host;
+  return null;
+}

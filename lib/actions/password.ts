@@ -8,7 +8,8 @@ import { rawDb } from "@/lib/db";
 import { rateLimit } from "@/lib/rate-limit";
 import { getEmailProvider } from "@/lib/providers/notifications";
 import { consumePasswordToken, issuePasswordToken, MIN_PASSWORD_LENGTH, RESET_TTL_MS } from "@/lib/password-tokens";
-import { appUrl, clientAppOrigin } from "@/lib/app-url";
+import { appUrl } from "@/lib/app-url";
+import { clinicAppOrigin } from "@/lib/clinic-app-link";
 import { chooseAccount, isPortal, portalRoles, type Portal } from "@/lib/portal-scope";
 import { logReset } from "@/lib/signin-log";
 
@@ -79,10 +80,11 @@ export async function requestPasswordResetAction(_prev: FormState, fd: FormData)
     const account = found;
     logReset("sent", { portal, role: account.role });
     const token = await issuePasswordToken(account.id, RESET_TTL_MS);
-    // A client's link has to open on the client host — the same origin as the
-    // app they are signing in to. Staff and platform admins belong on this
-    // deployment's own host, which is the portal.
-    const origin = clinicSlug ? clientAppOrigin() : appUrl();
+    // A client's link has to open on the origin they actually use: the
+    // clinic's own domain when it has one, the shared client host otherwise.
+    // Staff and platform admins belong on this deployment's own host, which
+    // is the portal.
+    const origin = clinicSlug ? await clinicAppOrigin(clinicSlug) : appUrl();
     const resetUrl = `${origin}/set-password?token=${encodeURIComponent(token)}`;
 
     // A platform admin has no clinic — the agency's own identity stands in,

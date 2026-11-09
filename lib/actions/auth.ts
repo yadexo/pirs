@@ -15,7 +15,7 @@ import { audienceFor, chooseAccount, isPortal, portalRoles, slugFromNext, type P
 import { recordActivity } from "@/lib/activity";
 import { currentClientBasePath } from "@/lib/public-clinic";
 import { getTenantDb } from "@/lib/tenant-db";
-import { absoluteClientAppUrl } from "@/lib/client-app-url";
+import { clinicAppUrl } from "@/lib/clinic-app-link";
 import { getEmailProvider } from "@/lib/providers/notifications";
 import { senderFor } from "@/lib/emails/sender";
 import { welcomeClientEmail } from "@/lib/emails/templates";
@@ -233,7 +233,7 @@ export async function customerRegisterAction(tenantSlug: string, _prevState: unk
   const template = welcomeClientEmail({
     branding: { name: clinicName, logoUrl: tenant.branding?.logoUrl ?? null, color: tenant.branding?.primaryColor ?? null },
     firstName,
-    openAppUrl: absoluteClientAppUrl(tenantSlug),
+    openAppUrl: await clinicAppUrl(tenantSlug),
     locale,
   });
   await getEmailProvider()

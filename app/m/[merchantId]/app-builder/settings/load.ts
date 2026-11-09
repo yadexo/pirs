@@ -3,7 +3,7 @@ import { rawDb } from "@/lib/db";
 import type { TenantDb } from "@/lib/tenant-db";
 import type { SettingsSection } from "@/lib/nav";
 import { PERMISSIONS } from "@/lib/permissions";
-import { clinicJoinUrl } from "@/lib/app-url";
+import { clinicJoinUrl } from "@/lib/clinic-app-link";
 import { qrSvg } from "@/lib/qr";
 import { countryCodeFrom, countryName, isStripeConfigured } from "@/lib/stripe-connect";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
@@ -22,7 +22,7 @@ export async function loadSettingsSection(db: TenantDb, merchantId: string, sect
         db.tenantBranding.findFirst({ where: {} }),
         rawDb.tenant.findUniqueOrThrow({ where: { id: merchantId }, select: { slug: true } }),
       ]);
-      const joinUrl = clinicJoinUrl(tenant.slug);
+      const joinUrl = await clinicJoinUrl(tenant.slug);
       return plain({ section, settings, branding, appLink: { url: joinUrl, qrSvg: qrSvg(joinUrl, { margin: 2 }) } });
     }
     case "branding": {
