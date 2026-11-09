@@ -508,12 +508,11 @@ export function TeamSection({ merchantId, data, canEdit }: { merchantId: string;
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {isOwner ? (
-                    <Pill tone="primary">{t("ownerPill")}</Pill>
-                  ) : (
+                  {isOwner && <Pill tone="primary">{t("ownerPill")}</Pill>}
+                  {u.status === "INVITED" && <Pill tone="amber">{t("invitedPill")}</Pill>}
+                  {p && !p.active && <Pill tone="neutral">{t("deactivatedPill")}</Pill>}
+                  {!isOwner && (
                     <>
-                      {u.status === "INVITED" && <Pill tone="amber">{t("invitedPill")}</Pill>}
-                      {p && !p.active && <Pill tone="neutral">{t("deactivatedPill")}</Pill>}
                       {p && (
                         <select
                           aria-label={t("roleForAria", { name: p.firstName })}
@@ -530,30 +529,33 @@ export function TeamSection({ merchantId, data, canEdit }: { merchantId: string;
                           ))}
                         </select>
                       )}
-                      {canEdit && p && u.status === "INVITED" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={async () => {
-                            const res = await resendInviteAction(merchantId, p.id);
-                            if ("error" in res) return toast.error(res.error);
-                            setInviteLink({ link: res.inviteLink, emailed: res.emailed });
-                            setInviting(true);
-                          }}
-                        >
-                          {t("resendInvite")}
-                        </Button>
-                      )}
-                      {canEdit && p && u.status !== "INVITED" && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => run(setStaffActiveAction(merchantId, p.id, !p.active), p.active ? t("accessRemovedToast") : t("accessRestoredToast"))}
-                        >
-                          {p.active ? t("deactivate") : t("reactivate")}
-                        </Button>
-                      )}
                     </>
+                  )}
+                  {canEdit && p && u.status === "INVITED" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        const res = await resendInviteAction(merchantId, p.id);
+                        if ("error" in res) return toast.error(res.error);
+                        setInviteLink({ link: res.inviteLink, emailed: res.emailed });
+                        setInviting(true);
+                      }}
+                    >
+                      {t("resendInvite")}
+                    </Button>
+                  )}
+                  {/* Owners can be switched off too — the action refuses your
+                      own account and the clinic's last active owner, and says
+                      which, so no viewer id has to be plumbed through here. */}
+                  {canEdit && p && u.status !== "INVITED" && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => run(setStaffActiveAction(merchantId, p.id, !p.active), p.active ? t("accessRemovedToast") : t("accessRestoredToast"))}
+                    >
+                      {p.active ? t("deactivate") : t("reactivate")}
+                    </Button>
                   )}
                 </div>
               </li>

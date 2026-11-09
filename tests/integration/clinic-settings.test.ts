@@ -41,10 +41,15 @@ describe("clinic settings", () => {
   let ownerId: string;
   let staffId: string;
 
+  // authTime is "signed in just now". It matters because switching an account
+  // off ends the sessions that already existed (setStaffActiveAction stamps
+  // sessionsValidAfter), and switching it back on deliberately does not
+  // resurrect them — so a test that deactivates someone and carries on acting
+  // as them has to sign in again, exactly as the person would.
   const asOwner = () =>
-    authMock.auth.mockResolvedValue({ user: { id: ownerId, email: "o@x.com", name: "o", role: "TENANT_ADMIN", tenantId: clinic, tenantSlug: null, staffProfileId: null, customerProfileId: null, permissions: "ALL" } });
+    authMock.auth.mockResolvedValue({ user: { id: ownerId, email: "o@x.com", name: "o", role: "TENANT_ADMIN", tenantId: clinic, tenantSlug: null, staffProfileId: null, customerProfileId: null, permissions: "ALL", authTime: Date.now() } });
   const asStaff = () =>
-    authMock.auth.mockResolvedValue({ user: { id: staffId, email: "s@x.com", name: "s", role: "STAFF", tenantId: clinic, tenantSlug: null, staffProfileId: null, customerProfileId: null, permissions: "ALL" } });
+    authMock.auth.mockResolvedValue({ user: { id: staffId, email: "s@x.com", name: "s", role: "STAFF", tenantId: clinic, tenantSlug: null, staffProfileId: null, customerProfileId: null, permissions: "ALL", authTime: Date.now() } });
 
   beforeAll(async () => {
     clinic = (await rawDb.tenant.create({ data: { slug: `set-${stamp}`, name: "Settings Clinic" } })).id;
@@ -158,6 +163,9 @@ describe("clinic settings", () => {
       await S.setStaffActiveAction(clinic, profile.id, false);
       expect(await loadLiveAccount(staffId, Date.now())).toBeNull();
       await S.setStaffActiveAction(clinic, profile.id, true);
+      // Back on, but the sessions that existed before stay ended: they sign in
+      // again. tests/integration/team-accounts.test.ts covers that directly.
+      expect(await loadLiveAccount(staffId, Date.now())).not.toBeNull();
     });
 
     it("won't delete a role someone still has", async () => {

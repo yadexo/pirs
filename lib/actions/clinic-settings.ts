@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { rawDb } from "@/lib/db";
 import { ActionError, formBool, formText, requireMerchantAction, runAction, type ActionResult } from "@/lib/merchant-action";
 import { issuePasswordToken, INVITE_TTL_MS } from "@/lib/password-tokens";
+import { rateLimit } from "@/lib/rate-limit";
 import { getEmailProvider } from "@/lib/providers/notifications";
 import { isPermissionKey } from "@/lib/permissions";
 import { WEEKDAYS, type OpeningHours } from "@/lib/opening-hours";
@@ -235,6 +236,30 @@ export async function saveBrandingAction(merchantId: string, fd: FormData): Prom
 // Team
 // ---------------------------------------------------------------------------
 
+/**
+ * How many team changes one person may make in an hour.
+ *
+ * Not about brute force — every one of these is behind an owner session —
+ * but about blast radius: a stolen session, or a script with a bug in its
+ * loop, should not be able to invite a thousand accounts or churn everyone's
+ * rights before anybody notices. Generous enough that a real owner setting up
+ * a clinic never meets it.
+ */
+const TEAM_INVITES_PER_HOUR = 20;
+const TEAM_WRITES_PER_HOUR = 60;
+
+async function limitTeamInvites(actorUserId: string) {
+  if (!(await rateLimit(`team-invite:${actorUserId}`, TEAM_INVITES_PER_HOUR, 60 * 60 * 1000)).ok) {
+    throw new ActionError("That is a lot of invitations at once. Try again in a little while.");
+  }
+}
+
+async function limitTeamWrites(actorUserId: string) {
+  if (!(await rateLimit(`team-write:${actorUserId}`, TEAM_WRITES_PER_HOUR, 60 * 60 * 1000)).ok) {
+    throw new ActionError("That is a lot of changes at once. Try again in a little while.");
+  }
+}
+
 async function sendInvite(merchantId: string, userId: string, email: string, firstName: string) {
   const token = await issuePasswordToken(userId, INVITE_TTL_MS);
   const link = `${appUrl()}/set-password?token=${encodeURIComponent(token)}`;
@@ -264,6 +289,7 @@ const inviteSchema = z.object({
 export async function inviteStaffAction(merchantId: string, fd: FormData): Promise<ActionResult<{ inviteLink: string; emailed: boolean }>> {
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
+    await limitTeamInvites(ctx.user.id);
     const data = inviteSchema.parse({
       firstName: formText(fd, "firstName"),
       lastName: formText(fd, "lastName"),
@@ -303,16 +329,45 @@ export async function inviteStaffAction(merchantId: string, fd: FormData): Promi
   });
 }
 
-async function findStaff(merchantId: string, staffProfileId: string) {
+/**
+ * Someone on this clinic's team: a staff member or one of its owners.
+ *
+ * Owners are included because the team list shows them (settings/load.ts reads
+ * both roles), and a list you cannot act on is a list that lies. What may be
+ * done to an owner is narrower, and each action says so for itself.
+ */
+async function findTeamMember(merchantId: string, staffProfileId: string) {
   const profile = await rawDb.staffProfile.findFirst({ where: { id: staffProfileId, tenantId: merchantId }, include: { user: true } });
-  if (!profile || profile.user.role !== "STAFF") throw new ActionError("That staff member no longer exists.");
+  if (!profile || (profile.user.role !== "STAFF" && profile.user.role !== "TENANT_ADMIN")) {
+    throw new ActionError("That team member no longer exists.");
+  }
   return profile;
+}
+
+/**
+ * Refuses when this would leave the clinic with no owner who can sign in.
+ *
+ * Serializable, so two deactivations racing against the same last two owners
+ * cannot both read "one will be left" and both go ahead — the same reasoning
+ * as the platform admin guard in lib/actions/platform-admins.ts.
+ */
+async function assertNotLastOwner(merchantId: string, userId: string) {
+  await rawDb.$transaction(
+    async (tx) => {
+      const others = await tx.user.count({
+        where: { tenantId: merchantId, role: "TENANT_ADMIN", status: "ACTIVE", id: { not: userId }, staffProfile: { active: true } },
+      });
+      if (others === 0) throw new ActionError("At least one active owner must remain at this clinic.");
+    },
+    { isolationLevel: "Serializable" },
+  );
 }
 
 export async function resendInviteAction(merchantId: string, staffProfileId: string): Promise<ActionResult<{ inviteLink: string; emailed: boolean }>> {
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
-    const profile = await findStaff(merchantId, staffProfileId);
+    await limitTeamWrites(ctx.user.id);
+    const profile = await findTeamMember(merchantId, staffProfileId);
     if (profile.user.status !== "INVITED") throw new ActionError("They have already set up their account.");
     const { link, emailed } = await sendInvite(merchantId, profile.userId, profile.user.email, profile.firstName);
     await ctx.audit("staff.invite_resent", "User", profile.userId);
@@ -323,7 +378,12 @@ export async function resendInviteAction(merchantId: string, staffProfileId: str
 export async function setStaffRoleAction(merchantId: string, staffProfileId: string, roleId: string | null): Promise<ActionResult> {
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
-    const profile = await findStaff(merchantId, staffProfileId);
+    await limitTeamWrites(ctx.user.id);
+    const profile = await findTeamMember(merchantId, staffProfileId);
+    // An owner already has everything a role could grant (permissionsFor in
+    // lib/live-account.ts gives TENANT_ADMIN "ALL" and never reads the role),
+    // so storing one here would be a setting that quietly does nothing.
+    if (profile.user.role === "TENANT_ADMIN") throw new ActionError("An owner already has full access, so a role would change nothing.");
     if (roleId && !(await ctx.db.role.findFirst({ where: { id: roleId } }))) throw new ActionError("That role no longer exists.");
     await rawDb.staffProfile.update({ where: { id: profile.id }, data: { roleId } });
     await ctx.audit("staff.role_changed", "StaffProfile", profile.id, { roleId });
@@ -332,16 +392,32 @@ export async function setStaffRoleAction(merchantId: string, staffProfileId: str
   });
 }
 
-/** Takes effect on the staff member's next request (see lib/live-account.ts). */
+/**
+ * Turns someone's access off (or back on).
+ *
+ * Takes effect on their very next request, not at their next sign-in: the
+ * profile flag stops loadLiveAccount for staff, and sessionsValidAfter ends
+ * every session that already existed — which is what "disable this account"
+ * has to mean for an owner, whose role is not gated by the profile flag at
+ * all. Reactivating leaves that cut-off exactly where it is — clearing it
+ * would resurrect the sessions this deactivation ended, and would undo the
+ * cut-off a password reset may have set since. They sign in again.
+ */
 export async function setStaffActiveAction(merchantId: string, staffProfileId: string, active: boolean): Promise<ActionResult> {
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
-    const profile = await findStaff(merchantId, staffProfileId);
-    await rawDb.staffProfile.update({
-      where: { id: profile.id },
-      data: { active, deactivatedAt: active ? null : new Date() },
-    });
-    await ctx.audit(active ? "staff.reactivated" : "staff.deactivated", "StaffProfile", profile.id);
+    await limitTeamWrites(ctx.user.id);
+    const profile = await findTeamMember(merchantId, staffProfileId);
+    if (!active) {
+      // Locking yourself out of your own clinic is never what was meant.
+      if (profile.userId === ctx.user.id) throw new ActionError("You can't remove your own access.");
+      if (profile.user.role === "TENANT_ADMIN") await assertNotLastOwner(merchantId, profile.userId);
+    }
+    await rawDb.$transaction([
+      rawDb.staffProfile.update({ where: { id: profile.id }, data: { active, deactivatedAt: active ? null : new Date() } }),
+      ...(active ? [] : [rawDb.user.update({ where: { id: profile.userId }, data: { sessionsValidAfter: new Date() } })]),
+    ]);
+    await ctx.audit(active ? "staff.reactivated" : "staff.deactivated", "StaffProfile", profile.id, { userId: profile.userId, role: profile.user.role });
     await revalidateMerchant(merchantId);
     return {};
   });
@@ -355,6 +431,7 @@ const roleSchema = z.object({
 export async function saveRoleAction(merchantId: string, roleId: string | null, fd: FormData): Promise<ActionResult<{ id: string }>> {
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
+    await limitTeamWrites(ctx.user.id);
     const data = roleSchema.parse({ name: formText(fd, "name"), permissions: fd.getAll("permissions").map(String) });
 
     const clash = await ctx.db.role.findFirst({ where: { name: { equals: data.name, mode: "insensitive" }, ...(roleId ? { NOT: { id: roleId } } : {}) } });
@@ -382,6 +459,7 @@ export async function saveRoleAction(merchantId: string, roleId: string | null, 
 export async function deleteRoleAction(merchantId: string, roleId: string): Promise<ActionResult> {
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
+    await limitTeamWrites(ctx.user.id);
     const inUse = await ctx.db.staffProfile.count({ where: { roleId } });
     if (inUse > 0) throw new ActionError(`${inUse} staff member${inUse === 1 ? " has" : "s have"} this role. Give them another role first.`);
     const { count } = await ctx.db.role.deleteMany({ where: { id: roleId } });
