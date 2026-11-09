@@ -44,8 +44,11 @@
   --brand-deep: #5c3300;
 
   /* ---------------------------------------------------------- typography */
-  /* Hanken Grotesk is loaded by next/font and sets --font-hanken. */
-  --font-ui: var(--font-hanken), -apple-system, system-ui, sans-serif;
+  /* Hanken Grotesk, self-hosted by next/font/local (app/layout.tsx), one
+     family per script subset. The browser falls back per character, so a
+     glyph missing from the latin cut is looked for in the next family along
+     before it ever reaches the system font. */
+  --font-ui: var(--font-hanken), var(--font-hanken-latin-ext), var(--font-hanken-vietnamese), var(--font-hanken-cyrillic-ext), -apple-system, system-ui, sans-serif;
 
   --display-size: 2.125rem; /* 34 */
   --display-line: 2.5rem; /* 40 */

@@ -36,6 +36,13 @@ describe("list-platform-admins script", () => {
     clinicId = (await rawDb.tenant.create({ data: { slug: `lpa-${stamp}`, name: "LPA Clinic" } })).id;
     await rawDb.user.create({ data: { tenantId: clinicId, email: clinicOwner, passwordHash, role: "TENANT_ADMIN" } });
 
+    // The address below is derived from the clock modulo 250, so sooner or
+    // later it is one another test file already used and left behind — and
+    // createMany on an existing primary key throws, taking this whole file
+    // with it. Files run one at a time (vitest.config.ts), so nothing live
+    // can be holding it.
+    await rawDb.rateLimitBucket.deleteMany({ where: { key: `login:ip:203.0.113.${stamp % 250}` } });
+
     await rawDb.rateLimitBucket.createMany({
       data: [
         // Locked: past the account limit, 7 minutes to go.
