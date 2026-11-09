@@ -252,6 +252,17 @@ function MerchantRowItem({ merchant }: { merchant: MerchantRow }) {
         )}
         <MembershipFee merchant={merchant} />
         <Toggle checked={active} onChange={toggleActive} label={active ? "Active" : "Inactive"} disabled={pending} />
+        {/* The platform's own page for this clinic — its domain lives there.
+            Separate from the row's main click, which still opens the clinic's
+            portal at /m/<id>. */}
+        <button
+          type="button"
+          onClick={() => router.push(`/agency/clinics/${merchant.id}`)}
+          aria-label={`Domain and platform settings for ${merchant.name}`}
+          className="rounded-[8px] p-1.5 text-ink-faint hover:bg-app hover:text-primary"
+        >
+          <Globe className="h-4 w-4" />
+        </button>
         <button
           type="button"
           onClick={impersonate}

@@ -4,13 +4,12 @@ import { z } from "zod";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { rawDb } from "@/lib/db";
-import { requireRole, ForbiddenError, UnauthorizedError } from "@/lib/rbac";
 import {
   ActionError,
   runAction,
   type ActionResult,
 } from "@/lib/merchant-action";
-import { getImpersonatedMerchantId } from "@/lib/actions/impersonation";
+import { requirePlatformAdminAction } from "@/lib/platform-admin-action";
 import { rateLimit } from "@/lib/rate-limit";
 import { writeAuditLog } from "@/lib/audit";
 import { createPlatformAdminInvite, PlatformAdminExistsError } from "@/lib/platform-admin-create";
@@ -32,36 +31,6 @@ async function clientIp() {
     h.get("x-real-ip") ||
     "unknown"
   );
-}
-
-/**
- * The guard every action here shares: right role, not mid-impersonation, own
- * 2FA already confirmed. The UI never reaches this action without all three
- * already being true — requireAgencyContext() redirects an unconfirmed admin
- * away from the whole page — but the action refuses on its own regardless,
- * since a button being hidden is not the same as the server refusing.
- */
-async function requirePlatformAdminAction() {
-  // requireRole's declared return type is narrower than what it actually
-  // returns (requireSession spreads the live account in) — same widening
-  // every other caller of user.twoFactorConfirmed (lib/merchant-context.ts)
-  // relies on.
-  let user: Awaited<ReturnType<typeof requireRole>> & { twoFactorConfirmed: boolean };
-  try {
-    user = (await requireRole("PLATFORM_ADMIN")) as typeof user;
-  } catch (err) {
-    // ActionError is what runAction's catch-all shows the caller verbatim;
-    // ForbiddenError/UnauthorizedError would otherwise be logged as an
-    // unexpected failure and hidden behind a generic message, same as a
-    // normal permission refusal never should be.
-    if (err instanceof ForbiddenError || err instanceof UnauthorizedError) throw new ActionError("Not permitted.");
-    throw err;
-  }
-  if (await getImpersonatedMerchantId())
-    throw new ActionError("Not available while impersonating.");
-  if (!user.twoFactorConfirmed)
-    throw new ActionError("Set up two-factor authentication first.");
-  return user;
 }
 
 const inviteSchema = z.object({

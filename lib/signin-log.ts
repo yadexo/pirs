@@ -48,6 +48,10 @@ export interface SignInFields {
   roles?: string[];
   /** For a refused session: how many seconds sessionsValidAfter is ahead of the session's start. Positive when clocks disagree. */
   ahead_s?: number;
+  /** Why something was refused, as a code. Never free text. */
+  reason?: string;
+  /** The state a record ended in, e.g. a domain's PENDING / VERIFIED / FAILED. */
+  status?: string;
 }
 
 /** Outcomes that are expected in normal use and are not a problem. */
@@ -69,6 +73,8 @@ function format(tag: string, outcome: string, fields: SignInFields): string {
   if (fields.role) parts.push(`role=${clean(fields.role)}`);
   if (fields.roles?.length) parts.push(`roles=${clean([...fields.roles].sort().join("+"))}`);
   if (fields.ahead_s !== undefined) parts.push(`ahead_s=${clean(Math.round(fields.ahead_s))}`);
+  if (fields.reason) parts.push(`reason=${clean(fields.reason)}`);
+  if (fields.status) parts.push(`status=${clean(fields.status)}`);
   return `[${tag}] ${parts.join(" ")}`;
 }
 
@@ -145,6 +151,42 @@ const REGISTER_INFO: ReadonlySet<RegisterOutcome> = new Set<RegisterOutcome>(["s
 export function logRegister(outcome: RegisterOutcome, fields: SignInFields = {}): void {
   try {
     write(format("register", outcome, fields), REGISTER_INFO.has(outcome));
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Outcomes of attaching, checking or removing a clinic's own domain
+ * (lib/actions/clinic-domains.ts).
+ *
+ * The host itself is never a field: it is somebody's real domain name, it has
+ * no fixed shape, and `clean` would print most of them as "?" anyway. What a
+ * line says is what happened and, for a refusal, which rule refused it — the
+ * audit log holds the host, where it belongs.
+ */
+export type DomainOutcome =
+  | "attached"
+  | "checked"
+  | "verified"
+  | "removed"
+  /** The typed domain broke one of the rules in lib/clinic-domain.ts. */
+  | "refused"
+  /** Vercel said no when attaching. */
+  | "vercel_refused"
+  /** Vercel said no when removing, so the row was kept. */
+  | "vercel_remove_failed"
+  /** A verification check could not be completed. */
+  | "check_failed"
+  /** No VERCEL_API_TOKEN / VERCEL_PROJECT_ID on this deployment. */
+  | "not_configured";
+
+const DOMAIN_INFO: ReadonlySet<DomainOutcome> = new Set<DomainOutcome>(["attached", "checked", "verified", "removed"]);
+
+/** Search for `[domain]`. Same rules as above: codes and labels, never a host or a token. */
+export function logDomain(outcome: DomainOutcome, fields: SignInFields = {}): void {
+  try {
+    write(format("domain", outcome, fields), DOMAIN_INFO.has(outcome));
   } catch {
     /* ignore */
   }
