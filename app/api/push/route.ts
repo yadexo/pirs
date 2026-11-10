@@ -42,6 +42,13 @@ export async function GET() {
   return NextResponse.json({ configured: vapidConfigured(), publicKey: vapidPublicKey(), devices });
 }
 
+/** The origin this request arrived on, behind a proxy or not. */
+function requestOrigin(req: Request): string {
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
+  const proto = req.headers.get("x-forwarded-proto") ?? (host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https");
+  return host ? `${proto}://${host}` : "";
+}
+
 export async function POST(req: Request) {
   const { db, user } = await requireCustomerContext();
   if (!vapidConfigured()) {
@@ -99,6 +106,11 @@ export async function POST(req: Request) {
   // The endpoint identifies the device, so re-subscribing the same one moves
   // it to this account rather than leaving a second row pointing at it.
   const userAgent = req.headers.get("user-agent")?.slice(0, 300) ?? null;
+  // Where this device is subscribing from, read from the request rather than
+  // taken from the body: a push payload carries a path, and the same path
+  // means different things on a clinic domain and on the shared host. Read
+  // the same way every other host decision here is.
+  const origin = requestOrigin(req);
   // A device this client had not subscribed before. Re-sending the same
   // subscription — a page that re-registers, a second tap — is not "turned on"
   // again, or the clinic's tally would count one person several times.
@@ -112,6 +124,7 @@ export async function POST(req: Request) {
       p256dh: input.keys.p256dh,
       auth: input.keys.auth,
       userAgent,
+      origin,
     },
     update: {
       tenantId: user.tenantId!,
@@ -119,6 +132,10 @@ export async function POST(req: Request) {
       p256dh: input.keys.p256dh,
       auth: input.keys.auth,
       userAgent,
+      // Re-subscribing moves the device to wherever it is now: a client who
+      // reinstalls on the clinic's new domain must stop being sent paths for
+      // the shared host.
+      origin,
       lastUsedAt: new Date(),
     },
   });

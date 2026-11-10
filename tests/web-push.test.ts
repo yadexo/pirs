@@ -1,9 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { CLIENT } from "./fixtures/hosts";
 import webpush, { WebPushError } from "web-push";
 
 const deleteMany = vi.fn(async () => ({ count: 0 }));
 const updateMany = vi.fn(async () => ({ count: 0 }));
-vi.mock("@/lib/db", () => ({ rawDb: { pushSubscription: { deleteMany, updateMany } } }));
+/**
+ * One clinic with a domain of its own, so composing a payload per device has
+ * something to compose against (lib/push-base-path.ts reads this map).
+ */
+const clinicDomainFindMany = vi.fn(async () => [{ host: "app.whitelabel.example", tenant: { slug: "riverside" } }]);
+vi.mock("@/lib/db", () => ({ rawDb: { pushSubscription: { deleteMany, updateMany }, clinicDomain: { findMany: clinicDomainFindMany } } }));
 
 const { deliver, vapidConfigured } = await import("@/lib/web-push");
 type Sender = Parameters<typeof deliver>[2];
@@ -40,11 +46,30 @@ describe("web push delivery", () => {
 
   it("sends the message as the payload the service worker reads", async () => {
     const send = accepting() as ReturnType<typeof vi.fn>;
-    await deliver([sub("a")], { title: "Riverside", body: "Paid", url: "/riverside/shop", tag: "t", icon: "/i.png" }, send);
+    // No clinic on the row, so there is no base path to add and the message
+    // goes exactly as written — which is what a test notification does.
+    await deliver([sub("a")], { title: "Riverside", body: "Paid", url: "/shop", tag: "t", icon: "/i.png" }, send);
 
     const [subscription, payload] = send.mock.calls[0] as [unknown, string];
     expect(subscription).toEqual({ endpoint: "https://push.example/a", keys: { p256dh: "key", auth: "auth" } });
-    expect(JSON.parse(payload)).toEqual({ title: "Riverside", body: "Paid", url: "/riverside/shop", tag: "t", icon: "/i.png" });
+    expect(JSON.parse(payload)).toEqual({ title: "Riverside", body: "Paid", url: "/shop", tag: "t", icon: "/i.png" });
+  });
+
+  it("gives each device the path that means something on its own origin", async () => {
+    // The whole point of recording an origin: one client installed from the
+    // clinic's domain, another from the shared host, and "/shop" is only
+    // right for one of them.
+    const send = accepting() as ReturnType<typeof vi.fn>;
+    const onClinicDomain = { ...sub("clinic"), origin: "https://app.whitelabel.example", tenant: { slug: "riverside" } };
+    const onSharedHost = { ...sub("shared"), origin: `https://${CLIENT}`, tenant: { slug: "riverside" } };
+
+    await deliver([onClinicDomain, onSharedHost], { title: "T", body: "B", url: "/shop", icon: "/app-icon/192.png" }, send);
+
+    const byEndpoint = Object.fromEntries(
+      (send.mock.calls as [{ endpoint: string }, string][]).map(([s, payload]) => [s.endpoint, JSON.parse(payload)]),
+    );
+    expect(byEndpoint["https://push.example/clinic"]).toMatchObject({ url: "/shop", icon: "/app-icon/192.png" });
+    expect(byEndpoint["https://push.example/shared"]).toMatchObject({ url: "/riverside/shop", icon: "/riverside/app-icon/192.png" });
   });
 
   it("deletes a subscription the push service says is gone, and keeps the rest", async () => {

@@ -415,6 +415,13 @@ model PushSubscription {
   p256dh    String
   auth      String
   userAgent String?
+  /// The origin this device subscribed from — "https://app.clinicname.nl" on
+  /// a clinic's own domain, the shared client host otherwise. A push payload
+  /// carries a path, and the service worker resolves it against its own
+  /// origin, so the same path means different things on the two. Null for
+  /// every subscription made before clinics had domains of their own: those
+  /// were all on the shared host, which is exactly how a null is read.
+  origin    String?
 
   createdAt  DateTime @default(now())
   /// Last time a push service accepted a message for this device.

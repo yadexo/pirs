@@ -1,5 +1,6 @@
 import "server-only";
 import { rawDb } from "@/lib/db";
+import { clinicAppUrl } from "@/lib/clinic-app-link";
 import { notifyClientQuietly } from "@/lib/web-push";
 import type { EmailBranding } from "@/lib/emails/layout";
 import type { EmailTemplate } from "@/lib/emails/templates";
@@ -125,28 +126,6 @@ async function recipientForOrder(orderId: string): Promise<OrderRecipient | null
   };
 }
 
-/**
- * The path back into the clinic's own app — never another clinic's, and
- * always inside the installed app's scope so opening it doesn't bounce the
- * client into Safari.
- *
- * There is no request to read a host from here (the webhook is Stripe's
- * request, not the client's), so this follows the same rule as the links the
- * app prints: the short address when the client app has its own domain.
- */
-function clinicPath(slug: string, rest = ""): string {
-  const short = Boolean(process.env.CLIENT_APP_URL);
-  return `${short ? "" : "/app"}/${encodeURIComponent(slug)}${rest}`;
-}
-
-/**
- * The same path as a link somebody can click in an email, where a path on its
- * own means nothing.
- */
-function absoluteClientUrl(path: string): string {
-  const base = (process.env.CLIENT_APP_URL ?? process.env.APP_URL ?? "").replace(/\/$/, "");
-  return base ? `${base}${path}` : path;
-}
 
 /**
  * An email the client can keep, for the things a push is too small to carry.
@@ -191,8 +170,8 @@ export async function notifyOrderPaid(orderId: string, amountCents: number): Pro
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
     body: PUSH_COPY.orderPaid[to.locale](to.orderNumber, amount(amountCents, to.currency)),
-    url: clinicPath(to.slug, "/profile?tab=settings"),
-    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    url: "/profile?tab=settings",
+    icon: "/app-icon/192.png",
     tag: `order-paid-${orderId}`,
   });
 }
@@ -221,7 +200,7 @@ export async function notifyOrderConfirmation(orderId: string): Promise<void> {
     totalCents: order.totalCents,
     vatCents: order.taxCents,
     currency: to.currency,
-    myItemsUrl: absoluteClientUrl(clinicPath(to.slug, "/profile?tab=items")),
+    myItemsUrl: await clinicAppUrl(to.slug, "/profile?tab=items"),
     locale: to.locale,
   });
   await sendBrandedEmail(to.email, to.clinicName, template);
@@ -233,8 +212,8 @@ export async function notifyItemRedeemed(customerUserId: string, clinicName: str
   await notifyClientQuietly(customerUserId, {
     title: clinicName,
     body: PUSH_COPY.itemRedeemed[localeOf(user?.locale)](itemName),
-    url: clinicPath(slug, "/profile?tab=items"),
-    icon: clinicPath(slug, "/app-icon/192.png"),
+    url: "/profile?tab=items",
+    icon: "/app-icon/192.png",
   });
 }
 
@@ -245,8 +224,8 @@ export async function notifyRefundProcessed(orderId: string, amountCents: number
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
     body: PUSH_COPY.refundProcessed[to.locale](fully, amount(amountCents, to.currency), to.orderNumber),
-    url: clinicPath(to.slug, "/profile?tab=settings"),
-    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    url: "/profile?tab=settings",
+    icon: "/app-icon/192.png",
     tag: `order-refund-${orderId}`,
   });
 
@@ -300,8 +279,8 @@ export async function notifyCreditChanged(customerProfileId: string, amountCents
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
     body: PUSH_COPY.creditChanged[to.locale](added, amount(Math.abs(amountCents), to.currency), reason),
-    url: clinicPath(to.slug, "/profile?tab=settings"),
-    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    url: "/profile?tab=settings",
+    icon: "/app-icon/192.png",
     tag: `credit-${customerProfileId}-${Date.now()}`,
   });
 }
@@ -319,8 +298,8 @@ export async function notifyPointsChanged(customerProfileId: string, points: num
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
     body: PUSH_COPY.pointsChanged[to.locale](added, Math.abs(points), reason),
-    url: clinicPath(to.slug, "/rewards"),
-    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    url: "/rewards",
+    icon: "/app-icon/192.png",
     tag: `points-${customerProfileId}-${Date.now()}`,
   });
 }
@@ -337,8 +316,8 @@ export async function notifyItemIssued(customerProfileId: string, itemName: stri
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
     body: PUSH_COPY.itemIssued[to.locale](headline, itemName, reason),
-    url: clinicPath(to.slug, "/profile?tab=items"),
-    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    url: "/profile?tab=items",
+    icon: "/app-icon/192.png",
     tag: `item-issued-${customerProfileId}-${Date.now()}`,
   });
 }
@@ -353,8 +332,8 @@ export async function notifyItemVoided(customerProfileId: string, itemName: stri
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
     body: PUSH_COPY.itemVoided[to.locale](itemName, reason),
-    url: clinicPath(to.slug, "/profile?tab=items"),
-    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    url: "/profile?tab=items",
+    icon: "/app-icon/192.png",
     tag: `item-voided-${customerProfileId}-${Date.now()}`,
   });
 }
@@ -377,14 +356,14 @@ export async function notifyPriceChange(
 
   const when = formatDay(change.effectiveAt, null);
   const price = amount(change.newPriceCents, change.currency);
-  const manage = clinicPath(to.slug, "/profile?tab=membership");
+  const manage = "/profile?tab=membership";
   const line = PUSH_COPY.priceChange[to.locale](change.planName, price, when);
 
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
     body: line,
     url: manage,
-    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    icon: "/app-icon/192.png",
     tag: `price-change-${customerProfileId}-${change.effectiveAt.getTime()}`,
   });
 
@@ -399,7 +378,7 @@ export async function notifyPriceChange(
       newPriceCents: change.newPriceCents,
       currency: change.currency,
       effectiveDate: when,
-      manageUrl: absoluteClientUrl(manage),
+      manageUrl: await clinicAppUrl(to.slug, manage),
       locale: to.locale,
     }),
   );
@@ -441,12 +420,12 @@ export async function notifyMembershipPaymentFailed(membershipId: string, benefi
   if (!to) return;
   const endDay = benefitsEndAt ? formatDay(benefitsEndAt, null) : null;
   const deadline = endDay ? PUSH_COPY.membershipPaymentFailedDeadline[to.locale](endDay) : "";
-  const updateUrl = clinicPath(to.slug, "/profile?tab=membership");
+  const updateUrl = "/profile?tab=membership";
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
     body: PUSH_COPY.membershipPaymentFailed[to.locale](to.planName, deadline),
     url: updateUrl,
-    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    icon: "/app-icon/192.png",
     tag: `membership-failed-${membershipId}`,
   });
 
@@ -458,7 +437,7 @@ export async function notifyMembershipPaymentFailed(membershipId: string, benefi
       branding: to.branding,
       firstName: to.firstName,
       planName: to.planName,
-      updatePaymentUrl: absoluteClientUrl(updateUrl),
+      updatePaymentUrl: await clinicAppUrl(to.slug, updateUrl),
       benefitsEndAt: endDay,
       locale: to.locale,
     }),
@@ -478,8 +457,8 @@ export async function notifyMembershipChanged(membershipId: string, what: string
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
     body: `${what} — ${reason}`,
-    url: clinicPath(to.slug, "/profile?tab=settings"),
-    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    url: "/profile?tab=settings",
+    icon: "/app-icon/192.png",
     tag: `membership-changed-${membershipId}-${Date.now()}`,
   });
 }
@@ -491,8 +470,8 @@ export async function notifyMembershipSuspended(membershipId: string): Promise<v
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
     body: PUSH_COPY.membershipSuspended[to.locale](to.planName),
-    url: clinicPath(to.slug, "/profile?tab=settings"),
-    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    url: "/profile?tab=settings",
+    icon: "/app-icon/192.png",
     tag: `membership-suspended-${membershipId}`,
   });
 }
@@ -504,8 +483,8 @@ export async function notifyMembershipActive(membershipId: string, paidCents?: n
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
     body: PUSH_COPY.membershipActive[to.locale](to.planName),
-    url: clinicPath(to.slug, "/profile?tab=settings"),
-    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    url: "/profile?tab=settings",
+    icon: "/app-icon/192.png",
     tag: `membership-active-${membershipId}`,
   });
 
@@ -534,8 +513,8 @@ export async function notifySessionsReceived(customerProfileId: string, packageN
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
     body: PUSH_COPY.sessionsReceived[to.locale](sessions, packageName),
-    url: clinicPath(to.slug, "/profile"),
-    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    url: "/profile",
+    icon: "/app-icon/192.png",
     tag: `sessions-${customerProfileId}-${Date.now()}`,
   });
 }
@@ -549,12 +528,12 @@ export async function notifySessionsReceived(customerProfileId: string, packageN
 export async function notifySessionsExpiring(customerProfileId: string, packageName: string, sessions: number, endsOn: string): Promise<void> {
   const to = await recipientForClient(customerProfileId);
   if (!to) return;
-  const myItems = clinicPath(to.slug, "/profile");
+  const myItems = "/profile";
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
     body: PUSH_COPY.sessionsExpiring[to.locale](sessions, packageName, endsOn),
     url: myItems,
-    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    icon: "/app-icon/192.png",
     tag: `sessions-expiring-${customerProfileId}`,
   });
 
@@ -562,7 +541,7 @@ export async function notifySessionsExpiring(customerProfileId: string, packageN
   await sendBrandedEmail(
     to.email,
     to.clinicName,
-    sessionsExpiringEmail({ branding: to.branding, firstName: to.firstName, packageName, sessions, endsOn, myItemsUrl: absoluteClientUrl(myItems), locale: to.locale }),
+    sessionsExpiringEmail({ branding: to.branding, firstName: to.firstName, packageName, sessions, endsOn, myItemsUrl: await clinicAppUrl(to.slug, myItems), locale: to.locale }),
   );
 }
 
@@ -578,8 +557,8 @@ export async function notifySessionUsed(customerProfileId: string, packageName: 
   await notifyClientQuietly(to.userId, {
     title: to.clinicName,
     body: PUSH_COPY.sessionUsed[to.locale](packageName, serviceName, remaining),
-    url: clinicPath(to.slug, "/profile"),
-    icon: clinicPath(to.slug, "/app-icon/192.png"),
+    url: "/profile",
+    icon: "/app-icon/192.png",
     tag: `session-used-${customerProfileId}-${Date.now()}`,
   });
 }

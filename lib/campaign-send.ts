@@ -37,10 +37,6 @@ export function campaignPath(productId: string | null): string {
   return productId ? `/shop?product=${encodeURIComponent(productId)}` : "/shop";
 }
 
-export function clinicBase(slug: string): string {
-  return `${process.env.CLIENT_APP_URL ? "" : "/app"}/${encodeURIComponent(slug)}`;
-}
-
 /**
  * An offer's notification is only worth sending while the offer is worth
  * having. A clinic that switches an offer off, or lets it end, should not
@@ -89,7 +85,6 @@ export async function sendCampaignNow(campaignId: string, now: Date = new Date()
   }
 
   const clinicName = campaign.tenant.branding?.businessName ?? campaign.tenant.name;
-  const base = clinicBase(campaign.tenant.slug);
 
   const targets = await marketingAudience(campaign.tenantId, campaign.customerProfileId);
   const result = await sendMarketingCampaign(campaign.tenantId, targets, {
@@ -105,8 +100,10 @@ export async function sendCampaignNow(campaignId: string, now: Date = new Date()
     message: {
       title: campaign.subject?.trim() || clinicName,
       body: campaign.body,
-      url: `${base}${campaignPath(campaign.productId)}`,
-      icon: `${base}/app-icon/192.png`,
+      // Clinic-relative. lib/web-push.ts adds each device's own prefix, which
+      // differs between the clinic's domain and the shared client host.
+      url: campaignPath(campaign.productId),
+      icon: "/app-icon/192.png",
     },
   });
 

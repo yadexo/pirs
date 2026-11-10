@@ -1,5 +1,6 @@
 import webpush, { type PushSubscription as WebPushSubscription, type SendResult, WebPushError } from "web-push";
 import { rawDb } from "@/lib/db";
+import { pushBasePath } from "@/lib/push-base-path";
 
 /**
  * Web Push for the clients' installed apps.
@@ -18,7 +19,15 @@ import { rawDb } from "@/lib/db";
 export interface PushMessage {
   title: string;
   body: string;
-  /** Path inside the clinic's app, e.g. "/riverside/shop". */
+  /**
+   * Path *inside* the clinic's app, e.g. "/shop" — not "/riverside/shop".
+   *
+   * Where the clinic's app sits differs per device: the root of the clinic's
+   * own domain, "/riverside" on the shared host. The prefix is added per
+   * subscription at send time (lib/push-base-path.ts), because the service
+   * worker resolves this against its own origin and one payload for every
+   * device would be right for at most one of them.
+   */
   url?: string;
   /** Replaces an earlier notification with the same tag instead of stacking. */
   tag?: string;
@@ -58,6 +67,10 @@ export interface StoredSubscription {
   endpoint: string;
   p256dh: string;
   auth: string;
+  /** Where this device subscribed from; decides what its payload's paths mean. */
+  origin?: string | null;
+  /** The clinic whose app the paths are inside. */
+  tenant?: { slug: string } | null;
 }
 
 /** The send call, as an argument so tests don't need a push service. */
@@ -78,15 +91,35 @@ export async function deliver(subscriptions: StoredSubscription[], message: Push
   if (subscriptions.length === 0) return { sent: 0, removed: 0, failed: 0 };
   configure();
 
-  const payload = JSON.stringify(message);
   const dead: string[] = [];
   const alive: string[] = [];
   let failed = 0;
 
+  // One payload per *origin*, not per device: a clinic with a domain has at
+  // most two, and composing the same string a thousand times would be waste.
+  const payloads = new Map<string, string>();
+  const payloadFor = async (row: StoredSubscription): Promise<string> => {
+    const slug = row.tenant?.slug;
+    // Nothing to place, or nowhere to place it against: send as it is. A test
+    // notification carries no path at all.
+    if (!slug || (!message.url && !message.icon)) return JSON.stringify(message);
+    const key = row.origin ?? "";
+    const cached = payloads.get(key);
+    if (cached) return cached;
+    const base = await pushBasePath(row.origin, slug);
+    const composed = JSON.stringify({
+      ...message,
+      ...(message.url ? { url: `${base}${message.url}` } : {}),
+      ...(message.icon ? { icon: `${base}${message.icon}` } : {}),
+    });
+    payloads.set(key, composed);
+    return composed;
+  };
+
   await Promise.all(
     subscriptions.map(async (row) => {
       try {
-        await send({ endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } }, payload);
+        await send({ endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } }, await payloadFor(row));
         alive.push(row.id);
       } catch (err) {
         if (isGone(err)) dead.push(row.id);
@@ -101,7 +134,7 @@ export async function deliver(subscriptions: StoredSubscription[], message: Push
   return { sent: alive.length, removed: dead.length, failed };
 }
 
-const SELECT = { id: true, endpoint: true, p256dh: true, auth: true } as const;
+const SELECT = { id: true, endpoint: true, p256dh: true, auth: true, origin: true, tenant: { select: { slug: true } } } as const;
 
 /** Every device belonging to one client. */
 export async function sendToClient(userId: string, message: PushMessage, send?: Sender): Promise<PushOutcome> {

@@ -42,10 +42,11 @@ export async function sendClinicBroadcastAction(merchantId: string, fd: FormData
       throw new ActionError(`That's ${BROADCASTS_PER_HOUR} messages this hour, which is the limit. Try again later.`);
     }
 
-    const tenant = await rawDb.tenant.findUniqueOrThrow({
-      where: { id: merchantId },
-      select: { slug: true, name: true, branding: { select: { businessName: true } } },
-    });
+    // Still read, as the check that this clinic exists at all before anything
+    // is sent on its behalf. Nothing is taken from it any more: the paths in
+    // the message are relative to the clinic's app, so its slug is no longer
+    // needed here.
+    await rawDb.tenant.findUniqueOrThrow({ where: { id: merchantId }, select: { id: true } });
 
     // A product id from the form is checked against this clinic's own
     // products, so a link can never point into another clinic's shop.
@@ -59,14 +60,12 @@ export async function sendClinicBroadcastAction(merchantId: string, fd: FormData
       path = `/shop?product=${encodeURIComponent(product.id)}`;
     }
 
-    const short = Boolean(process.env.CLIENT_APP_URL);
-    const base = `${short ? "" : "/app"}/${encodeURIComponent(tenant.slug)}`;
-
     const result = await sendToClinicClients(merchantId, {
       title: input.title,
       body: input.body,
-      url: `${base}${path}`,
-      icon: `${base}/app-icon/192.png`,
+      // Clinic-relative: lib/web-push.ts adds each device’s own prefix.
+      url: path,
+      icon: "/app-icon/192.png",
     });
 
     await ctx.audit("notifications.broadcast", "Tenant", merchantId, {

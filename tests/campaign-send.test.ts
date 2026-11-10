@@ -4,7 +4,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({ rawDb: {} }));
 vi.mock("@/lib/marketing", () => ({ marketingAudience: async () => [], sendMarketingCampaign: async () => ({ devices: 0, clients: 0, skipped: {} }) }));
 
-const { promotionStillWorthAnnouncing, campaignPath, clinicBase } = await import("@/lib/campaign-send");
+const { promotionStillWorthAnnouncing, campaignPath } = await import("@/lib/campaign-send");
 
 /**
  * A notification about an offer is only worth sending while the offer is
@@ -46,13 +46,14 @@ describe("where a notification opens", () => {
     expect(campaignPath(null)).toBe("/shop");
   });
 
-  it("stays inside the clinic's own app", () => {
-    // Without a client-app domain the app lives under /app; with one it is the
-    // short address. Either way the link never leaves the installed scope.
-    delete process.env.CLIENT_APP_URL;
-    expect(clinicBase("riverside")).toBe("/app/riverside");
-    process.env.CLIENT_APP_URL = "https://login.deza.ai";
-    expect(clinicBase("riverside")).toBe("/riverside");
-    delete process.env.CLIENT_APP_URL;
+  it("is relative to the clinic's app, not to a host", () => {
+    // Where the app sits differs per device — the root of the clinic's own
+    // domain, "/riverside" on the shared host — so the path carries no
+    // prefix at all. lib/push-base-path.ts adds the right one per
+    // subscription, and tests/push-base-path.test.ts covers that.
+    for (const path of [campaignPath(null), campaignPath("prod_1")]) {
+      expect(path.startsWith("/")).toBe(true);
+      expect(path).not.toContain("/app/");
+    }
   });
 });
