@@ -4,7 +4,7 @@ import { rawDb } from "@/lib/db";
 import { getTenantDb } from "@/lib/tenant-db";
 import { completePaidOrder, releaseFailedOrder } from "@/lib/order-completion";
 import { disconnectClinicAccount, syncClinicFromAccount } from "@/lib/stripe-connect";
-import { domainsApi, registerApplePayDomains } from "@/lib/apple-pay-domains";
+import { clinicCheckoutDomains, domainsApi, registerApplePayDomains } from "@/lib/apple-pay-domains";
 import {
   notifyMembershipActive,
   notifyMembershipPaymentFailed,
@@ -112,7 +112,16 @@ function intentId(charge: Stripe.Charge): string | null {
  */
 async function registerDomainsQuietly(stripeAccountId: string): Promise<void> {
   try {
-    const results = await registerApplePayDomains(domainsApi(stripe()), stripeAccountId);
+    // Including the clinic's own domain, if it has one. Apple Pay appears
+    // only on a registered host, so a clinic whose clients check out at
+    // app.clinicname.nl needs that registered on its own account as well as
+    // the shared one.
+    const clinic = await rawDb.tenant.findFirst({
+      where: { stripeAccountId },
+      select: { domains: { where: { type: "CLIENT", status: "VERIFIED" }, select: { host: true } } },
+    });
+    const domains = clinicCheckoutDomains(clinic?.domains[0]?.host ?? null);
+    const results = await registerApplePayDomains(domainsApi(stripe()), stripeAccountId, domains);
     for (const result of results.filter((r) => r.status === "failed")) {
       console.error(`[stripe-webhook] Apple Pay domain ${result.domain} not registered for ${stripeAccountId}: ${result.error}`);
     }

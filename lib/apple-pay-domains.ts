@@ -48,6 +48,24 @@ export function checkoutDomains(env: NodeJS.ProcessEnv = process.env): string[] 
   return [...domains];
 }
 
+/**
+ * The same, plus a clinic's own domain when it has one.
+ *
+ * Apple Pay only appears on a registered domain, and the registration lives
+ * on the clinic's connected account — so a clinic that moves its clients to
+ * app.clinicname.nl needs that host registered on its own account too, or
+ * Apple Pay quietly stops appearing at its checkout and nothing says why.
+ *
+ * The shared hosts stay in the list: the old address keeps working, and
+ * clients who installed from it are still checking out there.
+ */
+export function clinicCheckoutDomains(clinicHost: string | null, env: NodeJS.ProcessEnv = process.env): string[] {
+  const domains = checkoutDomains(env);
+  const host = hostOf(clinicHost);
+  if (host && !domains.includes(host)) domains.push(host);
+  return domains;
+}
+
 /** The Stripe calls this module makes — lets tests pass a fake. */
 export interface PaymentMethodDomainsApi {
   list: (params: { domain_name: string; limit?: number }, options: { stripeAccount: string }) => Promise<{ data: { id: string }[] }>;

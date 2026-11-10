@@ -75,6 +75,31 @@ const asChallenges = (value: unknown): VercelVerificationChallenge[] => (Array.i
 
 const clientDomainOf = (tenantId: string) => ({ tenantId_type: { tenantId, type: "CLIENT" as const } });
 
+/**
+ * Registers a freshly verified domain for Apple Pay on the clinic's own
+ * connected account.
+ *
+ * Best-effort on purpose: Apple Pay is a convenience on top of card payments,
+ * so a clinic that is not connected to Stripe yet, or a Stripe that is having
+ * a bad minute, must not make verifying a domain fail. The next
+ * account.updated event registers it too (lib/stripe-webhook.ts), and so does
+ * npm run prod:apple-pay.
+ */
+async function registerDomainForApplePay(tenantId: string, host: string): Promise<void> {
+  try {
+    const clinic = await rawDb.tenant.findUnique({ where: { id: tenantId }, select: { stripeAccountId: true, stripeChargesEnabled: true } });
+    if (!clinic?.stripeAccountId || !clinic.stripeChargesEnabled) return;
+    const { clinicCheckoutDomains, domainsApi, registerApplePayDomains } = await import("@/lib/apple-pay-domains");
+    const { stripe } = await import("@/lib/stripe-payments");
+    const results = await registerApplePayDomains(domainsApi(stripe()), clinic.stripeAccountId, clinicCheckoutDomains(host));
+    for (const failure of results.filter((r) => r.status === "failed")) {
+      console.warn(`[domain] Apple Pay not registered for ${failure.domain}: ${failure.error}`);
+    }
+  } catch (err) {
+    console.warn("[domain] Apple Pay registration skipped:", err instanceof Error ? err.message : err);
+  }
+}
+
 export async function attachClinicDomainAction(merchantId: string, fd: FormData): Promise<ActionResult<{ domain: DomainView }>> {
   return runAction(async () => {
     const actor = await requirePlatformAdminAction();
@@ -184,6 +209,11 @@ export async function checkClinicDomainAction(merchantId: string): Promise<Actio
     if (wasVerified !== (status === "VERIFIED")) {
       forgetClinicHosts();
       if (status === "VERIFIED") {
+        // Apple Pay appears only on a host registered with Stripe, on this
+        // clinic's own connected account. Done now rather than waiting for
+        // the next account.updated event, which may never come — quietly,
+        // because a clinic that cannot take Apple Pay still takes cards.
+        await registerDomainForApplePay(merchantId, row.host);
         await writeAuditLog({
           tenantId: merchantId,
           actorUserId: actor.id,
