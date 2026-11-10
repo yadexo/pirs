@@ -11,6 +11,10 @@ import { applyDuePriceChanges } from "@/lib/membership-price-rollout";
 import { EXPIRY_REMINDER_DAYS } from "@/lib/package-pricing";
 import { notifySessionsExpiring } from "@/lib/client-notifications";
 import { formatDay } from "@/lib/client-format";
+import { describeError, vercelConfig, vercelDomainsApi } from "@/lib/vercel-domains";
+import { forgetClinicHosts } from "@/lib/clinic-hosts";
+import { writeAuditLog } from "@/lib/audit";
+import { logDomain } from "@/lib/signin-log";
 
 /** How long an unpaid order may hold stock and redeemed points. */
 const ABANDONED_ORDER_MS = 60 * 60 * 1000;
@@ -212,5 +216,66 @@ export const CRON_JOBS: Record<string, () => Promise<CronResult>> = {
       packageExpiryReminders: expiryReminders,
       packagesExpired: expiredPackages.count,
     };
+  },
+  /**
+   * Hourly: look again at clinic domains that have not verified yet.
+   *
+   * Verification is not instant — DNS takes minutes, sometimes longer — and
+   * nobody should have to sit on the page pressing "Check now". A domain
+   * that starts working at three in the morning should be routing by four.
+   *
+   * Only PENDING ones, and only while Vercel is configured. A FAILED domain
+   * is waiting for a person to read why and do something; retrying it in a
+   * loop would just overwrite that reason with the same one.
+   */
+  async domains(): Promise<CronResult> {
+    const config = vercelConfig();
+    if (!config) return { skipped: "Vercel is not configured", checked: 0, verified: 0, failed: 0 };
+
+    const pending = await rawDb.clinicDomain.findMany({ where: { status: "PENDING" }, select: { id: true, host: true, tenantId: true } });
+    if (pending.length === 0) return { checked: 0, verified: 0, failed: 0 };
+
+    const api = vercelDomainsApi(config);
+    let verified = 0;
+    let failed = 0;
+
+    for (const domain of pending) {
+      try {
+        const result = await api.verify(domain.host);
+        await rawDb.clinicDomain.update({
+          where: { id: domain.id },
+          data: {
+            status: result.verified ? "VERIFIED" : "PENDING",
+            verification: result.verification as never,
+            lastCheckedAt: new Date(),
+            ...(result.verified ? { verifiedAt: new Date(), lastError: null } : {}),
+          },
+        });
+        if (result.verified) {
+          verified += 1;
+          forgetClinicHosts();
+          await writeAuditLog({
+            tenantId: domain.tenantId,
+            actorUserId: null,
+            actorType: "SYSTEM",
+            action: "clinic.domain_verified",
+            entityType: "ClinicDomain",
+            entityId: domain.id,
+            metadata: { host: domain.host, by: "cron" },
+          });
+          logDomain("verified");
+        }
+      } catch (err) {
+        // One domain Vercel cannot answer for must not stop the others.
+        failed += 1;
+        await rawDb.clinicDomain.update({
+          where: { id: domain.id },
+          data: { lastCheckedAt: new Date(), lastError: describeError(err) },
+        });
+        logDomain("check_failed");
+      }
+    }
+
+    return { checked: pending.length, verified, failed };
   },
 };
