@@ -4587,3 +4587,32 @@
     transform: rotate(180deg) translateY(6px);
   }
 }
+
+/* The hello on the first open of the installed app. */
+.ca-welcome .oin {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.ca-welcome .okring {
+  margin: 0 auto 18px;
+}
+.ca-welcome-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--ink-strong);
+}
+.ca-welcome-body {
+  margin: 10px 0 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 32ch;
+}
+.ca-welcome-actions {
+  margin-top: 32px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}

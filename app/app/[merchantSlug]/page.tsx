@@ -2,7 +2,7 @@ import { getClientAppContext } from "@/lib/client-app-context";
 import { getClientSummary } from "@/lib/client-app-data";
 import { getHomeSections } from "@/lib/client-app-home";
 import { getPromptHistory } from "@/lib/notification-prompt-data";
-import { getNudgeHistory } from "@/lib/install-nudge-data";
+import { getNudgeHistory, hasOpenedInstalled } from "@/lib/install-nudge-data";
 import { NO_NUDGE_HISTORY } from "@/lib/install-nudge";
 import { requestOrigin } from "@/lib/request-origin";
 import { HomeView } from "./home-view";
@@ -18,12 +18,18 @@ export default async function ClientHomePage({ params }: { params: Promise<{ mer
   // has two, and a Home Screen icon added from one is a different app, with
   // its own storage, from one added from the other.
   const origin = await requestOrigin();
-  const [summary, sections, promptHistory, settings, nudgeHistory] = await Promise.all([
+  const [summary, sections, promptHistory, settings, nudgeHistory, openedBefore] = await Promise.all([
     getClientSummary(ctx.db, ctx.customerProfileId),
     getHomeSections(ctx.db, { tenantId: ctx.merchant.id, customerProfileId: ctx.customerProfileId }),
     getPromptHistory(ctx.db, ctx.customerProfileId),
-    ctx.db.tenantSettings.findFirst({ where: {}, select: { installNudgeEnabled: true } }),
+    ctx.db.tenantSettings.findFirst({
+      where: {},
+      select: { installNudgeEnabled: true, installNudgeMessageNl: true, installNudgeMessageEn: true },
+    }),
     origin ? getNudgeHistory(ctx.db, ctx.customerProfileId, origin) : Promise.resolve(NO_NUDGE_HISTORY),
+    // Whether to say hello. Asked of the server because the installed app
+    // starts with empty storage — see components/client-app/install-welcome.tsx.
+    origin ? hasOpenedInstalled(ctx.db, ctx.customerProfileId, origin) : Promise.resolve(true),
   ]);
   if (!summary) return null;
 
@@ -38,6 +44,9 @@ export default async function ClientHomePage({ params }: { params: Promise<{ mer
       promptHistory={promptHistory}
       nudgeEnabled={settings?.installNudgeEnabled ?? true}
       nudgeHistory={nudgeHistory}
+      firstOpenInApp={!openedBefore}
+      nudgeMessageNl={settings?.installNudgeMessageNl ?? null}
+      nudgeMessageEn={settings?.installNudgeMessageEn ?? null}
     />
   );
 }

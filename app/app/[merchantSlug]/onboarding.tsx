@@ -5,6 +5,7 @@ import { useActionState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { BlackButton } from "@/components/client-app/primitives";
+import { isStandalone } from "@/components/client-app/pwa";
 import { customerSignInAction, customerRegisterAction } from "@/lib/actions/auth";
 
 const field =
@@ -24,6 +25,15 @@ export function Onboarding({ merchantSlug, merchantName, logoUrl }: { merchantSl
   const joining = useSearchParams().get("join") === "1";
   const [mode, setMode] = React.useState<"signin" | "register">(joining ? "register" : "signin");
 
+  // Someone who just added the app to their Home Screen lands here, not on a
+  // welcome: an installed app has its own cookie jar, so being signed in in
+  // Safari counts for nothing inside it. Said plainly, that is a one-off step.
+  // Left unsaid, it reads as "my account is gone".
+  const [inApp, setInApp] = React.useState(false);
+  React.useEffect(() => {
+    setInApp(isStandalone());
+  }, []);
+
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center px-8">
       {logoUrl ? (
@@ -37,6 +47,7 @@ export function Onboarding({ merchantSlug, merchantName, logoUrl }: { merchantSl
       <h1 className="mt-6 text-center text-[27px] font-bold leading-tight text-[var(--ink-strong)]">
         {mode === "signin" ? t("welcomeBack", { name: merchantName }) : t("join", { name: merchantName })}
       </h1>
+      {inApp && <p className="mt-3 max-w-[32ch] text-center text-[14px] leading-snug text-[var(--muted)]">{t("inAppSignIn")}</p>}
 
       <div className="mt-8 w-full max-w-sm">
         {mode === "signin" ? <SignInForm merchantSlug={merchantSlug} /> : <RegisterForm merchantSlug={merchantSlug} />}

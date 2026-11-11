@@ -332,6 +332,7 @@
       "startingCamera": "Camera starten…"
     },
     "onboarding": {
+      "inAppSignIn": "Je hebt de app toegevoegd, dit is een eigen venster — meld je hier één keer aan, daarna onthoudt hij je.",
       "welcomeBack": "Welkom terug bij {name}",
       "join": "Doe mee bij {name}",
       "newHere": "Nieuw hier?",
@@ -652,6 +653,11 @@
       "shortMenu": "Het menu van je browser, en dan App installeren.",
       "shortDock": "Archief, en dan Voeg toe aan Dock.",
       "shortQr": "Open het op je telefoon om het daar toe te voegen."
+    },
+    "installWelcome": {
+      "title": "Je zit in de app",
+      "body": "{name} staat nu op je beginscherm. Open het wanneer je wil — hier blijf je aangemeld.",
+      "start": "Aan de slag"
     },
     "notifications": {
       "sheetTitle": "Blijf op de hoogte",

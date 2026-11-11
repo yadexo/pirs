@@ -7,6 +7,7 @@ import { useBasePath } from "./base-path";
 import { Icon, money, useToast } from "@/components/client-app/ui";
 import { NotificationPrompt } from "@/components/client-app/push";
 import { InstallNudge } from "@/components/client-app/install-nudge";
+import { InstallWelcome } from "@/components/client-app/install-welcome";
 import type { NudgeHistory } from "@/lib/install-nudge";
 import { Button, ProductCard, Tag } from "@/components/client-app/v2";
 import { useCart } from "./cart-context";
@@ -38,6 +39,9 @@ export function HomeView({
   promptHistory,
   nudgeEnabled,
   nudgeHistory,
+  firstOpenInApp,
+  nudgeMessageNl,
+  nudgeMessageEn,
 }: {
   merchantSlug: string;
   merchantName: string;
@@ -48,6 +52,10 @@ export function HomeView({
   promptHistory: PromptHistory;
   nudgeEnabled: boolean;
   nudgeHistory: NudgeHistory;
+  /** They have never opened the installed app on this address before. */
+  firstOpenInApp: boolean;
+  nudgeMessageNl: string | null;
+  nudgeMessageEn: string | null;
 }) {
   const router = useRouter();
   const base = useBasePath();
@@ -55,6 +63,7 @@ export function HomeView({
   const { refresh } = useCart();
   const { toast } = useToast();
   const [busy, setBusy] = React.useState<string | null>(null);
+  const [welcomeUp, setWelcomeUp] = React.useState(false);
   const t = useTranslations("clientApp.home");
   const tc = useTranslations("clientApp");
   const tm = useTranslations("clientApp.membership");
@@ -305,9 +314,24 @@ export function HomeView({
         </div>
       </div>
 
-      <div className="v2-notify">
-        <NotificationPrompt merchantSlug={merchantSlug} clinicName={merchantName} history={promptHistory} />
-      </div>
+      {/*
+        One question at a time. The welcome and the notifications sheet would
+        otherwise both come up on the same first visit inside the installed
+        app, one on top of the other, so the sheet waits until the welcome has
+        been closed — which also means the first thing a client reads in the
+        new app is hello, not a permission request.
+      */}
+      <InstallWelcome
+        merchantSlug={merchantSlug}
+        merchantName={merchantName}
+        firstOpen={firstOpenInApp}
+        messageNl={nudgeMessageNl}
+        messageEn={nudgeMessageEn}
+        onOpen={() => setWelcomeUp(true)}
+        onClose={() => setWelcomeUp(false)}
+      />
+
+      <div className="v2-notify">{!welcomeUp && <NotificationPrompt merchantSlug={merchantSlug} clinicName={merchantName} history={promptHistory} />}</div>
 
       {/*
         On Home, not in the layout. The old install card lived in the layout

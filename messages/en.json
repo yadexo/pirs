@@ -332,6 +332,7 @@
       "startingCamera": "Starting camera…"
     },
     "onboarding": {
+      "inAppSignIn": "You added the app, so this is its own window — sign in once here and it will remember you.",
       "welcomeBack": "Welcome back to {name}",
       "join": "Join {name}",
       "newHere": "New here?",
@@ -652,6 +653,11 @@
       "shortMenu": "Your browser's menu, then Install app.",
       "shortDock": "File, then Add to Dock.",
       "shortQr": "Open it on your phone to add it there."
+    },
+    "installWelcome": {
+      "title": "You're in the app",
+      "body": "{name} is on your Home Screen now. Open it any time — you'll stay signed in here.",
+      "start": "Let's go"
     },
     "notifications": {
       "sheetTitle": "Stay in the loop",
