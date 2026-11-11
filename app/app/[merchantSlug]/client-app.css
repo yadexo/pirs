@@ -4434,3 +4434,156 @@
   font-size: var(--small-size);
   color: var(--danger);
 }
+
+/* The install nudge: the full-screen walkthrough. The banner reuses
+   .ca-install above. Nothing here goes under 14px. */
+.ca-nudge .oin {
+  align-items: center;
+  text-align: center;
+}
+.ca-nudge-close {
+  position: absolute;
+  top: calc(var(--sat) + 10px);
+  right: 10px;
+  color: var(--muted);
+}
+.ca-nudge-mark {
+  display: grid;
+  place-items: center;
+  background: var(--black);
+  color: var(--on-black);
+  font-size: 34px;
+  font-weight: 700;
+}
+.ca-nudge-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--ink-strong);
+}
+.ca-nudge-why {
+  margin: 8px 0 0;
+  font-size: 15px;
+  color: var(--muted);
+  max-width: 30ch;
+}
+.ca-nudge-lead {
+  margin: 22px 0 0;
+  font-size: 15px;
+  color: var(--ink);
+  max-width: 32ch;
+}
+.ca-nudge-steps {
+  margin: 24px 0 0;
+  padding: 0 0 0 26px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.ca-nudge-steps li::marker {
+  color: var(--muted);
+  font-weight: 700;
+}
+.ca-nudge-steps b {
+  font-weight: 700;
+  color: var(--ink-strong);
+}
+.ca-nudge-steps span {
+  display: inline-flex;
+  vertical-align: -3px;
+}
+.ca-nudge-elsewhere {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.ca-nudge-url {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+  word-break: break-all;
+  max-width: 34ch;
+}
+.ca-nudge-qr {
+  width: 200px;
+  margin: 24px 0 0;
+  padding: 12px;
+  background: #fff;
+  border-radius: var(--r-tile);
+  box-shadow: var(--shadow-card);
+}
+.ca-nudge-note {
+  margin: 18px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+  max-width: 32ch;
+}
+.ca-nudge-actions {
+  margin-top: auto;
+  padding-top: 26px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.ca-nudge-cta {
+  width: 100%;
+  max-width: 320px;
+  height: 50px;
+  font-size: 16px;
+}
+.ca-nudge-later,
+.ca-nudge-never {
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ca-nudge-never {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* The arrow points at the control the step above names. It is decoration: it
+   adds nothing the words do not already say, which is why the blanket
+   reduced-motion rule can stop it dead without costing anything. */
+.ca-nudge-arrow {
+  display: block;
+  margin: 18px auto 0;
+  color: var(--faint);
+  animation: ca-nudge-bob var(--duration-slow, 1.4s) var(--ease-standard, ease-in-out) infinite alternate;
+}
+.ca-nudge-arrow.up {
+  transform: rotate(180deg);
+}
+@keyframes ca-nudge-bob {
+  from {
+    opacity: 0.45;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(6px);
+  }
+}
+.ca-nudge-arrow.up {
+  animation-name: ca-nudge-bob-up;
+}
+@keyframes ca-nudge-bob-up {
+  from {
+    opacity: 0.45;
+    transform: rotate(180deg) translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(180deg) translateY(6px);
+  }
+}

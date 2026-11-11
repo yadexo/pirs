@@ -625,12 +625,33 @@
       "firstPaymentThenRecurring": "{amount} nu, daarna hetzelfde bedrag per periode. Op elk moment op te zeggen via je profiel.",
       "becomeMember": "Word lid"
     },
-    "install": {
-      "addToHomeScreen": "Zet {name} op je beginscherm",
-      "iosInstructions": "Tik op <icon></icon> Deel, en dan op <b>Zet op beginscherm</b>.",
-      "openLikeAnApp": "Open het als een app, met je beloningen op één tik afstand.",
+    "installNudge": {
+      "addTo": "Zet {name} op je beginscherm",
+      "why": "Je afspraken, beloningen en aanbiedingen op één tik, in een eigen venster.",
+      "signInAgain": "De app opent in een eigen venster, dus daar meld je je één keer aan.",
       "install": "Installeren",
-      "close": "Sluiten"
+      "working": "Even geduld…",
+      "notNow": "Niet nu",
+      "never": "Vraag dit niet meer",
+      "promptBody": "Je browser kan het voor je toevoegen.",
+      "iosStep1": "Tik op <icon></icon> Deel, onderaan het scherm.",
+      "iosStep1Pad": "Tik op <icon></icon> Deel, rechtsboven in het scherm.",
+      "iosStep2": "Scroll naar beneden en kies <b>Zet op beginscherm</b>.",
+      "iosStep3": "Tik op <b>Voeg toe</b> en open {name} vanaf je beginscherm.",
+      "menuStep1": "Open het menu van je browser.",
+      "menuStep2": "Kies <b>App installeren</b> of <b>Toevoegen aan startscherm</b>.",
+      "dockStep1": "Open <b>Archief</b> in de menubalk.",
+      "dockStep2": "Kies <b>Voeg toe aan Dock</b>.",
+      "elsewhereBody": "Deze browser kan geen apps op je beginscherm zetten. Kopieer de link en open hem in {browser}.",
+      "copyLink": "Link kopiëren",
+      "copied": "Link gekopieerd",
+      "qrTitle": "Scan dit met je telefoon",
+      "qrBody": "{name} staat op het beginscherm van je telefoon. Scan de code om het daar te openen.",
+      "shortIos": "Tik op <icon></icon> Deel, en dan op <b>Zet op beginscherm</b>.",
+      "shortIosPad": "Tik rechtsboven op <icon></icon> Deel, en dan op <b>Zet op beginscherm</b>.",
+      "shortMenu": "Het menu van je browser, en dan App installeren.",
+      "shortDock": "Archief, en dan Voeg toe aan Dock.",
+      "shortQr": "Open het op je telefoon om het daar toe te voegen."
     },
     "notifications": {
       "sheetTitle": "Blijf op de hoogte",

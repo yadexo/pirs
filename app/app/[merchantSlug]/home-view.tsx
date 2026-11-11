@@ -6,6 +6,8 @@ import { useLocale, useTranslations } from "next-intl";
 import { useBasePath } from "./base-path";
 import { Icon, money, useToast } from "@/components/client-app/ui";
 import { NotificationPrompt } from "@/components/client-app/push";
+import { InstallNudge } from "@/components/client-app/install-nudge";
+import type { NudgeHistory } from "@/lib/install-nudge";
 import { Button, ProductCard, Tag } from "@/components/client-app/v2";
 import { useCart } from "./cart-context";
 import { clientAddToCartAction } from "@/lib/actions/client-app";
@@ -34,6 +36,8 @@ export function HomeView({
   summary,
   sections,
   promptHistory,
+  nudgeEnabled,
+  nudgeHistory,
 }: {
   merchantSlug: string;
   merchantName: string;
@@ -42,6 +46,8 @@ export function HomeView({
   summary: ClientSummary;
   sections: HomeSections;
   promptHistory: PromptHistory;
+  nudgeEnabled: boolean;
+  nudgeHistory: NudgeHistory;
 }) {
   const router = useRouter();
   const base = useBasePath();
@@ -302,6 +308,14 @@ export function HomeView({
       <div className="v2-notify">
         <NotificationPrompt merchantSlug={merchantSlug} clinicName={merchantName} history={promptHistory} />
       </div>
+
+      {/*
+        On Home, not in the layout. The old install card lived in the layout
+        and compared the path against the clinic's base path to stay on Home —
+        which on a clinic's own domain is "", never equal to "/", so it never
+        appeared there at all. Home renders it; Home is where it belongs.
+      */}
+      <InstallNudge merchantSlug={merchantSlug} merchantName={merchantName} logoUrl={logoUrl} enabled={nudgeEnabled} history={nudgeHistory} />
 
       {homeOrder(sections.returning).map((key) => blocks[key])}
     </div>

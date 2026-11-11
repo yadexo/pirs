@@ -30,7 +30,7 @@ import {
   ensureStripePrice,
 } from "@/lib/memberships-billing";
 import { setLocaleCookie, type AppLocale } from "@/lib/locale-cookie";
-import { headers } from "next/headers";
+import { requestOrigin } from "@/lib/request-origin";
 import { recordPromptEvent } from "@/lib/notification-prompt-data";
 import { recordInstallEvent } from "@/lib/install-nudge-data";
 import { rateLimit } from "@/lib/rate-limit";
@@ -1477,15 +1477,13 @@ export async function clientRecordInstallEventAction(
   const { ok } = await rateLimit(`install-event:${user.id}`, 30, 60 * 60 * 1000);
   if (!ok) return { error: "rate-limited" };
 
-  const requestHeaders = await headers();
-  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "";
-  const proto = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https");
-  if (!host) return { error: "invalid" };
+  const origin = await requestOrigin();
+  if (!origin) return { error: "invalid" };
 
   await recordInstallEvent(db, {
     tenantId: user.tenantId!,
     customerProfileId: user.customerProfileId!,
-    origin: `${proto}://${host}`,
+    origin,
     ...parsed.data,
   });
   // Anything but an impression changes what Home should show next.

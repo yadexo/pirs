@@ -625,12 +625,33 @@
       "firstPaymentThenRecurring": "{amount} now, then the same each period. Cancel any time from your profile.",
       "becomeMember": "Become a member"
     },
-    "install": {
-      "addToHomeScreen": "Add {name} to your Home Screen",
-      "iosInstructions": "Tap <icon></icon> Share, then <b>Add to Home Screen</b>.",
-      "openLikeAnApp": "Open it like an app, with your rewards one tap away.",
+    "installNudge": {
+      "addTo": "Add {name} to your Home Screen",
+      "why": "Your appointments, rewards and offers one tap away, in their own window.",
+      "signInAgain": "The app opens in its own window, so you sign in there once.",
       "install": "Install",
-      "close": "Close"
+      "working": "One moment…",
+      "notNow": "Not now",
+      "never": "Don't ask again",
+      "promptBody": "Your browser can add it for you.",
+      "iosStep1": "Tap <icon></icon> Share, at the bottom of the screen.",
+      "iosStep1Pad": "Tap <icon></icon> Share, at the top right of the screen.",
+      "iosStep2": "Scroll down and choose <b>Add to Home Screen</b>.",
+      "iosStep3": "Tap <b>Add</b>, then open {name} from your Home Screen.",
+      "menuStep1": "Open your browser's menu.",
+      "menuStep2": "Choose <b>Install app</b>, or <b>Add to Home screen</b>.",
+      "dockStep1": "In the menu bar, open <b>File</b>.",
+      "dockStep2": "Choose <b>Add to Dock</b>.",
+      "elsewhereBody": "This browser can't add apps to your Home Screen. Copy the link and open it in {browser}.",
+      "copyLink": "Copy link",
+      "copied": "Link copied",
+      "qrTitle": "Scan this with your phone",
+      "qrBody": "{name} lives on your phone's Home Screen. Scan the code to open it there.",
+      "shortIos": "Tap <icon></icon> Share, then <b>Add to Home Screen</b>.",
+      "shortIosPad": "Tap <icon></icon> Share at the top right, then <b>Add to Home Screen</b>.",
+      "shortMenu": "Your browser's menu, then Install app.",
+      "shortDock": "File, then Add to Dock.",
+      "shortQr": "Open it on your phone to add it there."
     },
     "notifications": {
       "sheetTitle": "Stay in the loop",

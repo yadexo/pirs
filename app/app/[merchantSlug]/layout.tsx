@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { getClientAppContext } from "@/lib/client-app-context";
 import { headers } from "next/headers";
 import { currentClientAppPaths, getPublicClinic, shortAppName } from "@/lib/public-clinic";
-import { InstallPrompt, ServiceWorker } from "@/components/client-app/pwa";
+import { ServiceWorker } from "@/components/client-app/pwa";
 import { LaunchImageLinks, Splash } from "@/components/client-app/splash";
 import { SplashDismiss } from "@/components/client-app/splash-dismiss";
 import { ZoomLock } from "@/components/client-app/zoom-lock";
@@ -122,8 +122,7 @@ export default async function ClientAppLayout({
         {children}
       </ClientAppShell>
       <ServiceWorker scope={scope} />
-      <ZoomLock />
-      <InstallPrompt base={base} merchantSlug={merchantSlug} merchantName={ctx.merchant.name} />
+      <ZoomLock />
     </div>
   );
 }
