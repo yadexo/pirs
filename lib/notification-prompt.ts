@@ -14,9 +14,6 @@
 /** Days to wait after the nth decline before asking again. The list's length is how many reminders there are. */
 export const REMINDER_DELAYS_DAYS = [3, 14] as const;
 
-/** How long a browser-tab client's "Install the app" card stays closed. Matches the install nudge's own. */
-export const INSTALL_CARD_HIDDEN_DAYS = 30;
-
 const DAY_MS = 864e5;
 
 /** What the server remembers about this client and the prompt. */
@@ -34,7 +31,14 @@ export const NO_HISTORY: PromptHistory = { declines: 0, lastDeclinedAt: null, of
 /** The states the notifications hook reports for this device (components/client-app/push.tsx). */
 export type PushState = "loading" | "unsupported" | "install-first" | "unconfigured" | "denied" | "off" | "on";
 
-export type PromptSurface = "sheet" | "card" | "install" | "settings-help";
+/**
+ * "install" used to be one of these: a card in a browser tab on an iPhone,
+ * saying to install the app because notifications cannot work without it. The
+ * install nudge owns that question now (lib/install-nudge.ts), so this asks
+ * only about notifications, and only where they are possible. The INSTALL
+ * value stays in the database enum, because rows were written with it.
+ */
+export type PromptSurface = "sheet" | "card" | "settings-help";
 
 export interface PromptChoice {
   surface: PromptSurface;
@@ -49,8 +53,6 @@ export interface PromptInput {
   /** Running as an installed app rather than in a browser tab. */
   standalone: boolean;
   history: PromptHistory;
-  /** When the client last closed the "install the app" card on this device, ms since epoch. */
-  installClosedAt: number | null;
   now: number;
 }
 
@@ -74,7 +76,7 @@ export function reminderDue(history: Pick<PromptHistory, "declines" | "lastDecli
  * our own records say. "Not now" is the answer only we can remember.
  */
 export function choosePrompt(input: PromptInput): PromptChoice | null {
-  const { state, permission, standalone, history, installClosedAt, now } = input;
+  const { state, permission, standalone, history, now } = input;
   const stage = history.declines;
 
   switch (state) {
@@ -84,13 +86,14 @@ export function choosePrompt(input: PromptInput): PromptChoice | null {
     case "on":
       return null;
 
-    // A browser tab on an iPhone can't get notifications at all, so the one
-    // useful thing to say is how to install. Closing it is not a decision
-    // about notifications — it is not counted, or a client who dismissed it
-    // in Safari would then wait days for the sheet in the app they installed.
+    // A browser tab on an iPhone can't get notifications at all until the app
+    // is installed, and asking for that is the install nudge's job now. Two
+    // cards saying the same thing used to come up on this one screen — this
+    // and the install prompt in the layout — in different words, each with its
+    // own cooldown. Nothing here counts as an answer about notifications, so
+    // the sheet still comes up on the first visit inside the installed app.
     case "install-first":
-      if (installClosedAt !== null && now - installClosedAt < INSTALL_CARD_HIDDEN_DAYS * DAY_MS) return null;
-      return { surface: "install", stage: 0 };
+      return null;
 
     // Denied: never the prompt. Only, once they have said no through us and
     // the wait is over, a reminder of where the switch is.

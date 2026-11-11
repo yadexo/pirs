@@ -4,7 +4,7 @@ import * as React from "react";
 import { useTranslations } from "next-intl";
 import { Icon, Sheet } from "@/components/client-app/ui";
 import { Button } from "@/components/client-app/v2";
-import { IosInstallSteps, isIos, isStandalone } from "@/components/client-app/pwa";
+import { isIos, isStandalone } from "@/components/client-app/pwa";
 import { clientRecordNotificationPromptAction } from "@/lib/actions/client-app";
 import { choosePrompt, type PromptHistory, type PromptSurface, type PushState } from "@/lib/notification-prompt";
 
@@ -16,8 +16,8 @@ import { choosePrompt, type PromptHistory, type PromptSurface, type PushState } 
  *
  * Permission is only ever asked for after a tap. Browsers hold it against a
  * site that asks on load — and iOS refuses outright unless the request comes
- * from a gesture inside an installed app, which is why a Safari tab is told to
- * install the app rather than shown a button that cannot work.
+ * from a gesture inside an installed app, which is why a Safari tab reports
+ * "install-first" rather than offering a button that cannot work.
  */
 
 /** The push service wants the key as bytes, not the base64url the server sends. */
@@ -161,45 +161,38 @@ export function usePush() {
   return { state, permission, busy, message, enable, disable, sendTest };
 }
 
-const SURFACE: Record<PromptSurface, "SHEET" | "CARD" | "INSTALL" | "SETTINGS_HELP"> = {
+const SURFACE: Record<PromptSurface, "SHEET" | "CARD" | "SETTINGS_HELP"> = {
   sheet: "SHEET",
   card: "CARD",
-  install: "INSTALL",
   "settings-help": "SETTINGS_HELP",
 };
-
-const installClosedKey = (slug: string) => `notify-install-closed:${slug}`;
 
 /**
  * Home: asks a client who hasn't decided to turn notifications on, in the
  * shape that fits — a sheet on the first visit in the installed app, a card
- * after that, a how-to when the device said no, an install hint in a browser.
- * Renders nothing the rest of the time, and never for a client who already
- * granted or denied the device's own permission.
+ * after that, a how-to when the device said no. Renders nothing the rest of
+ * the time, and never for a client who already granted or denied the device's
+ * own permission.
+ *
+ * Getting the app installed is the install nudge's job
+ * (components/client-app/install-nudge.tsx), not this one's.
  */
 export function NotificationPrompt({ merchantSlug, clinicName, history }: { merchantSlug: string; clinicName: string; history: PromptHistory }) {
   const t = useTranslations("clientApp.notifications");
   const { state, permission, busy, message, enable } = usePush();
   const [standalone, setStandalone] = React.useState(false);
-  const [installClosedAt, setInstallClosedAt] = React.useState<number | null>(null);
   // Closed by the client just now. The server catches up on the next render.
   const [closed, setClosed] = React.useState(false);
   // The device just said no to the prompt we put up: say how to undo it, in place.
   const [blockedOn, setBlockedOn] = React.useState<"sheet" | "card" | null>(null);
   const [sheetReady, setSheetReady] = React.useState(false);
-  const [stepsOpen, setStepsOpen] = React.useState(false);
   const reported = React.useRef(new Set<string>());
 
   React.useEffect(() => {
     setStandalone(isStandalone());
-    try {
-      setInstallClosedAt(Number(localStorage.getItem(installClosedKey(merchantSlug))) || null);
-    } catch {
-      /* storage blocked: the card is simply shown */
-    }
-  }, [merchantSlug]);
+  }, []);
 
-  const choice = closed ? null : choosePrompt({ state, permission, standalone, history, installClosedAt, now: Date.now() });
+  const choice = closed ? null : choosePrompt({ state, permission, standalone, history, now: Date.now() });
   const surface = choice?.surface;
   const stage = choice?.stage ?? 0;
 
@@ -247,16 +240,6 @@ export function NotificationPrompt({ merchantSlug, clinicName, history }: { merc
     setClosed(true);
   };
 
-  const closeInstall = () => {
-    const at = Date.now();
-    setInstallClosedAt(at);
-    try {
-      localStorage.setItem(installClosedKey(merchantSlug), String(at));
-    } catch {
-      /* ignore */
-    }
-  };
-
   const offers = history.offersDecided ? t("offersDecided") : t("offersDefault");
 
   // --- the sheet -----------------------------------------------------------
@@ -301,34 +284,23 @@ export function NotificationPrompt({ merchantSlug, clinicName, history }: { merc
   }
 
   // --- the cards -----------------------------------------------------------
-  if (blockedOn === "card" || surface === "card" || surface === "settings-help" || surface === "install") {
+  if (blockedOn === "card" || surface === "card" || surface === "settings-help") {
     const help = blockedOn === "card" || surface === "settings-help";
-    const install = !help && surface === "install";
 
-    const title = help ? t("deniedTitle") : install ? t("installTitle") : t("cardTitle");
-    const onClose = help ? (blockedOn ? closeHelp : () => notNow("settings-help")) : install ? closeInstall : () => notNow("card");
+    const title = help ? t("deniedTitle") : t("cardTitle");
+    const onClose = help ? (blockedOn ? closeHelp : () => notNow("settings-help")) : () => notNow("card");
 
     return (
       <div className="ca-pushcard" role="region" aria-label={title}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p className="ca-pushcard-title">{title}</p>
-          <p className="ca-pushcard-body">{help ? t("deniedSteps") : install ? t("installBody") : `${t("sheetBody", { name: clinicName })} ${offers}`}</p>
-          {install && stepsOpen && (
-            <p className="ca-pushcard-body ca-pushcard-steps">
-              <IosInstallSteps />
-            </p>
-          )}
+          <p className="ca-pushcard-body">{help ? t("deniedSteps") : `${t("sheetBody", { name: clinicName })} ${offers}`}</p>
           {message && (
             <p className="ca-pushcard-body" role="alert">
               {message}
             </p>
           )}
-          {install && (
-            <button type="button" className="press ca-pushcard-link" aria-expanded={stepsOpen} onClick={() => setStepsOpen((open) => !open)}>
-              {stepsOpen ? t("hideSteps") : t("howToInstall")}
-            </button>
-          )}
-          {!help && !install && (
+          {!help && (
             <button className="btn-black ca-pushcard-action" type="button" onClick={() => void turnOn("card")} disabled={busy}>
               {busy ? t("working") : t("turnOn")}
             </button>

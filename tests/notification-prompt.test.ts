@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   choosePrompt,
-  INSTALL_CARD_HIDDEN_DAYS,
   NO_HISTORY,
   REMINDER_DELAYS_DAYS,
   reminderDue,
@@ -21,7 +20,6 @@ const base: PromptInput = {
   permission: "default",
   standalone: true,
   history: NO_HISTORY,
-  installClosedAt: null,
   now: NOW,
 };
 const pick = (over: Partial<PromptInput>) => choosePrompt({ ...base, ...over });
@@ -123,21 +121,17 @@ describe("when the device said no", () => {
 });
 
 describe("in a browser tab", () => {
-  it("on an iPhone, says to install rather than showing a button that cannot work", () => {
-    expect(pick({ state: "install-first", permission: null, standalone: false })).toEqual({ surface: "install", stage: 0 });
+  it("on an iPhone, says nothing: asking for the install belongs to the install nudge", () => {
+    // Two cards asking for the same install used to come up on this one
+    // screen, in different words and with separate cooldowns.
+    expect(pick({ state: "install-first", permission: null, standalone: false })).toBeNull();
+    expect(pick({ state: "install-first", standalone: false, history: declined(1, 100) })).toBeNull();
   });
 
-  it("stays away after the card was closed, then returns", () => {
-    const closed = (daysAgo: number) => NOW - daysAgo * DAY;
-    expect(pick({ state: "install-first", standalone: false, installClosedAt: closed(1) })).toBeNull();
-    expect(pick({ state: "install-first", standalone: false, installClosedAt: closed(INSTALL_CARD_HIDDEN_DAYS - 1) })).toBeNull();
-    expect(pick({ state: "install-first", standalone: false, installClosedAt: closed(INSTALL_CARD_HIDDEN_DAYS) })).toEqual({ surface: "install", stage: 0 });
-  });
-
-  it("does not count closing the install card as a decision about notifications", () => {
-    // The install card ignores the schedule entirely, so a client who closed it
-    // in Safari gets the sheet on their first visit in the app they install.
-    expect(pick({ state: "install-first", standalone: false, history: declined(3, 1) })).toEqual({ surface: "install", stage: 0 });
+  it("does not count the browser tab as a decision about notifications", () => {
+    // Nothing happens here, whatever the history says — and the sheet still
+    // comes up on the first visit inside the app they install.
+    expect(pick({ state: "install-first", standalone: false, history: declined(3, 1) })).toBeNull();
     expect(pick({ state: "off", permission: "default", standalone: true, history: NO_HISTORY })).toEqual({ surface: "sheet", stage: 0 });
   });
 
