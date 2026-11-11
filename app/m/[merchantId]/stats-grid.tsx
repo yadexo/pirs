@@ -166,6 +166,30 @@ export function StatsGrid({
           <p className="tabular text-[22px] font-semibold">{metrics.referrals}</p>
           <InsetEmpty />
         </Widget>
+
+        {/*
+          Two figures, because either alone misleads. The conversion rate says
+          whether the invitation works; on its own it looks superb at two
+          clients out of three. The share of the list says how far the app has
+          actually got; on its own it says nothing about whether asking helps.
+        */}
+        <Widget title={t("installRate")} tooltip={t("installRateTooltip")}>
+          <p className="tabular text-[22px] font-semibold">
+            {metrics.install.shownInRange === 0 ? "—" : `${Math.round((metrics.install.installedInRange / metrics.install.shownInRange) * 100)}%`}
+          </p>
+          <p className="mt-1 text-[12px] text-ink-muted">
+            {metrics.install.shownInRange === 0
+              ? t("installNoneAsked")
+              : t("installOfAsked", { installed: metrics.install.installedInRange, shown: metrics.install.shownInRange })}
+          </p>
+          <p className="mt-3 text-[12px] text-ink-muted">
+            {t("installShareOfClients", {
+              installed: metrics.install.installedEver,
+              clients: metrics.appUsers,
+              percent: metrics.appUsers === 0 ? 0 : Math.round((metrics.install.installedEver / metrics.appUsers) * 100),
+            })}
+          </p>
+        </Widget>
       </div>
     </section>
   );

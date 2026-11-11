@@ -3,6 +3,7 @@ import type { TenantDb } from "@/lib/tenant-db";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
 import { DEFAULT_TIME_ZONE } from "@/lib/time-zone";
 import { startOfDayIn } from "@/lib/zoned-time";
+import { getInstallStats } from "@/lib/install-nudge-data";
 
 export interface ActivityItem {
   id: string;
@@ -28,6 +29,18 @@ export interface HomeMetrics {
   /** Total clients at the end of each day in the range. */
   appUserSeries: number[];
   referrals: number;
+  /**
+   * How the invitation to install the app is doing. Counted in clients, not
+   * events, and read from the stored rows like everything else here.
+   */
+  install: {
+    /** Clients shown the nudge inside the range. */
+    shownInRange: number;
+    /** Of those, how many ended up with the app — the only figure that matters. */
+    installedInRange: number;
+    /** Clients who have ever opened the installed app, against `appUsers`. */
+    installedEver: number;
+  };
   topClients: { name: string; totalCents: number }[];
   activity: ActivityItem[];
 }
@@ -134,6 +147,10 @@ export async function getHomeMetrics(db: TenantDb, range: string): Promise<HomeM
   const itemCents = (...types: string[]) =>
     rangeOrders.reduce((sum, o) => sum + o.items.filter((i) => types.includes(i.itemType)).reduce((s, i) => s + i.totalCents, 0), 0);
 
+  // Two windows, because they answer two questions: how the invitation is
+  // doing lately, and how much of the clinic's list is actually on the app.
+  const [installInRange, installEver] = await Promise.all([getInstallStats(db, rangeStart), getInstallStats(db)]);
+
   const clientIds = topClientRows.map((r) => r.customerProfileId);
   const clients = clientIds.length
     ? await db.customerProfile.findMany({ where: { id: { in: clientIds } }, select: { id: true, firstName: true, lastName: true } })
@@ -159,6 +176,11 @@ export async function getHomeMetrics(db: TenantDb, range: string): Promise<HomeM
     appUsers: customerCount,
     appUserSeries,
     referrals,
+    install: {
+      shownInRange: installInRange.shown,
+      installedInRange: installInRange.installed,
+      installedEver: installEver.installed,
+    },
     topClients: topClientRows.map((r) => {
       const c = clients.find((x) => x.id === r.customerProfileId);
       return { name: c ? `${c.firstName} ${c.lastName}` : "Unknown", totalCents: r._sum.totalCents ?? 0 };

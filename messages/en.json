@@ -752,7 +752,12 @@
       "topTeamMembers": "Top Team Members",
       "noTeamData": "No team member data available",
       "appUsers": "App Users",
-      "referrals": "Referrals"
+      "referrals": "Referrals",
+      "installRate": "App installs",
+      "installRateTooltip": "Of the clients invited to add the app in this period, how many ended up opening it from their Home Screen. Counted per client, not per time they were asked.",
+      "installOfAsked": "{installed} of {shown} clients invited",
+      "installNoneAsked": "No clients were invited in this period",
+      "installShareOfClients": "{installed} of {clients} clients have the app ({percent}%)"
     },
     "activityFeed": {
       "empty": "No client activity yet. Bookings, purchases and check-ins appear here."

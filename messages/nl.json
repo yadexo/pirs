@@ -752,7 +752,12 @@
       "topTeamMembers": "Topmedewerkers",
       "noTeamData": "Geen medewerkersgegevens beschikbaar",
       "appUsers": "App-gebruikers",
-      "referrals": "Verwijzingen"
+      "referrals": "Verwijzingen",
+      "installRate": "App-installaties",
+      "installRateTooltip": "Van de klanten die in deze periode gevraagd is de app toe te voegen: hoeveel hebben hem daarna vanaf hun beginscherm geopend. Per klant geteld, niet per keer dat het gevraagd is.",
+      "installOfAsked": "{installed} van {shown} gevraagde klanten",
+      "installNoneAsked": "In deze periode is het niemand gevraagd",
+      "installShareOfClients": "{installed} van {clients} klanten heeft de app ({percent}%)"
     },
     "activityFeed": {
       "empty": "Nog geen klantactiviteit. Boekingen, aankopen en check-ins verschijnen hier."
