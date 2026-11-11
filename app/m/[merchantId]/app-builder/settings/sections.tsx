@@ -182,6 +182,37 @@ export function GeneralSection({ merchantId, data, canEdit }: { merchantId: stri
             <TextField label={t("subtitleLabel")} name="shopBannerSubtitle" defaultValue={str(s?.shopBannerSubtitle)} placeholder={t("subtitlePlaceholder")} maxLength={120} errors={errors} />
             <TextField label={t("buttonLabelLabel")} name="shopBannerButtonLabel" defaultValue={str(s?.shopBannerButtonLabel)} placeholder={t("buttonLabelPlaceholder")} maxLength={30} errors={errors} hint={t("shopBannerHint")} />
           </FormSection>
+          <FormSection title={t("installNudgeTitle")}>
+            <CheckboxField
+              name="installNudgeEnabled"
+              label={t("installNudgeLabel")}
+              description={t("installNudgeDescription")}
+              defaultChecked={s ? s.installNudgeEnabled : true}
+            />
+            {/*
+              Two fields, because a clinic's clients are not all reading the
+              same language and one sentence cannot be both. Each is shown
+              only to the clients reading that language; an empty one falls
+              back to ours rather than showing nothing.
+            */}
+            <TextField
+              label={t("welcomeNlLabel")}
+              name="installNudgeMessageNl"
+              defaultValue={str(s?.installNudgeMessageNl)}
+              placeholder={t("welcomeNlPlaceholder")}
+              maxLength={160}
+              errors={errors}
+            />
+            <TextField
+              label={t("welcomeEnLabel")}
+              name="installNudgeMessageEn"
+              defaultValue={str(s?.installNudgeMessageEn)}
+              placeholder={t("welcomeEnPlaceholder")}
+              maxLength={160}
+              errors={errors}
+              hint={t("welcomeHint")}
+            />
+          </FormSection>
           <FormSection title={t("languageTitle")}>
             <SelectField
               label={t("defaultLocaleLabel")}

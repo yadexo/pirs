@@ -81,6 +81,11 @@ const generalSchema = z.object({
   shopBannerHeadline: optionalText(80),
   shopBannerSubtitle: optionalText(120),
   shopBannerButtonLabel: optionalText(30),
+  installNudgeEnabled: z.boolean(),
+  // One short sentence, so it fits a phone without scrolling. Empty means our
+  // own default for that language, not a blank space on a client's screen.
+  installNudgeMessageNl: optionalText(160),
+  installNudgeMessageEn: optionalText(160),
   termsContent: optionalText(20000),
   privacyContent: optionalText(20000),
   cancellationPolicy: optionalText(5000),
@@ -98,6 +103,9 @@ export async function saveGeneralSettingsAction(merchantId: string, fd: FormData
       shopBannerHeadline: formText(fd, "shopBannerHeadline"),
       shopBannerSubtitle: formText(fd, "shopBannerSubtitle"),
       shopBannerButtonLabel: formText(fd, "shopBannerButtonLabel"),
+      installNudgeEnabled: formBool(fd, "installNudgeEnabled"),
+      installNudgeMessageNl: formText(fd, "installNudgeMessageNl"),
+      installNudgeMessageEn: formText(fd, "installNudgeMessageEn"),
       termsContent: formText(fd, "termsContent"),
       privacyContent: formText(fd, "privacyContent"),
       cancellationPolicy: formText(fd, "cancellationPolicy"),
@@ -112,6 +120,9 @@ export async function saveGeneralSettingsAction(merchantId: string, fd: FormData
       shopBannerHeadline: data.shopBannerHeadline ?? null,
       shopBannerSubtitle: data.shopBannerSubtitle ?? null,
       shopBannerButtonLabel: data.shopBannerButtonLabel ?? null,
+      installNudgeEnabled: data.installNudgeEnabled,
+      installNudgeMessageNl: data.installNudgeMessageNl ?? null,
+      installNudgeMessageEn: data.installNudgeMessageEn ?? null,
       defaultClientLocale: data.defaultClientLocale,
       clientFormality: data.clientFormality,
     });
