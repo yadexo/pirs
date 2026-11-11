@@ -30,7 +30,9 @@ import {
   ensureStripePrice,
 } from "@/lib/memberships-billing";
 import { setLocaleCookie, type AppLocale } from "@/lib/locale-cookie";
+import { headers } from "next/headers";
 import { recordPromptEvent } from "@/lib/notification-prompt-data";
+import { recordInstallEvent } from "@/lib/install-nudge-data";
 import { rateLimit } from "@/lib/rate-limit";
 
 /**
@@ -1438,6 +1440,55 @@ export async function clientRecordNotificationPromptAction(
 
   await recordPromptEvent(db, { tenantId: user.tenantId!, customerProfileId: user.customerProfileId!, ...parsed.data });
   // A no changes what Home should show next, so Home reads it again.
+  if (parsed.data.kind !== "SHOWN") revalidateClient(slug);
+  return { ok: true };
+}
+
+/**
+ * What the browser may tell us about the install nudge.
+ *
+ * Every kind here is something the browser genuinely witnessed: it showed the
+ * nudge, the client tapped the button, the client said no, the browser
+ * reported an install, or the app was opened installed. None of them is worth
+ * forging — the worst a tampered call can do is make one clinic's own tally
+ * wrong by one, for one client, and `requireCustomerContext` means it can
+ * only ever be the caller's own client row.
+ *
+ * The origin is taken from the request, never from the argument: it decides
+ * which of a clinic's two addresses this counts against, and a browser saying
+ * "I installed from the clinic's domain" when it did not would silence the
+ * nudge on an address the client never visited.
+ */
+const installEvent = z.object({
+  kind: z.enum(["SHOWN", "STARTED", "ACCEPTED", "OPENED", "DISMISSED", "NEVER"]),
+  os: z.enum(["IOS", "IPADOS", "ANDROID", "MACOS", "WINDOWS", "OTHER"]),
+  browser: z.enum(["SAFARI", "CHROME", "EDGE", "SAMSUNG", "FIREFOX", "OPERA", "OTHER"]),
+  stage: z.number().int().min(0).max(9),
+});
+
+export async function clientRecordInstallEventAction(
+  slug: string,
+  input: z.input<typeof installEvent>,
+): Promise<{ ok: true } | { error: string }> {
+  const parsed = installEvent.safeParse(input);
+  if (!parsed.success) return { error: "invalid" };
+
+  const { db, user } = await requireCustomerContext();
+  const { ok } = await rateLimit(`install-event:${user.id}`, 30, 60 * 60 * 1000);
+  if (!ok) return { error: "rate-limited" };
+
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "";
+  const proto = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https");
+  if (!host) return { error: "invalid" };
+
+  await recordInstallEvent(db, {
+    tenantId: user.tenantId!,
+    customerProfileId: user.customerProfileId!,
+    origin: `${proto}://${host}`,
+    ...parsed.data,
+  });
+  // Anything but an impression changes what Home should show next.
   if (parsed.data.kind !== "SHOWN") revalidateClient(slug);
   return { ok: true };
 }

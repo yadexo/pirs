@@ -126,6 +126,7 @@ model Tenant {
   activityEvents           ActivityEvent[]
   pushSubscriptions        PushSubscription[]
   notificationPromptEvents NotificationPromptEvent[]
+  installPromptEvents      InstallPromptEvent[]
   domains                  ClinicDomain[]
   redeemableItems          RedeemableItem[]
   birthdayGreetings        BirthdayGreeting[]
@@ -256,6 +257,18 @@ model TenantSettings {
   /// usable for this many days. Zero percent means a message only.
   birthdayDiscountPercent Int     @default(0)
   birthdayDiscountDays    Int     @default(14)
+
+  /// Whether the client app asks this clinic's clients to install it.
+  /// On by default, including for every clinic that existed before the nudge
+  /// did — a deliberate choice, since the built-in welcome sentence is safe
+  /// to send under any clinic's name and a clinic can switch it off.
+  installNudgeEnabled   Boolean @default(true)
+  /// The clinic's own one line in the walkthrough, per language. Empty means
+  /// the app's default for that language — the same way shopBannerHeadline
+  /// already behaves. Two columns rather than one, so a Dutch clinic's
+  /// English-speaking clients still read English.
+  installNudgeMessageNl String?
+  installNudgeMessageEn String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -673,6 +686,7 @@ model CustomerProfile {
   notificationDeliveries   NotificationDelivery[]
   activityEvents           ActivityEvent[]
   notificationPromptEvents NotificationPromptEvent[]
+  installPromptEvents      InstallPromptEvent[]
   redeemableItems          RedeemableItem[]
   personalPromotions       Promotion[]
   personalCampaigns        NotificationCampaign[]
@@ -2320,4 +2334,75 @@ model ClinicDomain {
 
   @@unique([tenantId, type])
   @@index([status])
+}
+
+/// What happened each time the app asked a client to install it.
+///
+/// Append-only, like NotificationPromptEvent, and for the same reason: the
+/// schedule is worked out from these rows rather than from a counter that
+/// could drift away from them. There is deliberately no unique constraint
+/// and no read-then-write guard — two tabs, or an install event arriving in
+/// the same second as the first standalone open, would race one — so the
+/// tally counts distinct clients instead of summing rows.
+///
+/// `origin` is here for the same reason it is on PushSubscription: installing
+/// from login.deza.ai and from a clinic's own domain produce two different
+/// apps, with their own icons and their own storage. A client who said "don't
+/// ask again" on one has said nothing about the other.
+model InstallPromptEvent {
+  id                String             @id @default(cuid())
+  tenantId          String
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerProfileId String
+  customerProfile   CustomerProfile    @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  kind              InstallPromptKind
+  /// Which device and browser it happened on, so a clinic can see where its
+  /// clients are failing to install. Enums, not free text: a column that took
+  /// whatever the detector emitted would quietly orphan a dashboard row every
+  /// time the detector changed.
+  os                InstallClientOs    @default(OTHER)
+  browser           InstallBrowser     @default(OTHER)
+  /// The address this happened on, e.g. "https://app.clinicname.nl".
+  origin            String
+  /// How many times this client had already said "Not now" when it happened.
+  stage             Int                @default(0)
+  createdAt         DateTime           @default(now())
+
+  @@index([tenantId, kind, createdAt])
+  @@index([customerProfileId, kind, createdAt])
+}
+
+enum InstallPromptKind {
+  /// The nudge was put in front of them.
+  SHOWN
+  /// They tapped the button that starts an install.
+  STARTED
+  /// The browser told us an install completed. Only some browsers say so.
+  ACCEPTED
+  /// The app was opened installed, for the first time on this address. The
+  /// only signal iOS gives, and the one the install count is built from.
+  OPENED
+  /// "Not now".
+  DISMISSED
+  /// "Don't ask again".
+  NEVER
+}
+
+enum InstallClientOs {
+  IOS
+  IPADOS
+  ANDROID
+  MACOS
+  WINDOWS
+  OTHER
+}
+
+enum InstallBrowser {
+  SAFARI
+  CHROME
+  EDGE
+  SAMSUNG
+  FIREFOX
+  OPERA
+  OTHER
 }
