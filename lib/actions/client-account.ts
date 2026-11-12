@@ -2,7 +2,6 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { rawDb } from "@/lib/db";
 import { ActionError, requireMerchantAction, runAction, type ActionResult } from "@/lib/merchant-action";
 import { adjustAccountCredit, InsufficientCreditError } from "@/lib/account-credit";
 import { adjustLoyaltyPoints, InsufficientPointsError } from "@/lib/loyalty";
@@ -246,13 +245,4 @@ export async function adjustClientPointsAction(
     revalidatePath(`/m/${merchantId}/clients`);
     return { balance };
   });
-}
-
-/** Where the client's own app reads this from, kept in one place. */
-export async function clientCreditBalance(customerProfileId: string): Promise<number> {
-  const profile = await rawDb.customerProfile.findUnique({
-    where: { id: customerProfileId },
-    select: { accountCreditBalanceCents: true },
-  });
-  return profile?.accountCreditBalanceCents ?? 0;
 }

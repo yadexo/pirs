@@ -12,15 +12,7 @@ const rbacMocks = vi.hoisted(() => ({
 vi.mock("@/lib/rbac", () => rbacMocks);
 
 const { clientCheckoutAction, clientJoinPlanAction } = await import("@/lib/actions/client-app");
-const { adjustAccountCreditAction } = await import("@/lib/actions/customers");
-const { manualLoyaltyAdjustmentAction } = await import("@/lib/actions/loyalty");
 const { getAvailableSlots } = await import("@/lib/availability");
-
-function formData(fields: Record<string, string>) {
-  const fd = new FormData();
-  for (const [k, v] of Object.entries(fields)) fd.set(k, v);
-  return fd;
-}
 
 describe("business-critical workflows", () => {
   let tenantId: string;
@@ -217,7 +209,9 @@ describe("business-critical workflows", () => {
     it("applies a reward as a discount and keeps the points ledger balanced", async () => {
       await clearOpenBaskets();
       // Give the customer enough points to afford the 100-point reward.
-      await manualLoyaltyAdjustmentAction(undefined, formData({ customerProfileId, points: "500", reason: "Test grant" }));
+      // Setup only. How a clinic grants points is tested where that lives
+      // now: tests/integration/client-account.test.ts.
+      await rawDb.customerProfile.update({ where: { id: customerProfileId }, data: { loyaltyPointsBalance: { increment: 500 } } });
 
       const before = await rawDb.customerProfile.findUnique({ where: { id: customerProfileId } });
       const balanceBefore = before!.loyaltyPointsBalance;
@@ -267,26 +261,6 @@ describe("business-critical workflows", () => {
       await clearOpenBaskets();
     });
 
-    it("requires a reason for manual point adjustments", async () => {
-      const result = await manualLoyaltyAdjustmentAction(undefined, formData({ customerProfileId, points: "50", reason: "" }));
-      expect(result).toEqual({ error: "A reason is required for manual adjustments." });
-    });
-  });
-
-  describe("account credit", () => {
-    it("requires a reason and records an auditable transaction", async () => {
-      const noReason = await adjustAccountCreditAction(undefined, formData({ customerProfileId, amount: "10", reason: "" }));
-      expect(noReason).toEqual({ error: "A reason is required for manual adjustments." });
-
-      const before = await rawDb.customerProfile.findUnique({ where: { id: customerProfileId } });
-      await adjustAccountCreditAction(undefined, formData({ customerProfileId, amount: "10", reason: "Goodwill credit" }));
-      const after = await rawDb.customerProfile.findUnique({ where: { id: customerProfileId } });
-
-      expect(after!.accountCreditBalanceCents).toBe(before!.accountCreditBalanceCents + 1000);
-
-      const tx = await rawDb.accountCreditTransaction.findFirst({ where: { customerProfileId, reason: "Goodwill credit" } });
-      expect(tx?.amountCents).toBe(1000);
-    });
   });
 
   /**

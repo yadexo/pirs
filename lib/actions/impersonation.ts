@@ -1,15 +1,11 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { IMPERSONATION_MAX_MS } from "@/lib/impersonation-policy";
+import { IMPERSONATION_COOKIE, IMPERSONATION_MAX_MS, SESSION_ID_COOKIE } from "@/lib/impersonation-policy";
 import { redirect } from "next/navigation";
 import { rawDb } from "@/lib/db";
 import { requireRole } from "@/lib/rbac";
 
-// Not exported: a "use server" module may only export async functions.
-const IMPERSONATION_COOKIE = "impersonate_merchant";
-
-const SESSION_ID_COOKIE = "impersonate_session";
 
 /**
  * Impersonation is a cookie the agency admin carries, never a role change —
@@ -58,10 +54,4 @@ export async function stopImpersonationAction() {
   jar.delete(SESSION_ID_COOKIE);
 
   redirect("/agency");
-}
-
-/** The merchant an agency admin is currently viewing, if any. */
-export async function getImpersonatedMerchantId(): Promise<string | null> {
-  const jar = await cookies();
-  return jar.get(IMPERSONATION_COOKIE)?.value ?? null;
 }

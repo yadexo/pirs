@@ -1,7 +1,7 @@
 import "server-only";
 import { requireRole, ForbiddenError, TwoFactorRequiredError, TWO_FACTOR_FIRST, UnauthorizedError } from "@/lib/rbac";
 import { ActionError } from "@/lib/action-error";
-import { getImpersonatedMerchantId } from "@/lib/actions/impersonation";
+import { getImpersonatedMerchantId } from "@/lib/impersonation-policy";
 
 /**
  * The guard every platform-level action shares: the right role, two-factor

@@ -18,7 +18,6 @@ import {
 } from "@/lib/memberships-billing";
 import { notifyMembershipChanged } from "@/lib/client-notifications";
 import { tenantCurrency } from "@/lib/currency";
-import { getTenantDb } from "@/lib/tenant-db";
 
 /**
  * A clinic managing one client's membership.
@@ -385,9 +384,4 @@ export async function giveFreePeriodsAction(
     revalidatePath(`/m/${merchantId}/clients`);
     return { nextBillingAt: until.toISOString() };
   });
-}
-
-/** Used by the tests and the cron: the tenant-scoped client for a clinic. */
-export async function membershipDb(merchantId: string) {
-  return getTenantDb(merchantId);
 }

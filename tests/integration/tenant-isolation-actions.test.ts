@@ -24,8 +24,9 @@ const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
 vi.mock("@/auth", () => authMock);
 vi.mock("@/client-auth", () => ({ clientAuth: vi.fn() }));
 
-const { adjustAccountCreditAction, toggleCustomerTagAction } = await import("@/lib/actions/customers");
-const { manualLoyaltyAdjustmentAction } = await import("@/lib/actions/loyalty");
+// The clinic portal's own actions. These cases used to call the old /admin
+// actions, which nothing reached any more and which have been deleted.
+const { adjustClientCreditAction, adjustClientPointsAction } = await import("@/lib/actions/client-account");
 const { refundableForOrderAction } = await import("@/lib/actions/refund-order");
 const { voidClientItemAction } = await import("@/lib/actions/client-items");
 const { spendPackageSessionAction, clientPackagesAction } = await import("@/lib/actions/redeem");
@@ -137,33 +138,24 @@ describe("tenant isolation through server actions", () => {
 
   it("cannot adjust another tenant's client's account credit", async () => {
     asStaffA();
-    const fd = new FormData();
-    fd.set("customerProfileId", customerB.id);
-    fd.set("amount", "50");
-    fd.set("reason", "test");
-    const res = (await adjustAccountCreditAction(undefined, fd)) as { error?: string };
+    // Naming its own clinic and the other clinic's client...
+    const res = (await adjustClientCreditAction(tenantA.id, customerB.id, { direction: "add", amount: "50", reason: "test" })) as { error?: string };
     expect(res.error).toBeTruthy();
+    // ...and naming the other clinic outright.
+    const direct = (await adjustClientCreditAction(tenantB.id, customerB.id, { direction: "add", amount: "50", reason: "test" })) as { error?: string };
+    expect(direct.error).toBeTruthy();
     const still = await rawDb.customerProfile.findUnique({ where: { id: customerB.id } });
     expect(still?.accountCreditBalanceCents).toBe(1000);
   });
 
   it("cannot award or remove another tenant's client's loyalty points", async () => {
     asStaffA();
-    const fd = new FormData();
-    fd.set("customerProfileId", customerB.id);
-    fd.set("points", "500");
-    fd.set("reason", "test");
-    await expect(manualLoyaltyAdjustmentAction(undefined, fd)).rejects.toThrow(/not found/i);
+    const res = (await adjustClientPointsAction(tenantA.id, customerB.id, { direction: "add", points: "500", reason: "test" })) as { error?: string };
+    expect(res.error).toBeTruthy();
+    const direct = (await adjustClientPointsAction(tenantB.id, customerB.id, { direction: "remove", points: "50", reason: "test" })) as { error?: string };
+    expect(direct.error).toBeTruthy();
     const still = await rawDb.customerProfile.findUnique({ where: { id: customerB.id } });
     expect(still?.loyaltyPointsBalance).toBe(100);
-  });
-
-  it("cannot tag another tenant's client", async () => {
-    asStaffA();
-    const tag = await rawDb.customerTag.create({ data: { tenantId: tenantA.id, name: "VIP" } });
-    await expect(toggleCustomerTagAction(customerB.id, tag.id, true)).rejects.toThrow();
-    const assigned = await rawDb.customerProfileTag.findFirst({ where: { customerProfileId: customerB.id, tagId: tag.id } });
-    expect(assigned).toBeNull();
   });
 
   it("cannot see or refund another tenant's order", async () => {

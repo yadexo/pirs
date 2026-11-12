@@ -6,7 +6,7 @@ import { rawDb } from "@/lib/db";
 import { getTenantDb, type TenantDb } from "@/lib/tenant-db";
 import { loadLiveAccount, type LiveAccount } from "@/lib/live-account";
 import { twoFactorRequiredForRole } from "@/lib/two-factor";
-import { getImpersonatedMerchantId } from "@/lib/actions/impersonation";
+import { getImpersonatedMerchantId } from "@/lib/impersonation-policy";
 import type { SidebarEntry } from "@/components/shell/sidebar";
 import type { SupportLink } from "@/components/shell/sidebar";
 import type { SwitchableMerchant } from "@/components/shell/merchant-switcher";
