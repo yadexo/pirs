@@ -1,5 +1,22 @@
 import { nanoid } from "nanoid";
 import type { PaymentIntentResult, PaymentProvider, RefundResult, SubscriptionResult } from "./types";
+import { isRealProduction } from "@/lib/deploy-env";
+
+/**
+ * Thrown when the mock provider is asked to take money in real production.
+ *
+ * The mock approves every payment without moving a cent. It is the default
+ * whenever Stripe is not configured, so a missing key in production used to
+ * mean every order was "paid" (docs/security/review-2026-11.md, P-2).
+ * clinicPaymentMode() now refuses first; this is the same refusal one layer
+ * down, for any caller that reaches the provider another way.
+ */
+export class MockPaymentsInProductionError extends Error {
+  constructor() {
+    super("Mock payments cannot take money in production. Stripe is not configured.");
+    this.name = "MockPaymentsInProductionError";
+  }
+}
 
 /**
  * Whether this deployment should decline mock payments, for exercising the
@@ -31,6 +48,12 @@ export class MockPaymentProvider implements PaymentProvider {
     description: string;
     simulateFailure?: boolean;
   }): Promise<PaymentIntentResult> {
+    // A decline, not an exception: checkout already knows how to give back
+    // what it was holding when a payment fails, and that is what must happen.
+    if (isRealProduction()) {
+      console.error("[payments] the mock provider was asked to charge in production; refused.");
+      return { providerPaymentId: `refused_${nanoid(10)}`, status: "FAILED", failureReason: "Payments aren't available right now. Please try again later." };
+    }
     if (params.simulateFailure) {
       return {
         providerPaymentId: `mock_pi_${nanoid(10)}`,
@@ -48,6 +71,7 @@ export class MockPaymentProvider implements PaymentProvider {
     currency: string;
     intervalMonths: number;
   }): Promise<SubscriptionResult> {
+    if (isRealProduction()) throw new MockPaymentsInProductionError();
     return { providerSubscriptionId: `mock_sub_${nanoid(10)}`, status: "ACTIVE" };
   }
 

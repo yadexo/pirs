@@ -4,6 +4,7 @@ import { rawDb } from "@/lib/db";
 import { applicationFeeCents } from "@/lib/platform-fee";
 import { isStripeConfigured, StripeNotConfiguredError } from "@/lib/stripe-connect";
 import type { Currency } from "@/lib/currency";
+import { isRealProduction } from "@/lib/deploy-env";
 
 /**
  * Client payments as *direct charges* on the clinic's own connected account:
@@ -38,7 +39,19 @@ export function stripe(): Stripe {
 export async function clinicPaymentMode(tenantId: string): Promise<
   { mode: "mock" } | { mode: "stripe"; stripeAccountId: string } | { mode: "blocked"; reason: string }
 > {
-  if (!isStripeConfigured()) return { mode: "mock" };
+  if (!isStripeConfigured()) {
+    // No Stripe key. On a developer's machine and on staging that means the
+    // mock provider, which approves everything — that is what it is for. In
+    // real production it must never mean that: a key that is missing, mistyped
+    // or mid-rotation would turn every checkout into a completed sale with no
+    // money behind it, and nothing would say so
+    // (docs/security/review-2026-11.md, P-2). There, no key means no payments.
+    if (isRealProduction()) {
+      console.error("[payments] STRIPE_SECRET_KEY is not set in production: card payments are refused until it is.");
+      return { mode: "blocked", reason: "This clinic can't take card payments right now. Please try again later." };
+    }
+    return { mode: "mock" };
+  }
   const clinic = await rawDb.tenant.findUnique({
     where: { id: tenantId },
     select: { stripeAccountId: true, stripeStatus: true, stripeChargesEnabled: true },
