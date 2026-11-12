@@ -221,10 +221,14 @@ describe("sign-in outcomes in the logs", () => {
   describe("rate limits", () => {
     it("names the account limit, with the same sentinel as before", async () => {
       const email = addr("limited");
+      // An address nothing else in the suite uses, cleared first: a counter left
+      // over by another file would trip the address limit before this one.
+      await rawDb.rateLimitBucket.deleteMany({ where: { key: "login:ip:192.0.2.211" } });
       let last: { lines: string[]; error: unknown } = { lines: [], error: null };
       for (let i = 0; i < 11; i++) {
-        // A fresh address each time, so only the account counter can trip.
-        last = await capture(() => authorizeCredentials({ portal: "staff", email, password: WRONG }, "staff", `203.0.113.${100 + i}`));
+        // The same address each time: ten failures on one account from one
+        // place is what trips (lib/login-limits.ts), well before the address's own limit.
+        last = await capture(() => authorizeCredentials({ portal: "staff", email, password: WRONG }, "staff", "192.0.2.211"));
         if (last.error) break;
       }
       expect((last.error as Error).message).toMatch(/^__rate_limited__:\d+/);

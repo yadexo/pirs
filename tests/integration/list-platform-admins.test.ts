@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
 import { rawDb } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
-import { LOGIN_ATTEMPTS_PER_ACCOUNT, LOGIN_ATTEMPTS_PER_IP, LOGIN_WINDOW_MS } from "@/lib/login-limits";
+import { LOGIN_FAILURES_PER_ACCOUNT, LOGIN_ATTEMPTS_PER_IP, LOGIN_WINDOW_MS } from "@/lib/login-limits";
 import { formatRemaining, listPlatformAdmins } from "../../prisma/list-platform-admins";
 
 describe("list-platform-admins script", () => {
@@ -46,11 +46,11 @@ describe("list-platform-admins script", () => {
     await rawDb.rateLimitBucket.createMany({
       data: [
         // Locked: past the account limit, 7 minutes to go.
-        { key: `login:admin:${bareAdmin}`, count: LOGIN_ATTEMPTS_PER_ACCOUNT + 1, resetAt: inMinutes(7) },
+        { key: `login:admin:${bareAdmin}`, count: LOGIN_FAILURES_PER_ACCOUNT + 1, resetAt: inMinutes(7) },
         // Running but not locked.
         { key: `login:admin:${protectedAdmin}`, count: 3, resetAt: inMinutes(4) },
-        // Exactly at the limit is still allowed: it is the next attempt that is refused.
-        { key: `login:admin:lpa-edge-${stamp}@example.com`, count: LOGIN_ATTEMPTS_PER_ACCOUNT, resetAt: inMinutes(2) },
+        // One short of the limit is still allowed: reaching it is what locks.
+        { key: `login:admin:lpa-edge-${stamp}@example.com`, count: LOGIN_FAILURES_PER_ACCOUNT - 1, resetAt: inMinutes(2) },
         // A locked address.
         { key: `login:ip:203.0.113.${stamp % 250}`, count: LOGIN_ATTEMPTS_PER_IP + 5, resetAt: inMinutes(9) },
         // Over the limit but already over: must not be reported as a lock.
@@ -98,21 +98,21 @@ describe("list-platform-admins script", () => {
       expect(find(report, bareAdmin)).toMatchObject({
         kind: "account",
         portal: "admin",
-        attempts: LOGIN_ATTEMPTS_PER_ACCOUNT + 1,
-        limit: LOGIN_ATTEMPTS_PER_ACCOUNT,
+        attempts: LOGIN_FAILURES_PER_ACCOUNT + 1,
+        limit: LOGIN_FAILURES_PER_ACCOUNT,
         locked: true,
         remainingMs: 7 * 60_000,
         platformAdmin: true,
       });
     });
 
-    it("does not call a counter below the limit, or exactly at it, a lock", async () => {
+    it("does not call a counter below its limit a lock", async () => {
       const report = await listPlatformAdmins(db, now);
       expect(find(report, protectedAdmin)).toMatchObject({ attempts: 3, locked: false, remainingMs: 4 * 60_000 });
-      expect(find(report, `lpa-edge-${stamp}@example.com`)).toMatchObject({ attempts: LOGIN_ATTEMPTS_PER_ACCOUNT, locked: false });
+      expect(find(report, `lpa-edge-${stamp}@example.com`)).toMatchObject({ attempts: LOGIN_FAILURES_PER_ACCOUNT - 1, locked: false });
     });
 
-    it("reports an address by its own, higher limit", async () => {
+    it("reports an address by its own limit", async () => {
       const report = await listPlatformAdmins(db, now);
       expect(find(report, `203.0.113.${stamp % 250}`)).toMatchObject({ kind: "ip", portal: null, limit: LOGIN_ATTEMPTS_PER_IP, locked: true, platformAdmin: false });
     });
@@ -140,7 +140,7 @@ describe("list-platform-admins script", () => {
       await listPlatformAdmins(db, now);
       expect([await rawDb.user.count(), await rawDb.rateLimitBucket.count(), await rawDb.twoFactorSecret.count()]).toEqual(before);
       const bucket = await rawDb.rateLimitBucket.findUniqueOrThrow({ where: { key: `login:admin:${bareAdmin}` } });
-      expect(bucket.count).toBe(LOGIN_ATTEMPTS_PER_ACCOUNT + 1);
+      expect(bucket.count).toBe(LOGIN_FAILURES_PER_ACCOUNT + 1);
     });
 
     it("puts no password hash, password or two-factor secret in the report", async () => {

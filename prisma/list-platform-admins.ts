@@ -21,7 +21,15 @@
  */
 import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
-import { LOGIN_ATTEMPTS_PER_ACCOUNT, LOGIN_ATTEMPTS_PER_IP, LOGIN_WINDOW_MS } from "../lib/login-limits";
+import {
+  describeLoginKey,
+  LOGIN_ACCOUNT_WINDOW_MS,
+  LOGIN_ATTEMPTS_PER_IP,
+  LOGIN_FAILURES_PER_ACCOUNT,
+  LOGIN_FAILURES_PER_ACCOUNT_AND_SOURCE,
+  LOGIN_WINDOW_MS,
+  loginCounterLocked,
+} from "../lib/login-limits";
 import { describeDatabase, exitWith } from "./admin-cli";
 
 export interface AdminRow {
@@ -55,14 +63,20 @@ export interface Clocks {
 }
 
 export interface LoginBucket {
-  kind: "account" | "ip";
-  /** The email (account) or address (ip) the counter is for. */
+  /**
+   * "account": failures on this account from everywhere. "account-from-address":
+   * failures on it from one address. "ip": attempts from one address at any account.
+   */
+  kind: "account" | "account-from-address" | "ip";
+  /** The email (either account kind) or address (ip) the counter is for. */
   subject: string;
   /** The portal an account counter belongs to; null for an IP. */
   portal: string | null;
+  /** The address the failures came from, for account-from-address; null otherwise. */
+  from: string | null;
   attempts: number;
   limit: number;
-  /** Over the limit: further sign-ins are refused until it resets. */
+  /** At or over its limit: sign-ins it covers are refused until it resets. */
   locked: boolean;
   remainingMs: number;
   resetsAt: string;
@@ -135,23 +149,24 @@ export async function listPlatformAdmins(db: PrismaClient, now = new Date()): Pr
     select: { key: true, count: true, resetAt: true },
   });
 
-  const buckets: LoginBucket[] = rows.map((row) => {
-    // login:ip:<address>  or  login:<portal>:<email>
-    const isIp = row.key.startsWith("login:ip:");
-    const [, portalOrIp = "", ...rest] = row.key.split(":");
-    const subject = isIp ? row.key.slice("login:ip:".length) : rest.join(":");
-    const limit = isIp ? LOGIN_ATTEMPTS_PER_IP : LOGIN_ATTEMPTS_PER_ACCOUNT;
-    return {
-      kind: isIp ? "ip" : "account",
-      subject,
-      portal: isIp ? null : portalOrIp,
-      attempts: row.count,
-      limit,
-      locked: row.count > limit,
-      remainingMs: Math.max(0, row.resetAt.getTime() - now.getTime()),
-      resetsAt: row.resetAt.toISOString(),
-      platformAdmin: !isIp && adminEmails.has(subject.toLowerCase()),
-    };
+  const buckets: LoginBucket[] = rows.flatMap((row) => {
+    // What each key counts, and its limit, is decided in one place.
+    const counter = describeLoginKey(row.key);
+    if (!counter) return [];
+    return [
+      {
+        kind: counter.kind,
+        subject: counter.subject,
+        portal: counter.portal,
+        from: counter.from,
+        attempts: row.count,
+        limit: counter.limit,
+        locked: loginCounterLocked(counter, row.count),
+        remainingMs: Math.max(0, row.resetAt.getTime() - now.getTime()),
+        resetsAt: row.resetAt.toISOString(),
+        platformAdmin: counter.kind !== "ip" && adminEmails.has(counter.subject.toLowerCase()),
+      },
+    ];
   });
 
   return { clocks, admins, buckets };
@@ -217,8 +232,12 @@ Platform admins (${report.admins.length})`);
 
   const locked = report.buckets.filter((b) => b.locked);
   const mins = LOGIN_WINDOW_MS / 60000;
-  console.log(`\nSign-in rate limits: ${LOGIN_ATTEMPTS_PER_ACCOUNT} attempts per account and ${LOGIN_ATTEMPTS_PER_IP} per address, per ${mins}-minute window.`);
-  console.log(`The window starts at the first attempt and resets ${mins} minutes later, so a lock never lasts longer than ${mins} minutes.`);
+  const accountMins = LOGIN_ACCOUNT_WINDOW_MS / 60000;
+  console.log("\nSign-in rate limits:");
+  console.log(`  ${LOGIN_FAILURES_PER_ACCOUNT_AND_SOURCE} failed attempts on one account from one address, per ${mins} minutes`);
+  console.log(`  ${LOGIN_FAILURES_PER_ACCOUNT} failed attempts on one account from everywhere, per ${accountMins} minutes`);
+  console.log(`  ${LOGIN_ATTEMPTS_PER_IP} attempts of any kind from one address, per ${mins} minutes`);
+  console.log("Each window starts at the first one counted and resets when it ends, so a lock never lasts longer than its window.");
 
   if (report.buckets.length === 0) {
     console.log("\nNo sign-in counters are running right now: nobody is locked out.\n");
@@ -226,7 +245,10 @@ Platform admins (${report.admins.length})`);
   }
   console.log(`\n${locked.length === 0 ? "Nobody is locked out" : `${locked.length} LOCKED`}; ${report.buckets.length} counter(s) running`);
   for (const b of report.buckets) {
-    const what = b.kind === "ip" ? `address ${b.subject}` : `${b.subject} (${b.portal} portal)${b.platformAdmin ? "  <- platform admin" : ""}`;
+    const what =
+      b.kind === "ip"
+        ? `address ${b.subject}`
+        : `${b.subject} (${b.portal} portal${b.from ? `, from ${b.from}` : ", from everywhere"})${b.platformAdmin ? "  <- platform admin" : ""}`;
     const state = b.locked ? `LOCKED, unlocks in ${formatRemaining(b.remainingMs)} (${b.resetsAt})` : `${b.attempts} of ${b.limit} used, resets in ${formatRemaining(b.remainingMs)}`;
     console.log(`  ${b.locked ? "!!" : "  "} ${what}\n       ${state}`);
   }

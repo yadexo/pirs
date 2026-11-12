@@ -5,8 +5,17 @@ import "server-only";
 import { CredentialsSignin } from "@auth/core/errors";
 import { rawDb } from "@/lib/db";
 import { spendPasswordCheck, verifyPassword } from "@/lib/password";
-import { rateLimit } from "@/lib/rate-limit";
-import { LOGIN_ATTEMPTS_PER_ACCOUNT, LOGIN_ATTEMPTS_PER_IP, LOGIN_WINDOW_MS } from "@/lib/login-limits";
+import { rateLimit, rateLimitExhausted } from "@/lib/rate-limit";
+import {
+  LOGIN_ACCOUNT_WINDOW_MS,
+  LOGIN_ATTEMPTS_PER_IP,
+  LOGIN_FAILURES_PER_ACCOUNT,
+  LOGIN_FAILURES_PER_ACCOUNT_AND_SOURCE,
+  LOGIN_WINDOW_MS,
+  loginAccountKey,
+  loginIpKey,
+  loginSourceKey,
+} from "@/lib/login-limits";
 import { logSignIn } from "@/lib/signin-log";
 import { audienceFor, chooseAccount, isPortal, portalRoles, type Portal } from "@/lib/portal-scope";
 import { permissionsFor } from "@/lib/live-account";
@@ -122,18 +131,38 @@ export async function authorizeCredentials(
     return null;
   }
 
-  // Both limits run regardless of which trips first, so a attacker spraying
-  // one password across many accounts from one address is still caught, and
-  // a botnet trying one account from many addresses still is too.
-  const [byAccount, byIp] = await Promise.all([
-    rateLimit(`login:${portal}:${email}`, LOGIN_ATTEMPTS_PER_ACCOUNT, LOGIN_WINDOW_MS),
-    rateLimit(`login:ip:${ip}`, LOGIN_ATTEMPTS_PER_IP, LOGIN_WINDOW_MS),
+  // Three limits (lib/login-limits.ts). The address limit counts this attempt
+  // as it is made. The two about the account count failures only, so they are
+  // looked at here and added to further down, when — and only when — this
+  // attempt turns out to be one.
+  const sourceKey = loginSourceKey(portal, email, ip);
+  const accountKey = loginAccountKey(portal, email);
+  const [byIp, fromHere, fromAnywhere] = await Promise.all([
+    rateLimit(loginIpKey(ip), LOGIN_ATTEMPTS_PER_IP, LOGIN_WINDOW_MS),
+    rateLimitExhausted(sourceKey, LOGIN_FAILURES_PER_ACCOUNT_AND_SOURCE),
+    rateLimitExhausted(accountKey, LOGIN_FAILURES_PER_ACCOUNT),
   ]);
-  const limited = !byAccount.ok ? byAccount : !byIp.ok ? byIp : null;
-  if (limited) {
-    logSignIn(!byAccount.ok ? "rate_limited_account" : "rate_limited_ip", at);
-    throw new RateLimitedSignIn(limited.retryAfterMs);
+  const onAccount = fromHere.exhausted ? fromHere : fromAnywhere.exhausted ? fromAnywhere : null;
+  if (onAccount) {
+    logSignIn("rate_limited_account", at);
+    throw new RateLimitedSignIn(onAccount.retryAfterMs);
   }
+  if (!byIp.ok) {
+    logSignIn("rate_limited_ip", at);
+    throw new RateLimitedSignIn(byIp.retryAfterMs);
+  }
+
+  /**
+   * Counts this attempt as a failure, against this address and against the
+   * account. Called for every refusal below, including the ones where there
+   * is no such account: if only real accounts could be locked, being locked
+   * would say the account is real.
+   */
+  const countFailure = () =>
+    Promise.all([
+      rateLimit(sourceKey, LOGIN_FAILURES_PER_ACCOUNT_AND_SOURCE, LOGIN_WINDOW_MS),
+      rateLimit(accountKey, LOGIN_FAILURES_PER_ACCOUNT, LOGIN_ACCOUNT_WINDOW_MS),
+    ]);
 
   /**
    * Refuses a sign-in that never reached the password check — and spends the
@@ -149,7 +178,7 @@ export async function authorizeCredentials(
    */
   const refuse = async (outcome: Parameters<typeof logSignIn>[0], fields: Parameters<typeof logSignIn>[1]): Promise<null> => {
     logSignIn(outcome, fields);
-    await spendPasswordCheck(password);
+    await Promise.all([spendPasswordCheck(password), countFailure()]);
     return null;
   };
 
@@ -209,6 +238,7 @@ export async function authorizeCredentials(
   }
   if (!(await verifyPassword(password, user.passwordHash))) {
     logSignIn("wrong_password", { ...at, role: user.role });
+    await countFailure();
     return null;
   }
 
@@ -224,6 +254,9 @@ export async function authorizeCredentials(
     }
     if (!(await verifyTwoFactorCode(user.id, twoFactor.secret, code))) {
       logSignIn("two_factor_invalid_code", { ...at, role: user.role });
+      // A wrong code is a failure like a wrong password: the same limits are
+      // what stand between a stolen password and a guessed second factor.
+      await countFailure();
       throw new InvalidTwoFactorCodeSignIn();
     }
   }
