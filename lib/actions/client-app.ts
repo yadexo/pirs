@@ -34,6 +34,7 @@ import { requestOrigin } from "@/lib/request-origin";
 import { recordPromptEvent } from "@/lib/notification-prompt-data";
 import { recordInstallEvent } from "@/lib/install-nudge-data";
 import { rateLimit } from "@/lib/rate-limit";
+import { addableQuantity, chargeableLine, MAX_CART_QUANTITY, settableQuantity } from "@/lib/cart-quantity";
 
 /**
  * Every mutating action the client app can perform.
@@ -267,6 +268,13 @@ export async function clientCancelAppointmentAction(slug: string, appointmentId:
 // Cart & checkout
 // ---------------------------------------------------------------------------
 
+/**
+ * One answer for every malformed request. The app never sends one, so whoever
+ * gets this is not using the app and is owed no hint about which part was wrong.
+ */
+const CART_REFUSED = "That can't be added to your cart.";
+const CART_FULL = `You can have up to ${MAX_CART_QUANTITY} of one item in your cart.`;
+
 export async function clientAddToCartAction(
   slug: string,
   kind: "product" | "service" | "package",
@@ -274,6 +282,15 @@ export async function clientAddToCartAction(
   qty: number,
 ): Promise<{ error: string } | { ok: true }> {
   const { db, user } = await requireCustomerContext();
+
+  // The signature above is a wish. What arrives is whatever the browser sent,
+  // so every argument is checked before it is used — a quantity of minus one
+  // used to subtract its price from the rest of the basket (lib/cart-quantity.ts).
+  if (kind !== "product" && kind !== "service" && kind !== "package") return { error: CART_REFUSED };
+  if (typeof id !== "string" || id === "" || id.length > 64) return { error: CART_REFUSED };
+  const quantity = addableQuantity(qty);
+  if (quantity === null) return { error: CART_REFUSED };
+  qty = quantity;
 
   const basket =
     (await db.basket.findFirst({ where: { customerProfileId: user.customerProfileId!, status: "OPEN" } })) ??
@@ -285,6 +302,7 @@ export async function clientAddToCartAction(
     const pkg = await db.package.findFirst({ where: { id, active: true, archivedAt: null } });
     if (!pkg) return { error: "That package is no longer available." };
     const line = await db.basketItem.findFirst({ where: { basketId: basket.id, packageId: id } });
+    if (line && line.quantity + qty > MAX_CART_QUANTITY) return { error: CART_FULL };
     if (line) await db.basketItem.updateMany({ where: { id: line.id }, data: { quantity: { increment: qty } } });
     else
       await db.basketItem.create({
@@ -295,6 +313,7 @@ export async function clientAddToCartAction(
     if (!product) return { error: "Product not found." };
     if (product.inventoryQuantity < qty) return { error: "Not enough stock." };
     const line = await db.basketItem.findFirst({ where: { basketId: basket.id, productId: id } });
+    if (line && line.quantity + qty > MAX_CART_QUANTITY) return { error: CART_FULL };
     if (line) await db.basketItem.updateMany({ where: { id: line.id }, data: { quantity: { increment: qty } } });
     else
       await db.basketItem.create({
@@ -304,6 +323,7 @@ export async function clientAddToCartAction(
     const service = await db.service.findFirst({ where: { id, active: true } });
     if (!service) return { error: "Treatment not found." };
     const line = await db.basketItem.findFirst({ where: { basketId: basket.id, serviceId: id } });
+    if (line && line.quantity + qty > MAX_CART_QUANTITY) return { error: CART_FULL };
     if (line) await db.basketItem.updateMany({ where: { id: line.id }, data: { quantity: { increment: qty } } });
     else
       await db.basketItem.create({
@@ -342,12 +362,16 @@ export async function clientSetCartQtyAction(
   qty: number,
 ): Promise<{ error: string } | { ok: true }> {
   const { db, user } = await requireCustomerContext();
+  if (typeof itemId !== "string" || itemId === "" || itemId.length > 64) return { error: CART_REFUSED };
+  const quantity = settableQuantity(qty);
+  if (quantity === null) return { error: CART_REFUSED };
+  qty = quantity;
   const line = await db.basketItem.findFirst({
     where: { id: itemId, basket: { customerProfileId: user.customerProfileId!, status: "OPEN" } },
   });
   // The cart may have been checked out in another tab since this sheet rendered.
   if (!line) return { error: "That item is no longer in your cart." };
-  if (qty <= 0) await db.basketItem.deleteMany({ where: { id: itemId } });
+  if (qty === 0) await db.basketItem.deleteMany({ where: { id: itemId } });
   else await db.basketItem.updateMany({ where: { id: itemId }, data: { quantity: qty } });
   revalidateClient(slug);
   return { ok: true };
@@ -467,6 +491,17 @@ export async function clientCheckoutAction(
   });
   const items = basket?.items ?? [];
   if (!basket || items.length === 0) return { error: "Your cart is empty." };
+
+  // Checked on what is stored, not on what was asked for, and before anything
+  // is written: a line with a quantity or a price below zero takes money off
+  // every other line, and the total below is floored at nothing — which is
+  // how an order came to complete for free. The checks on the way into the
+  // cart and the database constraint both stand in front of this; it is here
+  // because being wrong about that would cost a clinic real money.
+  if (!items.every(chargeableLine)) {
+    console.error(`[checkout] refused basket ${basket.id}: a line has a quantity or price the till cannot charge`);
+    return { error: "Something in your cart isn't right. Remove the items and add them again." };
+  }
 
   for (const i of items) {
     if (i.itemType === "PRODUCT" && i.product && i.product.inventoryQuantity < i.quantity) {
