@@ -147,9 +147,11 @@ async function sendBrandedEmail(to: string | null, clinicName: string, template:
   try {
     const { getEmailProvider } = await import("@/lib/providers/notifications");
     const result = await getEmailProvider().send({ to, subject: template.subject, body: template.text, html: template.html, from: senderFor(clinicName) });
-    if (result.status === "FAILED") console.error(`[client-notifications] email to ${to} failed:`, result.error);
+    // No address in the log line: logs are kept, shipped and read far more
+    // widely than the database is, and "who we emailed" is personal data.
+    if (result.status === "FAILED") console.error("[client-notifications] email failed:", result.error);
   } catch (err) {
-    console.error(`[client-notifications] email to ${to} not sent:`, err instanceof Error ? err.message : err);
+    console.error("[client-notifications] email not sent:", err instanceof Error ? err.message : err);
   }
 }
 

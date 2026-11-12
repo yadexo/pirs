@@ -18,6 +18,10 @@ const buildId = process.env.BUILD_ID || String(Date.now());
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   generateBuildId: () => buildId,
+  // No "X-Powered-By: Next.js" on every response. It protects nothing by
+  // itself, but there is no reason to tell every scanner which framework —
+  // and so which advisories — to try first.
+  poweredByHeader: false,
   env: { NEXT_PUBLIC_BUILD_ID: buildId },
   eslint: {
     dirs: ["app", "components", "lib", "prisma", "server", "tests"],

@@ -56,6 +56,36 @@ export function buildCsp(nonce: string): string {
 }
 
 /** Applies every security header to a response, given the nonce already baked into its CSP. */
+/**
+ * What the browser lets these pages — and anything that ever gets injected
+ * into them — ask the device for.
+ *
+ * The camera is the one thing the app really uses: clients and staff scan QR
+ * codes (components/use-qr-camera.ts). It is allowed for our own pages only,
+ * never for a frame. Everything else here is something the app has no use
+ * for, so a script that should not be running cannot ask for it either.
+ *
+ * `payment` is deliberately absent. Apple Pay and Google Pay run inside
+ * Stripe's frame and need it, and leaving a feature out keeps the browser's
+ * default, which already allows that. Naming it here is how to break
+ * wallets with one typo.
+ */
+export const PERMISSIONS_POLICY = [
+  "camera=(self)",
+  "microphone=()",
+  "geolocation=()",
+  "usb=()",
+  "bluetooth=()",
+  "serial=()",
+  "hid=()",
+  "midi=()",
+  "magnetometer=()",
+  "gyroscope=()",
+  "accelerometer=()",
+  "display-capture=()",
+  "browsing-topics=()",
+].join(", ");
+
 export function applySecurityHeaders(headers: Headers, nonce: string, isHttps: boolean, opts: { skipCsp?: boolean } = {}): void {
   if (!opts.skipCsp) headers.set("Content-Security-Policy", buildCsp(nonce));
   headers.set("X-Content-Type-Options", "nosniff");
@@ -63,6 +93,7 @@ export function applySecurityHeaders(headers: Headers, nonce: string, isHttps: b
   // The modern, CSP-native equivalent is frame-ancestors above; this header
   // is kept alongside it for browsers too old to read CSP2.
   headers.set("X-Frame-Options", "DENY");
+  headers.set("Permissions-Policy", PERMISSIONS_POLICY);
   // Only over a connection that is actually HTTPS — a browser that cached
   // this header for plain-HTTP localhost would refuse to load it at all.
   if (isHttps) headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");

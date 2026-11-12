@@ -58,3 +58,30 @@ describe("security headers", () => {
     expect(headers.get("X-Content-Type-Options")).toBe("nosniff");
   });
 });
+
+describe("what pages may ask the device for", () => {
+  const policy = () => {
+    const headers = new Headers();
+    applySecurityHeaders(headers, "n", true);
+    return headers.get("Permissions-Policy") ?? "";
+  };
+
+  it("is sent on every response, with or without a CSP", () => {
+    expect(policy()).not.toBe("");
+    const sw = new Headers();
+    applySecurityHeaders(sw, "n", true, { skipCsp: true });
+    expect(sw.get("Permissions-Policy")).toBe(policy());
+  });
+
+  it("keeps the camera for our own pages — the QR scanner needs it — and for no frame", () => {
+    expect(policy()).toContain("camera=(self)");
+  });
+
+  it("denies what the app has no use for", () => {
+    for (const feature of ["microphone", "geolocation", "usb", "bluetooth", "display-capture"]) expect(policy()).toContain(`${feature}=()`);
+  });
+
+  it("does not name payment, so Apple Pay and Google Pay keep working inside Stripe's frame", () => {
+    expect(policy()).not.toContain("payment");
+  });
+});
