@@ -7,7 +7,7 @@ import { signIn } from "@/auth";
 import { clientSignIn } from "@/client-auth";
 import { rawDb } from "@/lib/db";
 import { TWO_FACTOR_REQUIRED_MESSAGE, INVALID_TWO_FACTOR_CODE_MESSAGE, RATE_LIMITED_MESSAGE_PREFIX } from "@/lib/auth-credentials";
-import { hashPassword } from "@/lib/password";
+import { hashPassword, spendPasswordCheck } from "@/lib/password";
 import { rateLimit, retryAfterParts } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request-ip";
 import { resolveDestination, canReach, safeNext } from "@/lib/login-destination";
@@ -15,10 +15,10 @@ import { audienceFor, chooseAccount, isPortal, portalRoles, slugFromNext, type P
 import { recordActivity } from "@/lib/activity";
 import { currentClientBasePath } from "@/lib/public-clinic";
 import { getTenantDb } from "@/lib/tenant-db";
-import { clinicAppUrl } from "@/lib/clinic-app-link";
+import { clinicAppOrigin, clinicAppUrl } from "@/lib/clinic-app-link";
 import { getEmailProvider } from "@/lib/providers/notifications";
 import { senderFor } from "@/lib/emails/sender";
-import { welcomeClientEmail } from "@/lib/emails/templates";
+import { accountExistsEmail, welcomeClientEmail } from "@/lib/emails/templates";
 import { resolveLocale } from "@/lib/locale";
 
 export type ActionResult = { error: string } | never;
@@ -159,6 +159,53 @@ const registerSchema = z.object({
   marketingConsent: z.boolean().optional(),
 });
 
+/**
+ * One answer whenever sign-up cannot go ahead for a reason we will not name.
+ * It reads sensibly to the person it is true for, and tells nobody else
+ * which addresses have accounts.
+ */
+const SIGN_UP_REFUSED = "We couldn't create that account. If you already have one, sign in or reset your password.";
+
+/**
+ * Emails someone that their address was used on the sign-up form.
+ *
+ * At most once a day per address and clinic: the form can be submitted by
+ * anyone, and this must not become a way to fill a stranger's inbox. A failure
+ * to send is logged and swallowed — the visitor is told the same thing either
+ * way, which is the point.
+ */
+async function tellExistingClient(params: {
+  tenantSlug: string;
+  tenant: { id: string; name: string; branding: { businessName: string | null; logoUrl: string | null; primaryColor: string | null } | null };
+  userId: string;
+  email: string;
+}): Promise<void> {
+  const { tenantSlug, tenant, userId, email } = params;
+  try {
+    const { ok } = await rateLimit(`register-exists:${tenant.id}:${email}`, 1, 24 * 60 * 60 * 1000);
+    if (!ok) return;
+    const [account, openAppUrl, origin] = await Promise.all([
+      rawDb.user.findUnique({ where: { id: userId }, select: { locale: true, customerProfile: { select: { firstName: true } } } }),
+      clinicAppUrl(tenantSlug),
+      // The origin this clinic's clients actually use — its own domain when it has one.
+      clinicAppOrigin(tenantSlug),
+    ]);
+    const clinicName = tenant.branding?.businessName ?? tenant.name;
+    const template = accountExistsEmail({
+      branding: { name: clinicName, logoUrl: tenant.branding?.logoUrl ?? null, color: tenant.branding?.primaryColor ?? null },
+      firstName: account?.customerProfile?.firstName ?? null,
+      openAppUrl,
+      // The same page the app's own "forgot password" link opens; no token is
+      // minted here, so this email cannot be used to take anything over.
+      resetUrl: `${origin}/forgot-password?clinic=${encodeURIComponent(tenantSlug)}`,
+      locale: account?.locale === "en" ? "en" : "nl",
+    });
+    await getEmailProvider().send({ to: email, subject: template.subject, body: template.text, html: template.html, from: senderFor(clinicName) });
+  } catch (err) {
+    console.error("[register] existing-account notice not sent:", err instanceof Error ? err.message : err);
+  }
+}
+
 export async function customerRegisterAction(tenantSlug: string, _prevState: unknown, formData: FormData) {
   const parsed = registerSchema.safeParse({
     firstName: formData.get("firstName"),
@@ -195,7 +242,20 @@ export async function customerRegisterAction(tenantSlug: string, _prevState: unk
   const existing = await rawDb.user.findFirst({
     where: { tenantId: tenant.id, email: email.toLowerCase(), role: "CUSTOMER" },
   });
-  if (existing) return { error: "An account with this email already exists." };
+  if (existing) {
+    // The form does not say the address is taken: that answered, for anyone
+    // who asked, whether a given person is a client of this clinic
+    // (docs/security/review-2026-11.md, A-4). The owner of the address is told
+    // instead, by email, with the way back in.
+    //
+    // This narrows the leak rather than closing it. A new address is signed in
+    // on the spot and this one is not, so the two outcomes still differ; only
+    // verifying the address before the account exists removes that (A-6).
+    await tellExistingClient({ tenantSlug, tenant, userId: existing.id, email: email.toLowerCase() });
+    // The same work a real sign-up does, so the clock says no more than the text.
+    await spendPasswordCheck(password);
+    return { error: SIGN_UP_REFUSED };
+  }
 
   const passwordHash = await hashPassword(password);
 

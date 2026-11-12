@@ -123,6 +123,39 @@ export function passwordResetEmail(params: { branding: EmailBranding; resetUrl: 
   return { subject, html: emailLayout({ branding, preheader, bodyHtml: html, locale }), text };
 }
 
+/**
+ * To someone who already has an account, when the sign-up form was sent with
+ * their address.
+ *
+ * The form itself no longer says the address is taken — that told anyone who
+ * asked whether a given person is a client of this clinic. The person who
+ * owns the address is the only one who should learn it, so they are told
+ * here: either it was them and they need the way back in, or it was not and
+ * nothing happened.
+ */
+export function accountExistsEmail(params: { branding: EmailBranding; firstName: string | null; openAppUrl: string; resetUrl: string; locale: AppLocale }): EmailTemplate {
+  const { branding, firstName, openAppUrl, resetUrl, locale } = params;
+  const nl = locale === "nl";
+  const intro = nl
+    ? `${greeting(locale, firstName ?? "")} iemand probeerde een account aan te maken bij ${branding.name} met dit e-mailadres. Je hebt er al een.`
+    : `${greeting(locale, firstName ?? "")} someone tried to create an account at ${branding.name} with this email address. You already have one.`;
+  const body = nl
+    ? "Was jij dat? Log dan gewoon in. Weet je je wachtwoord niet meer, dan kun je een nieuw instellen."
+    : "If that was you, just sign in. If you've forgotten your password, you can set a new one.";
+  const ignore = nl ? "Was jij dit niet? Dan hoef je niets te doen: er is niets veranderd." : "If it wasn't you, there is nothing to do: nothing has changed.";
+  const signIn = nl ? "Inloggen" : "Sign in";
+  const reset = nl ? "Wachtwoord opnieuw instellen" : "Reset your password";
+  const html =
+    emailParagraph(intro) +
+    emailParagraph(body) +
+    emailButton(signIn, openAppUrl, branding.color) +
+    `<p style="margin:16px 0;"><a href="${escapeHtml(resetUrl)}" style="color:#111318;">${escapeHtml(reset)}</a></p>` +
+    `<p style="margin:0;font-size:13px;color:#8a8d94;">${escapeHtml(ignore)}</p>`;
+  const text = [intro, "", body, "", `${signIn}: ${openAppUrl}`, `${reset}: ${resetUrl}`, "", ignore].join("\n");
+  const subject = nl ? `Je hebt al een account bij ${branding.name}` : `You already have an account at ${branding.name}`;
+  return { subject, html: emailLayout({ branding, preheader: subject, bodyHtml: html, locale }), text };
+}
+
 export function welcomeClientEmail(params: { branding: EmailBranding; firstName: string; openAppUrl: string; locale: AppLocale }): EmailTemplate {
   const { branding, firstName, openAppUrl, locale } = params;
   const nl = locale === "nl";

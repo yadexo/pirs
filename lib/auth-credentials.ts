@@ -4,7 +4,7 @@ import "server-only";
 // load (and that break outside a Next.js runtime, e.g. under plain Node).
 import { CredentialsSignin } from "@auth/core/errors";
 import { rawDb } from "@/lib/db";
-import { verifyPassword } from "@/lib/password";
+import { spendPasswordCheck, verifyPassword } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
 import { LOGIN_ATTEMPTS_PER_ACCOUNT, LOGIN_ATTEMPTS_PER_IP, LOGIN_WINDOW_MS } from "@/lib/login-limits";
 import { logSignIn } from "@/lib/signin-log";
@@ -135,19 +135,35 @@ export async function authorizeCredentials(
     throw new RateLimitedSignIn(limited.retryAfterMs);
   }
 
+  /**
+   * Refuses a sign-in that never reached the password check — and spends the
+   * same time as one that did.
+   *
+   * Every refusal here used to return at once, while a wrong password on a
+   * real account first ran bcrypt: about a third of a second against a few
+   * hundredths. The message was identical on purpose, and the clock gave the
+   * answer anyway — which addresses are admins, which are staff, who is a
+   * client of which clinic (docs/security/review-2026-11.md, A-3). So each one
+   * checks the password against a hash that matches nothing, and only then
+   * says no.
+   */
+  const refuse = async (outcome: Parameters<typeof logSignIn>[0], fields: Parameters<typeof logSignIn>[1]): Promise<null> => {
+    logSignIn(outcome, fields);
+    await spendPasswordCheck(password);
+    return null;
+  };
+
   let user;
 
   if (portal === "customer") {
     // A clinic's own app: the clinic is part of the identity, because the same
     // address may be a client of several clinics.
     if (!tenantSlug) {
-      logSignIn("invalid_portal", at);
-      return null;
+      return refuse("invalid_portal", at);
     }
     const tenant = await rawDb.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true, status: true } });
     if (!tenant || tenant.status !== "ACTIVE") {
-      logSignIn("clinic_not_active", at);
-      return null;
+      return refuse("clinic_not_active", at);
     }
     user = await rawDb.user.findFirst({ where: { email, tenantId: tenant.id, role: "CUSTOMER" }, include });
   } else {
@@ -162,8 +178,7 @@ export async function authorizeCredentials(
       // Two accounts of the same kind on one address — the same person owning
       // two clinics, say. There is no way to tell which was meant, and picking
       // one would be a security bug.
-      logSignIn("ambiguous_email", { ...at, roles: chosen.ambiguous });
-      return null;
+      return refuse("ambiguous_email", { ...at, roles: chosen.ambiguous });
     }
     if ("none" in chosen) {
       // One extra count, on the failure path only, to tell "no such address"
@@ -171,31 +186,26 @@ export async function authorizeCredentials(
       // clinic owner typing their address into the admin login looks like, and
       // the two are indistinguishable from the outside on purpose.
       const elsewhere = await rawDb.user.count({ where: { email } });
-      logSignIn(elsewhere > 0 ? "no_account_of_type" : "no_such_user", at);
-      return null;
+      return refuse(elsewhere > 0 ? "no_account_of_type" : "no_such_user", at);
     }
 
     const match = chosen.account;
     // A suspended clinic must not be reachable through this door.
     if (match.tenant && match.tenant.status !== "ACTIVE") {
-      logSignIn("clinic_not_active", { ...at, role: match.role });
-      return null;
+      return refuse("clinic_not_active", { ...at, role: match.role });
     }
     user = match;
   }
 
   if (!user) {
-    logSignIn("no_such_user", at);
-    return null;
+    return refuse("no_such_user", at);
   }
   if (user.status !== "ACTIVE") {
-    logSignIn("account_not_active", { ...at, role: user.role });
-    return null;
+    return refuse("account_not_active", { ...at, role: user.role });
   }
   // Deactivated staff, or a staff login with no profile, cannot sign in.
   if (user.role === "STAFF" && (!user.staffProfile || !user.staffProfile.active)) {
-    logSignIn("staff_blocked", { ...at, role: user.role });
-    return null;
+    return refuse("staff_blocked", { ...at, role: user.role });
   }
   if (!(await verifyPassword(password, user.passwordHash))) {
     logSignIn("wrong_password", { ...at, role: user.role });
