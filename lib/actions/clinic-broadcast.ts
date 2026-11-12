@@ -4,14 +4,17 @@ import { z } from "zod";
 import { rawDb } from "@/lib/db";
 import { ActionError, requireMerchantAction, runAction, type ActionResult } from "@/lib/merchant-action";
 import { rateLimit } from "@/lib/rate-limit";
-import { sendToClinicClients, vapidConfigured } from "@/lib/web-push";
+import { vapidConfigured } from "@/lib/web-push";
+import { marketingAudience, sendMarketingCampaign } from "@/lib/marketing";
+import { describeOutcome } from "@/lib/campaign-send";
 
 /**
  * A clinic sending one notification to its own clients' devices.
  *
  * "Its own" is not a filter the caller passes: the tenant comes from the
- * session, and the send reads subscriptions by that tenant id, so there is no
- * argument a clinic could change to reach someone else's clients.
+ * session, and the audience is read by that tenant id, so there is no
+ * argument a clinic could change to reach someone else's clients. And "its
+ * clients" means the ones who asked for offers — see the send below.
  *
  * Rate limited per clinic rather than per user — the limit protects clients
  * from being messaged twenty times in an afternoon, and staff share it.
@@ -60,20 +63,32 @@ export async function sendClinicBroadcastAction(merchantId: string, fd: FormData
       path = `/shop?product=${encodeURIComponent(product.id)}`;
     }
 
-    const result = await sendToClinicClients(merchantId, {
-      title: input.title,
-      body: input.body,
-      // Clinic-relative: lib/web-push.ts adds each device’s own prefix.
-      url: path,
-      icon: "/app-icon/192.png",
+    // A message a clinic writes to all its clients is marketing, so it goes
+    // the way all marketing goes (lib/marketing.ts): only to clients who have
+    // offers switched on, only inside the clinic's sending hours, and within
+    // the daily limit. It used to go straight to every device the clinic had,
+    // whatever its owner had chosen and whatever the hour
+    // (docs/security/review-2026-11.md, N-1).
+    const audience = await marketingAudience(merchantId);
+    const result = await sendMarketingCampaign(merchantId, audience, {
+      tenantId: merchantId,
+      // Clinic-relative: lib/web-push.ts adds each device's own prefix.
+      message: { title: input.title, body: input.body, url: path, icon: "/app-icon/192.png" },
     });
 
     await ctx.audit("notifications.broadcast", "Tenant", merchantId, {
       title: input.title,
-      devices: result.sent,
-      removed: result.removed,
+      devices: result.devices,
+      clients: result.clients,
+      skipped: result.skipped,
     });
 
-    return { devices: result.sent };
+    // Nobody got it: say why, rather than "sent to 0 devices".
+    if (result.clients === 0) {
+      const why = describeOutcome(result.skipped);
+      throw new ActionError(why ? `Nobody was sent this. ${why}.` : "Nobody was sent this: no client has both offers and notifications turned on.");
+    }
+
+    return { devices: result.devices };
   });
 }

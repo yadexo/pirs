@@ -92,7 +92,7 @@ export function usePush() {
   }, [read]);
 
   const enable = React.useCallback(
-    async (surface: TapSurface = "SETTINGS"): Promise<EnableResult> => {
+    async (surface: TapSurface = "SETTINGS", offers?: boolean): Promise<EnableResult> => {
       setBusy(true);
       setMessage(null);
       try {
@@ -115,7 +115,9 @@ export function usePush() {
           }));
 
         const json = subscription.toJSON() as { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
-        const res = await post("subscribe", { endpoint: json.endpoint, keys: json.keys, surface });
+        // `offers` is sent only when the prompt showed its box and it was
+        // ticked. Turning notifications on says nothing about offers.
+        const res = await post("subscribe", { endpoint: json.endpoint, keys: json.keys, surface, ...(offers === true ? { offers: true } : {}) });
         if (!res.ok) {
           setMessage(res.error ?? t("failed"));
           return "error";
@@ -186,6 +188,9 @@ export function NotificationPrompt({ merchantSlug, clinicName, history }: { merc
   // The device just said no to the prompt we put up: say how to undo it, in place.
   const [blockedOn, setBlockedOn] = React.useState<"sheet" | "card" | null>(null);
   const [sheetReady, setSheetReady] = React.useState(false);
+  // Unticked until they tick it. Offers are a separate question from
+  // notifications and get a separate answer.
+  const [wantsOffers, setWantsOffers] = React.useState(false);
   const reported = React.useRef(new Set<string>());
 
   React.useEffect(() => {
@@ -228,7 +233,7 @@ export function NotificationPrompt({ merchantSlug, clinicName, history }: { merc
   };
 
   const turnOn = async (on: "sheet" | "card") => {
-    const result = await enable(on === "sheet" ? "SHEET" : "CARD");
+    const result = await enable(on === "sheet" ? "SHEET" : "CARD", !history.offersDecided && wantsOffers);
     if (result === "denied") {
       report("BLOCKED", on, stage);
       setBlockedOn(on);
@@ -240,7 +245,16 @@ export function NotificationPrompt({ merchantSlug, clinicName, history }: { merc
     setClosed(true);
   };
 
-  const offers = history.offersDecided ? t("offersDecided") : t("offersDefault");
+  // Someone who has already chosen in Settings is told their choice stands.
+  // Anyone else is asked, here, on its own line — never assumed.
+  const offers = history.offersDecided ? (
+    <span>{t("offersDecided")}</span>
+  ) : (
+    <label className="ca-push-offers">
+      <input type="checkbox" checked={wantsOffers} onChange={(event) => setWantsOffers(event.target.checked)} disabled={busy} />
+      <span>{t("offersAsk", { name: clinicName })}</span>
+    </label>
+  );
 
   // --- the sheet -----------------------------------------------------------
   if (blockedOn === "sheet" || (surface === "sheet" && !blockedOn)) {
@@ -272,7 +286,7 @@ export function NotificationPrompt({ merchantSlug, clinicName, history }: { merc
             <Icon name="bell" size={28} />
           </span>
           <p className="ca-pushsheet-body">{blocked ? t("deniedSteps") : t("sheetBody", { name: clinicName })}</p>
-          {!blocked && <p className="ca-pushsheet-note">{offers}</p>}
+          {!blocked && <div className="ca-pushsheet-note">{offers}</div>}
           {message && (
             <p className="ca-pushsheet-note" role="alert">
               {message}
@@ -294,7 +308,8 @@ export function NotificationPrompt({ merchantSlug, clinicName, history }: { merc
       <div className="ca-pushcard" role="region" aria-label={title}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p className="ca-pushcard-title">{title}</p>
-          <p className="ca-pushcard-body">{help ? t("deniedSteps") : `${t("sheetBody", { name: clinicName })} ${offers}`}</p>
+          <p className="ca-pushcard-body">{help ? t("deniedSteps") : t("sheetBody", { name: clinicName })}</p>
+          {!help && <div className="ca-pushcard-body">{offers}</div>}
           {message && (
             <p className="ca-pushcard-body" role="alert">
               {message}

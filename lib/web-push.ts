@@ -142,12 +142,6 @@ export async function sendToClient(userId: string, message: PushMessage, send?: 
   return deliver(subscriptions, message, send);
 }
 
-/** Every device belonging to every client of one clinic. */
-export async function sendToClinicClients(tenantId: string, message: PushMessage, send?: Sender): Promise<PushOutcome> {
-  const subscriptions = await rawDb.pushSubscription.findMany({ where: { tenantId }, select: SELECT });
-  return deliver(subscriptions, message, send);
-}
-
 /**
  * For callers that must not fail because a notification did: the Stripe
  * webhook above all, where an exception would make Stripe retry an event that

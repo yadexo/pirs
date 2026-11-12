@@ -30,6 +30,8 @@ const subscribe = z.object({
   keys: z.object({ p256dh: z.string().min(1).max(500), auth: z.string().min(1).max(500) }),
   /** Where the client tapped, for the clinic's tally. Not trusted for anything else. */
   surface: z.enum(["SHEET", "CARD", "SETTINGS"]).optional(),
+  /** The "also send me offers" box, when the prompt showed one and it was ticked. */
+  offers: z.boolean().optional(),
 });
 const unsubscribe = z.object({ action: z.literal("unsubscribe"), endpoint: z.string().url().max(2000) });
 const test = z.object({ action: z.literal("test") });
@@ -155,21 +157,22 @@ export async function POST(req: Request) {
     });
   }
 
-  // Turning notifications on means saying yes to what the app said it would
-  // send: the order and appointment updates, and the clinic's offers. But a
-  // client who has ever switched offers off themselves keeps that choice —
-  // `marketingConsentChosenAt` is set only by their own decisions, so this
-  // can never undo one, however many times they toggle notifications.
-  await rawDb.customerProfile.updateMany({
-    where: { id: user.customerProfileId!, marketingConsentChosenAt: null },
-    data: {
-      pushConsent: true,
-      marketingConsent: true,
-      marketingConsentChosenAt: new Date(),
-      marketingConsentSource: "push-opt-in",
-    },
-  });
-  // Push itself is on either way: it is what they just agreed to.
+  // Turning notifications on is consent to notifications, and to nothing
+  // else. It used to switch offers and promotions on as well, for anyone who
+  // had not decided — agreeing to order updates was recorded as agreeing to
+  // marketing, which is not something consent can be bundled into
+  // (docs/security/review-2026-11.md, N-2).
+  //
+  // Offers are asked for on their own: a box on the prompt, unticked. Only a
+  // tick is written. Leaving it alone decides nothing, and a choice already
+  // made in Settings is never touched from here.
+  if (input.offers === true) {
+    await rawDb.customerProfile.updateMany({
+      where: { id: user.customerProfileId!, marketingConsentChosenAt: null },
+      data: { marketingConsent: true, marketingConsentChosenAt: new Date(), marketingConsentSource: "notifications-prompt" },
+    });
+  }
+  // Push itself is on: it is what they just agreed to.
   await rawDb.customerProfile.updateMany({ where: { id: user.customerProfileId! }, data: { pushConsent: true } });
 
   // Confirms on the device itself that it works — and iOS wants the first

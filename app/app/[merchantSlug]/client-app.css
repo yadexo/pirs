@@ -4616,3 +4616,24 @@
   display: flex;
   justify-content: center;
 }
+
+/* The "also send me offers" box on the notifications prompt. A real checkbox
+   with its label, big enough to hit: consent has to be a thing someone did. */
+.ca-push-offers {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink);
+  cursor: pointer;
+}
+.ca-push-offers input {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--black);
+}

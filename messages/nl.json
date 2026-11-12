@@ -661,8 +661,8 @@
     },
     "notifications": {
       "sheetTitle": "Blijf op de hoogte",
-      "sheetBody": "Updates over je bestellingen en afspraken, plus aanbiedingen en nieuws van {name}.",
-      "offersDefault": "Aanbiedingen en nieuws staan standaard aan. Je kunt ze altijd uitzetten in Instellingen.",
+      "sheetBody": "Updates over je bestellingen en afspraken van {name}.",
+      "offersAsk": "Stuur me ook aanbiedingen en nieuws van {name}",
       "offersDecided": "Aanbiedingen en nieuws volgen de keuze die je in Instellingen hebt gemaakt.",
       "turnOn": "Zet aan",
       "notNow": "Niet nu",

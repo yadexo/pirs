@@ -1578,6 +1578,10 @@ export async function clientDeleteAccountAction(slug: string): Promise<{ ok: tru
   // Disabled accounts are refused on every request; sessionsValidAfter keeps
   // sessions from before the closure dead even if the account is reopened.
   await rawDb.user.update({ where: { id: user.id }, data: { status: "DISABLED", sessionsValidAfter: new Date() } });
+  // And their devices. A push subscription outlives a session — it is the
+  // phone's own address — so leaving it would keep reaching someone who asked
+  // to be forgotten, long after they could sign in to say stop.
+  await rawDb.pushSubscription.deleteMany({ where: { userId: user.id } });
 
   await writeAuditLog({
     tenantId: user.tenantId,

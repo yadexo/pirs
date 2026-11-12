@@ -59,12 +59,12 @@ describe("the notifications prompt, on the server", () => {
     });
   }
 
-  const subscribe = (endpoint: string, surface?: string) =>
+  const subscribe = (endpoint: string, surface?: string, extra: Record<string, unknown> = {}) =>
     route.POST(
       new Request("http://localhost/api/push", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-forwarded-for": `10.9.${Math.floor(Math.random() * 250)}.1` },
-        body: JSON.stringify({ action: "subscribe", endpoint, keys: { p256dh: "p", auth: "a" }, ...(surface ? { surface } : {}) }),
+        body: JSON.stringify({ action: "subscribe", endpoint, keys: { p256dh: "p", auth: "a" }, ...(surface ? { surface } : {}), ...extra }),
       }),
     );
 
@@ -214,15 +214,41 @@ describe("the notifications prompt, on the server", () => {
       expect(row.surface).toBe("SETTINGS");
     });
 
-    it("opts a client who never decided into offers, and says where that came from", async () => {
+    it("turning notifications on is not consent to offers", async () => {
+      // docs/security/review-2026-11.md, N-2. This used to switch offers on
+      // for anyone who had not decided, recorded as "push-opt-in".
       const c = await newClient(tenantId, "consent-new");
       actAs(c);
       await subscribe(`https://push.example.test/${stamp}/consent-new`, "SHEET");
-      expect(await rawDb.customerProfile.findUniqueOrThrow({ where: { id: c.profileId } })).toMatchObject({
-        pushConsent: true,
-        marketingConsent: true,
-        marketingConsentSource: "push-opt-in",
+      const after = await rawDb.customerProfile.findUniqueOrThrow({ where: { id: c.profileId } });
+      expect(after).toMatchObject({ pushConsent: true, marketingConsent: false, marketingConsentSource: null });
+      // Nothing was decided, so they can still be asked.
+      expect(after.marketingConsentChosenAt).toBeNull();
+    });
+
+    it("offers are switched on only by the box on the prompt, ticked", async () => {
+      const ticked = await newClient(tenantId, "consent-ticked");
+      actAs(ticked);
+      await subscribe(`https://push.example.test/${stamp}/consent-ticked`, "SHEET", { offers: true });
+      const after = await rawDb.customerProfile.findUniqueOrThrow({ where: { id: ticked.profileId } });
+      expect(after).toMatchObject({ pushConsent: true, marketingConsent: true, marketingConsentSource: "notifications-prompt" });
+      expect(after.marketingConsentChosenAt).not.toBeNull();
+
+      // An unticked box is not a decision either way.
+      const unticked = await newClient(tenantId, "consent-unticked");
+      actAs(unticked);
+      await subscribe(`https://push.example.test/${stamp}/consent-unticked`, "CARD", { offers: false });
+      expect(await rawDb.customerProfile.findUniqueOrThrow({ where: { id: unticked.profileId } })).toMatchObject({
+        marketingConsent: false,
+        marketingConsentChosenAt: null,
       });
+
+      // And anything that is not a boolean is not a tick.
+      const odd = await newClient(tenantId, "consent-odd");
+      actAs(odd);
+      const res = await subscribe(`https://push.example.test/${stamp}/consent-odd`, "SHEET", { offers: "true" });
+      expect(res.status).toBe(400);
+      expect((await rawDb.customerProfile.findUniqueOrThrow({ where: { id: odd.profileId } })).marketingConsent).toBe(false);
     });
 
     it("never undoes a no the client once gave to offers", async () => {
@@ -233,7 +259,8 @@ describe("the notifications prompt, on the server", () => {
         marketingConsentSource: "preferences",
       });
       actAs(c);
-      await subscribe(`https://push.example.test/${stamp}/consent-no`, "SHEET");
+      // Even with the box ticked: a choice made in Settings is never overridden from the prompt.
+      await subscribe(`https://push.example.test/${stamp}/consent-no`, "SHEET", { offers: true });
 
       const after = await rawDb.customerProfile.findUniqueOrThrow({ where: { id: c.profileId } });
       // Push is on — that is what they just agreed to — but offers stay off.

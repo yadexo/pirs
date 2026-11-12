@@ -661,8 +661,8 @@
     },
     "notifications": {
       "sheetTitle": "Stay in the loop",
-      "sheetBody": "Order and appointment updates, plus offers and news from {name}.",
-      "offersDefault": "Offers and news are included. You can switch them off any time in Settings.",
+      "sheetBody": "Order and appointment updates from {name}.",
+      "offersAsk": "Also send me offers and news from {name}",
       "offersDecided": "Offers and news follow the choice you made in Settings.",
       "turnOn": "Turn on",
       "notNow": "Not now",
