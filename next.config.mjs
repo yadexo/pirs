@@ -22,11 +22,18 @@ const nextConfig = {
   eslint: {
     dirs: ["app", "components", "lib", "prisma", "server", "tests"],
   },
+  // Nothing in this app uses next/image: every picture is a plain <img> of a
+  // file we already resized on upload (lib/image-pipeline.ts). The optimiser
+  // endpoint exists regardless, and it used to accept any https host on the
+  // internet — an open image proxy that anyone could bill to this project,
+  // and the endpoint named in a critical Next.js advisory
+  // (docs/security/review-2026-11.md, I-1 and D-1). Both lists are empty on
+  // purpose: no remote host and no local path, so every request to
+  // /_next/image is refused. If next/image is ever adopted, name the one
+  // storage host here — never a wildcard.
   images: {
-    remotePatterns: [
-      { protocol: "http", hostname: "localhost" },
-      { protocol: "https", hostname: "**" },
-    ],
+    remotePatterns: [],
+    localPatterns: [],
   },
   async headers() {
     return [
