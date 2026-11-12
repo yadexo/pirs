@@ -31,6 +31,23 @@ export async function rateLimit(
 }
 
 /**
+ * Whether a counter has already reached its limit, without counting this look.
+ *
+ * For a limit that should only be spent by one kind of outcome — wrong
+ * guesses, say — where the caller has to know it is exhausted before it knows
+ * what the outcome will be. A missing or expired counter is not exhausted.
+ */
+export async function rateLimitExhausted(key: string, limit: number): Promise<{ exhausted: boolean; retryAfterMs: number }> {
+  const rows = await rawDb.$queryRaw<{ count: number; resetAt: Date; now: Date }[]>`
+    SELECT "count", "resetAt", NOW() AS now FROM "RateLimitBucket" WHERE "key" = ${key}
+  `;
+  const row = rows[0];
+  // The database's clock on both sides, the same one that set the window.
+  if (!row || row.resetAt.getTime() <= row.now.getTime()) return { exhausted: false, retryAfterMs: 0 };
+  return { exhausted: Number(row.count) >= limit, retryAfterMs: Math.max(0, row.resetAt.getTime() - row.now.getTime()) };
+}
+
+/**
  * The pieces of a "try again in …" message — not the message itself, so the
  * caller can translate it. Rounds up: 1ms left is still "1 minute" or
  * "1 second" away, never "0".

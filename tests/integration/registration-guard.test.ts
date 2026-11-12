@@ -22,7 +22,7 @@ vi.mock("next-intl/server", async () => {
   };
 });
 
-const { guardRegistration, CODE_ATTEMPTS_PER_EMAIL, CODE_ATTEMPTS_PER_IP } = await import("@/lib/registration-guard");
+const { guardRegistration, CODE_ATTEMPTS_PER_EMAIL, CODE_ATTEMPTS_PER_IP, WRONG_CODES_PER_HOUR_EVERYONE } = await import("@/lib/registration-guard");
 
 const CODE = "081946";
 const form = (fields: Record<string, string>) => {
@@ -135,5 +135,45 @@ describe("the registration gate", () => {
     const { result } = await run("admin", { code: CODE });
     expect(result).toBeNull();
     expect(await rawDb.rateLimitBucket.count({ where: { key: "register-code:email:" } })).toBe(0);
+  });
+
+  describe("wrong codes from everyone put together", () => {
+    /** A different address and a different email every time: neither of the other limits ever trips. */
+    const guessFromSomewhereNew = async (i: number, code: string) => {
+      ip = `198.51.100.${(i % 250) + 1}`;
+      return run("admin", { email: `guess-${i}-${stamp}@example.com`, code });
+    };
+
+    it("pauses registration once enough have been tried, however many addresses they came from", async () => {
+      for (let i = 0; i < WRONG_CODES_PER_HOUR_EVERYONE; i++) {
+        const { lines } = await guessFromSomewhereNew(i, "000000");
+        expect(lines).toEqual(["[register] outcome=code_wrong portal=admin"]);
+      }
+      const next = await guessFromSomewhereNew(999, "000001");
+      expect(next.result).toHaveProperty("error");
+      expect(next.lines).toEqual(["[register] outcome=rate_limited_everyone portal=admin"]);
+    });
+
+    it("refuses the right code too while it is paused — or the limit would only slow the wrong ones", async () => {
+      for (let i = 0; i < WRONG_CODES_PER_HOUR_EVERYONE; i++) await guessFromSomewhereNew(i, "000000");
+      const right = await guessFromSomewhereNew(1000, CODE);
+      expect(right.result).toHaveProperty("error");
+      expect(right.lines).toEqual(["[register] outcome=rate_limited_everyone portal=admin"]);
+    });
+
+    it("is not spent by right codes, or by forms sent with no code at all", async () => {
+      for (let i = 0; i < WRONG_CODES_PER_HOUR_EVERYONE + 5; i++) {
+        expect((await guessFromSomewhereNew(i, CODE)).result).toBeNull();
+        await guessFromSomewhereNew(5000 + i, "");
+      }
+      expect(await rawDb.rateLimitBucket.count({ where: { key: "register-code:wrong:everyone" } })).toBe(0);
+    });
+
+    it("opens again when the hour is up", async () => {
+      for (let i = 0; i < WRONG_CODES_PER_HOUR_EVERYONE; i++) await guessFromSomewhereNew(i, "000000");
+      expect((await guessFromSomewhereNew(2000, CODE)).result).toHaveProperty("error");
+      await rawDb.rateLimitBucket.updateMany({ where: { key: "register-code:wrong:everyone" }, data: { resetAt: new Date(Date.now() - 1000) } });
+      expect((await guessFromSomewhereNew(2001, CODE)).result).toBeNull();
+    });
   });
 });

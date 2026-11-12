@@ -141,6 +141,8 @@ export type RegisterOutcome =
   | "code_wrong"
   | "rate_limited_ip"
   | "rate_limited_email"
+  /** Too many wrong codes from everyone put together: registration is paused. */
+  | "rate_limited_everyone"
   /** An account of this kind already exists on the address. */
   | "email_taken"
   | "invalid_input";

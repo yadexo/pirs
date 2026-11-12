@@ -4,8 +4,23 @@ Self-registration — the clinic register page and the admin register page — i
 closed unless one environment variable is set:
 
 ```
-REGISTRATION_CODE=081946
+REGISTRATION_CODE=<long random value — openssl rand -base64 24>
 ```
+
+**Never a short number.** This code creates platform admins, who can open
+every clinic. An earlier version of this page showed a six-digit example; if
+any environment still uses that value, or any six-digit value, replace it —
+it has been in the repository, and a million possibilities is not a secret.
+
+**Leave it unset in production** except while you are actually letting
+someone in. Unset, both pages 404 and invitations still work.
+
+There are three limits on guessing: 10 attempts an hour per address, 5 per
+email address, and 20 wrong codes an hour from everyone put together. The
+last one pauses registration for everybody, including people with the right
+code, until the hour is up — if a real person is refused with "too many
+attempts" without having tried, someone is guessing, and the logs will show
+`[register] outcome=rate_limited_everyone`.
 
 Whoever has been told the code can create a clinic (with its owner) or a
 platform admin. That is all it says. It is one shared secret: it does not

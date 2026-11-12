@@ -1,6 +1,6 @@
 import "server-only";
 import { getTranslations } from "next-intl/server";
-import { rateLimit, retryAfterParts } from "@/lib/rate-limit";
+import { rateLimit, rateLimitExhausted, retryAfterParts } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request-ip";
 import { registrationCodeMatches, registrationEnabled } from "@/lib/registration-code";
 import { logRegister } from "@/lib/signin-log";
@@ -30,6 +30,27 @@ export const CODE_ATTEMPTS_PER_IP = 10;
 export const CODE_ATTEMPTS_PER_EMAIL = 5;
 export const CODE_WINDOW_MS = 60 * 60 * 1000;
 
+/**
+ * Wrong codes from everyone put together, per hour, before registration
+ * pauses for everyone.
+ *
+ * The two limits above both key on something the attacker chooses. The email
+ * address is theirs to vary, and addresses to send from are cheap, so neither
+ * slows a patient guesser — and what is being guessed is a code that creates
+ * a platform admin (docs/security/review-2026-11.md, A-2). This one keys on
+ * nothing: it counts wrong codes, whoever sent them.
+ *
+ * At this rate a six-digit code takes, on average, over two years to find;
+ * unlimited, a rented botnet does it in an afternoon.
+ *
+ * The cost is that anyone can pause registration for an hour by guessing
+ * wrong on purpose. That is the right way round: registration is a temporary
+ * door for a handful of invited people, invitations do not use it, and a door
+ * that closes under attack is better than one that can be picked.
+ */
+export const WRONG_CODES_PER_HOUR_EVERYONE = 20;
+const EVERYONE_KEY = "register-code:wrong:everyone";
+
 /** The email as a rate-limit key: whatever was typed, normalised and bounded. */
 function limitKeyEmail(fd: FormData): string {
   return String(fd.get("email") ?? "")
@@ -57,6 +78,17 @@ export async function guardRegistration(kind: RegistrationKind, fd: FormData): P
     return { error: t("closed") };
   }
 
+  // Before anything else, and without counting: a right code is refused too
+  // while this is tripped, or the limit would only slow down the wrong ones.
+  const everyone = await rateLimitExhausted(EVERYONE_KEY, WRONG_CODES_PER_HOUR_EVERYONE);
+  if (everyone.exhausted) {
+    logRegister("rate_limited_everyone", at);
+    const auth = await getTranslations("auth");
+    const { unit, count } = retryAfterParts(everyone.retryAfterMs);
+    const time = unit === "minute" ? auth("retryAfter.minutes", { count }) : auth("retryAfter.seconds", { count });
+    return { error: auth("tooManyAttempts", { time }) };
+  }
+
   const ip = await clientIp();
   const email = limitKeyEmail(fd);
   // Both counters are consumed before the code is compared, so a guess always
@@ -81,6 +113,9 @@ export async function guardRegistration(kind: RegistrationKind, fd: FormData): P
     return { error: t("invalidCode") };
   }
   if (!registrationCodeMatches(given)) {
+    // Only a wrong code spends the shared allowance; a missing one is a form
+    // submitted empty, not a guess.
+    await rateLimit(EVERYONE_KEY, WRONG_CODES_PER_HOUR_EVERYONE, CODE_WINDOW_MS);
     logRegister("code_wrong", at);
     return { error: t("invalidCode") };
   }
