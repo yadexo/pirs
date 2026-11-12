@@ -11,8 +11,17 @@ import { rawDb } from "./db";
  * BasketItem, MembershipBenefit, PromotionEligibility, RolePermission,
  * StaffLocation, StaffService) are intentionally excluded — they must always
  * be reached through their tenant-scoped parent relation.
+ *
+ * This list is an allowlist, which fails in the dangerous direction: a model
+ * left off it is not an error anywhere, it is simply read across every clinic
+ * by code that believes it is scoped. RedeemableItem was left off, and each
+ * clinic's Shop page showed the last 25 collections on the whole platform —
+ * other clinics' client names, notes and staff
+ * (docs/security/review-2026-11.md, T-1). So the list is no longer trusted to
+ * be kept by hand: tests/tenant-scoped-models.test.ts reads schema.prisma and
+ * fails for any model that has a tenantId column and is not here.
  */
-const TENANT_SCOPED_MODELS = new Set([
+export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set([
   "TenantBranding",
   "TenantSettings",
   "Location",
@@ -58,6 +67,12 @@ const TENANT_SCOPED_MODELS = new Set([
   "ActivityEvent",
   "NotificationDelivery",
   "AuditLog",
+  "RedeemableItem",
+  "PriceHistory",
+  "PackageSessionUse",
+  "MembershipPriceChange",
+  "BirthdayGreeting",
+  "ClinicDomain",
 ]);
 
 const READ_FILTER_OPS = new Set([

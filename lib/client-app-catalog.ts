@@ -120,7 +120,10 @@ export async function getCatalog(db: TenantDb, params: { tenantId: string; custo
     // Paid orders only: an abandoned basket is not a sale, and "Popular" is a
     // claim about what other clients actually bought.
     db.orderItem.findMany({
-      where: { order: { status: "PAID", paidAt: { gte: popularSince } } },
+      // OrderItem has no tenantId of its own, so the scoped client cannot add
+      // one: a filter through the relation has to name the clinic itself, or
+      // this reads every clinic's paid lines on every shop render.
+      where: { order: { tenantId: params.tenantId, status: "PAID", paidAt: { gte: popularSince } } },
       select: { serviceId: true, productId: true, quantity: true },
     }),
     // The whole history, not just the window: the price in force when the
