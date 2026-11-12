@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
+import { ENROLLED } from "../helpers/enrolled";
 
 const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
 vi.mock("@/auth", () => authMock);
@@ -54,7 +55,7 @@ describe("a clinic's own domain", () => {
     otherClinicId = (await rawDb.tenant.create({ data: { slug: `cd-other-${stamp}`, name: "Other Domain Clinic" } })).id;
     adminId = (await rawDb.user.create({ data: { email: `cd-admin-${stamp}@x.com`, passwordHash: "x", role: "PLATFORM_ADMIN" } })).id;
     await rawDb.twoFactorSecret.create({ data: { userId: adminId, secret: "AAAAAAAAAAAAAAAA", confirmedAt: new Date() } });
-    ownerId = (await rawDb.user.create({ data: { tenantId: clinicId, email: `cd-owner-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } })).id;
+    ownerId = (await rawDb.user.create({ data: { tenantId: clinicId, email: `cd-owner-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } })).id;
   });
 
   afterAll(async () => {

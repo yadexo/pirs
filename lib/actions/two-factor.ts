@@ -27,7 +27,7 @@ function actorTypeFor(role: string): "PLATFORM_ADMIN" | "STAFF" {
  * that's already confirmed; disabling that is a separate, explicit action.
  */
 export async function startTwoFactorSetupAction(): Promise<{ secret: string; otpauthUri: string; qrSvg: string } | { error: string }> {
-  const user = await requireSession("staff");
+  const user = await requireSession("staff", { beforeTwoFactor: true });
   const t = await getTranslations("twoFactor.errors");
   if (user.role === "CUSTOMER") return { error: t("notAvailableForAccount") };
 
@@ -47,7 +47,7 @@ export async function startTwoFactorSetupAction(): Promise<{ secret: string; otp
  * shown to the client exactly once, by the page that called this.
  */
 export async function confirmTwoFactorSetupAction(code: string): Promise<{ backupCodes: string[] } | { error: string }> {
-  const user = await requireSession("staff");
+  const user = await requireSession("staff", { beforeTwoFactor: true });
   const t = await getTranslations("twoFactor.errors");
   const row = await rawDb.twoFactorSecret.findUnique({ where: { userId: user.id } });
   if (!row) return { error: t("startSetupFirst") };

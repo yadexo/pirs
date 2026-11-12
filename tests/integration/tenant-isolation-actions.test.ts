@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
+import { ENROLLED } from "../helpers/enrolled";
 
 /**
  * tests/integration/tenant-isolation.test.ts already proves the data layer
@@ -66,7 +67,7 @@ describe("tenant isolation through server actions", () => {
     tenantA = await rawDb.tenant.create({ data: { slug: `iso-a-${stamp}`, name: "Isolation Tenant A", status: "ACTIVE" } });
     tenantB = await rawDb.tenant.create({ data: { slug: `iso-b-${stamp}`, name: "Isolation Tenant B", status: "ACTIVE" } });
 
-    const ownerA = await rawDb.user.create({ data: { tenantId: tenantA.id, email: `owner-a-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } });
+    const ownerA = await rawDb.user.create({ data: { tenantId: tenantA.id, email: `owner-a-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } });
     const staffProfileA = await rawDb.staffProfile.create({ data: { tenantId: tenantA.id, userId: ownerA.id, firstName: "A", lastName: "Owner", active: true } });
     staffA = { id: ownerA.id, staffProfileId: staffProfileA.id };
 
@@ -76,7 +77,7 @@ describe("tenant isolation through server actions", () => {
     });
     customerB = { id: profileB.id, userId: userB.id };
 
-    const ownerB = await rawDb.user.create({ data: { tenantId: tenantB.id, email: `owner-b-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } });
+    const ownerB = await rawDb.user.create({ data: { tenantId: tenantB.id, email: `owner-b-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } });
     const staffProfB = await rawDb.staffProfile.create({ data: { tenantId: tenantB.id, userId: ownerB.id, firstName: "B", lastName: "Owner", active: true } });
     staffProfileB = { id: staffProfB.id };
 

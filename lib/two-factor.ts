@@ -61,3 +61,23 @@ export async function disableTwoFactor(userId: string): Promise<void> {
     rawDb.twoFactorSecret.deleteMany({ where: { userId } }),
   ]);
 }
+
+export const TWO_FACTOR_FIRST = "Set up two-factor authentication first.";
+
+/**
+ * Whether this account has to finish setting up two-factor before it may do
+ * anything else.
+ *
+ * Owners and platform admins must have a second factor. They get a session on
+ * a password alone exactly once — to reach the setup page — and until setup is
+ * confirmed that session is good for nothing but setup.
+ *
+ * That used to be enforced by the pages, which redirect to setup, and not by
+ * the actions behind them: an account that had never enrolled was bounced
+ * from every screen and could still call every action directly, with client
+ * data coming back (docs/security/review-2026-11.md, A-1). A hidden button is
+ * not a refusal, so the refusal lives here, under every guard.
+ */
+export function mustSetUpTwoFactorFirst(account: { role: string; twoFactorConfirmed: boolean }): boolean {
+  return twoFactorRequiredForRole(account.role) && !account.twoFactorConfirmed;
+}

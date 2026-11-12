@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
+import { ENROLLED } from "../helpers/enrolled";
 
 const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
 vi.mock("@/auth", () => authMock);
@@ -74,7 +75,7 @@ describe("removing an offer", () => {
     process.env.AUTH_SECRET ??= "test-secret";
     clinic = (await rawDb.tenant.create({ data: { slug: `offer-${stamp}`, name: "Offer Clinic" } })).id;
 
-    const su = await rawDb.user.create({ data: { tenantId: clinic, email: `s-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } });
+    const su = await rawDb.user.create({ data: { tenantId: clinic, email: `s-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } });
     staffUserId = su.id;
     staffProfileId = (await rawDb.staffProfile.create({ data: { tenantId: clinic, userId: su.id, firstName: "Sam", lastName: "Staff" } })).id;
 

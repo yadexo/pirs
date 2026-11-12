@@ -1,5 +1,5 @@
 import "server-only";
-import { requireRole, ForbiddenError, UnauthorizedError } from "@/lib/rbac";
+import { requireRole, ForbiddenError, TwoFactorRequiredError, TWO_FACTOR_FIRST, UnauthorizedError } from "@/lib/rbac";
 import { ActionError } from "@/lib/action-error";
 import { getImpersonatedMerchantId } from "@/lib/actions/impersonation";
 
@@ -29,10 +29,13 @@ export async function requirePlatformAdminAction() {
     // ForbiddenError/UnauthorizedError would otherwise be logged as an
     // unexpected failure and hidden behind a generic message, which a normal
     // permission refusal never should be.
+    // requireRole refuses an admin who has not set up two-factor (lib/rbac.ts);
+    // that one keeps its own message, because it tells them what to do.
+    if (err instanceof TwoFactorRequiredError) throw new ActionError(TWO_FACTOR_FIRST);
     if (err instanceof ForbiddenError || err instanceof UnauthorizedError) throw new ActionError("Not permitted.");
     throw err;
   }
   if (await getImpersonatedMerchantId()) throw new ActionError("Not available while impersonating.");
-  if (!user.twoFactorConfirmed) throw new ActionError("Set up two-factor authentication first.");
+  if (!user.twoFactorConfirmed) throw new ActionError(TWO_FACTOR_FIRST);
   return user;
 }

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vites
 import type Stripe from "stripe";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
+import { ENROLLED } from "../helpers/enrolled";
 
 const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
 const clientAuthMock = vi.hoisted(() => ({ clientAuth: vi.fn(), clientSignIn: vi.fn(), clientSignOut: vi.fn() }));
@@ -78,7 +79,7 @@ describe("client payments on the clinic's Stripe account", () => {
     clientUserId = cu.id;
     clientProfileId = (await rawDb.customerProfile.create({ data: { tenantId: clinic, userId: cu.id, firstName: "Cara", lastName: "Client" } })).id;
 
-    const su = await rawDb.user.create({ data: { tenantId: clinic, email: `s-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } });
+    const su = await rawDb.user.create({ data: { tenantId: clinic, email: `s-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } });
     staffUserId = su.id;
     staffProfileId = (await rawDb.staffProfile.create({ data: { tenantId: clinic, userId: su.id, firstName: "Sam", lastName: "Staff" } })).id;
 

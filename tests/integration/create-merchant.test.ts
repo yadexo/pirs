@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
+import { ENROLLED } from "../helpers/enrolled";
 
 const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
 vi.mock("@/auth", () => authMock);
@@ -23,7 +24,7 @@ describe("createMerchantAction", () => {
 
   async function asPlatformAdmin() {
     if (!platformAdminId) {
-      const u = await rawDb.user.create({ data: { email: `admin-${Date.now()}@x.com`, passwordHash: "x", role: "PLATFORM_ADMIN" } });
+      const u = await rawDb.user.create({ data: { email: `admin-${Date.now()}@x.com`, passwordHash: "x", role: "PLATFORM_ADMIN", twoFactor: ENROLLED } });
       platformAdminId = u.id;
     }
     authMock.auth.mockResolvedValue({ user: { id: platformAdminId, email: "x@example.com", name: "x", role: "PLATFORM_ADMIN", permissions: "ALL" } });

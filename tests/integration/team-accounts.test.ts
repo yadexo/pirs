@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
+import { ENROLLED } from "../helpers/enrolled";
 
 const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
 vi.mock("@/auth", () => authMock);
@@ -36,7 +37,10 @@ describe("team accounts", () => {
     });
 
   const member = async (tenantId: string, role: "TENANT_ADMIN" | "STAFF", name: string) => {
-    const user = await rawDb.user.create({ data: { tenantId, email: `${name}-${stamp}@x.com`, passwordHash: "x", role } });
+    // Owners must have a second factor before they may act at all (lib/two-factor.ts).
+    const user = await rawDb.user.create({
+      data: { tenantId, email: `${name}-${stamp}@x.com`, passwordHash: "x", role, ...(role === "TENANT_ADMIN" ? { twoFactor: ENROLLED } : {}) },
+    });
     const profile = await rawDb.staffProfile.create({ data: { tenantId, userId: user.id, firstName: name, lastName: "Person" } });
     return { userId: user.id, profileId: profile.id };
   };

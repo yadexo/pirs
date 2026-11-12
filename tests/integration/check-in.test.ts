@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
 import { mintCheckinToken } from "@/lib/checkin-token";
+import { ENROLLED } from "../helpers/enrolled";
 
 const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
 vi.mock("@/auth", () => authMock);
@@ -32,8 +33,8 @@ describe("clinic check-in", () => {
     await rawDb.tenantBranding.create({ data: { tenantId: clinic, businessName: "Check-in Clinic", timeZone: "Europe/Amsterdam" } });
     await rawDb.loyaltyProgramme.create({ data: { tenantId: clinic, pointsPerVisit: 60 } });
 
-    ownerId = (await rawDb.user.create({ data: { tenantId: clinic, email: `o-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } })).id;
-    agencyId = (await rawDb.user.create({ data: { email: `a-${stamp}@x.com`, passwordHash: "x", role: "PLATFORM_ADMIN" } })).id;
+    ownerId = (await rawDb.user.create({ data: { tenantId: clinic, email: `o-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } })).id;
+    agencyId = (await rawDb.user.create({ data: { email: `a-${stamp}@x.com`, passwordHash: "x", role: "PLATFORM_ADMIN", twoFactor: ENROLLED } })).id;
     noRoleStaffId = (await rawDb.user.create({ data: { tenantId: clinic, email: `s-${stamp}@x.com`, passwordHash: "x", role: "STAFF" } })).id;
     await rawDb.staffProfile.create({ data: { tenantId: clinic, userId: noRoleStaffId, firstName: "No", lastName: "Role" } });
 

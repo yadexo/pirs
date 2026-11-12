@@ -12,7 +12,7 @@ import { SUPPORTED_LOCALES, setLocaleCookie, type AppLocale } from "@/lib/locale
  * merchant or agency path since this account can be signed into either.
  */
 export async function staffSaveLocaleAction(locale: string): Promise<{ error: string } | { ok: true }> {
-  const user = await requireSession("staff");
+  const user = await requireSession("staff", { beforeTwoFactor: true });
   if (!(SUPPORTED_LOCALES as readonly string[]).includes(locale)) return { error: "Unsupported language." };
 
   await rawDb.user.update({ where: { id: user.id }, data: { locale } });

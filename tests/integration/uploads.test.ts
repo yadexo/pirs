@@ -4,6 +4,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
+import { ENROLLED } from "../helpers/enrolled";
 
 const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
 vi.mock("@/auth", () => authMock);
@@ -34,9 +35,9 @@ describe("POST /api/uploads", () => {
     const other = await rawDb.tenant.create({ data: { slug: `uploads-other-${stamp}`, name: "Other Clinic", status: "ACTIVE" } });
     otherTenantId = other.id;
 
-    ownerId = (await rawDb.user.create({ data: { tenantId, email: `owner-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } })).id;
-    outsiderId = (await rawDb.user.create({ data: { tenantId: otherTenantId, email: `outsider-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } })).id;
-    platformAdminId = (await rawDb.user.create({ data: { email: `admin-${stamp}@x.com`, passwordHash: "x", role: "PLATFORM_ADMIN" } })).id;
+    ownerId = (await rawDb.user.create({ data: { tenantId, email: `owner-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } })).id;
+    outsiderId = (await rawDb.user.create({ data: { tenantId: otherTenantId, email: `outsider-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } })).id;
+    platformAdminId = (await rawDb.user.create({ data: { email: `admin-${stamp}@x.com`, passwordHash: "x", role: "PLATFORM_ADMIN", twoFactor: ENROLLED } })).id;
   });
 
   afterAll(async () => {

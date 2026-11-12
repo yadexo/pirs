@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
+import { ENROLLED } from "../helpers/enrolled";
 
 const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
 vi.mock("@/auth", () => authMock);
@@ -35,7 +36,7 @@ describe("clinic product panel", () => {
     process.env.AUTH_SECRET ??= "test-secret";
     clinic = (await rawDb.tenant.create({ data: { slug: `panel-${stamp}`, name: "Panel Clinic" } })).id;
     rival = (await rawDb.tenant.create({ data: { slug: `panel-rival-${stamp}`, name: "Rival" } })).id;
-    ownerId = (await rawDb.user.create({ data: { tenantId: clinic, email: `po-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } })).id;
+    ownerId = (await rawDb.user.create({ data: { tenantId: clinic, email: `po-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } })).id;
 
     const staffUser = await rawDb.user.create({ data: { tenantId: clinic, email: `ps-${stamp}@x.com`, passwordHash: "x", role: "STAFF" } });
     practitionerId = (await rawDb.staffProfile.create({ data: { tenantId: clinic, userId: staffUser.id, firstName: "Nadia", lastName: "Haddad", title: "Nurse practitioner", bio: "Ten years of injectables." } })).id;

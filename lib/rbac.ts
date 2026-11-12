@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { clientAuth } from "@/client-auth";
 import { getTenantDb } from "@/lib/tenant-db";
 import { loadLiveAccount } from "@/lib/live-account";
+import { mustSetUpTwoFactorFirst, TWO_FACTOR_FIRST } from "@/lib/two-factor";
 import type { PermissionKey } from "@/lib/permissions";
 import type { SessionUserShape } from "@/types/next-auth";
 
@@ -20,17 +21,39 @@ export class ForbiddenError extends Error {
   }
 }
 
+// The rule itself lives in lib/two-factor.ts, which has no session imports,
+// so lib/merchant-action.ts can apply the same one without loading this file.
+export { mustSetUpTwoFactorFirst, TWO_FACTOR_FIRST };
+
+/** A role that must have two-factor, on an account that has not set it up yet. */
+export class TwoFactorRequiredError extends ForbiddenError {
+  constructor() {
+    super(TWO_FACTOR_FIRST);
+    this.name = "TwoFactorRequiredError";
+  }
+}
+
 /**
  * Throws unless there is a signed-in user whose account is still allowed to
  * act. Role, clinic and permissions come from the database (see
  * lib/live-account.ts), so every guard below — client and staff — stops a
  * closed or deactivated account on its next request.
+ *
+ * Also throws for a role that requires two-factor and has not confirmed it.
+ * `beforeTwoFactor` is the one way round that, and it is for the handful of
+ * actions someone needs *in order to* set it up — starting and confirming
+ * setup, and choosing a language on the way. Anything that reads or changes
+ * a clinic's or the platform's data must never pass it.
  */
-export async function requireSession(audience: "staff" | "client" = "staff"): Promise<SessionUserShape> {
+export async function requireSession(
+  audience: "staff" | "client" = "staff",
+  options: { beforeTwoFactor?: boolean } = {},
+): Promise<SessionUserShape & { twoFactorConfirmed: boolean }> {
   const session = await (audience === "client" ? clientAuth() : auth());
   if (!session?.user) throw new UnauthorizedError();
   const live = await loadLiveAccount(session.user.id, session.user.authTime);
   if (!live) throw new UnauthorizedError("Your access has changed. Please sign in again.");
+  if (!options.beforeTwoFactor && mustSetUpTwoFactorFirst(live)) throw new TwoFactorRequiredError();
   return { ...session.user, ...live };
 }
 

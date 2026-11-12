@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
 import type { StripeConnectClient, V2AccountCreateBody, V2AccountLinkBody } from "@/lib/stripe-connect";
+import { ENROLLED } from "../helpers/enrolled";
 
 const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
 vi.mock("@/auth", () => authMock);
@@ -68,10 +69,10 @@ describe("Stripe Connect onboarding", () => {
     process.env.AUTH_SECRET ??= "test-secret";
     clinic = (await rawDb.tenant.create({ data: { slug: `stripe-${stamp}`, name: "Stripe Clinic" } })).id;
     await rawDb.tenantBranding.create({ data: { tenantId: clinic, businessName: "Stripe Clinic BV", country: "Nederland", contactEmail: "hello@clinic.example" } });
-    ownerId = (await rawDb.user.create({ data: { tenantId: clinic, email: `so-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } })).id;
+    ownerId = (await rawDb.user.create({ data: { tenantId: clinic, email: `so-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } })).id;
     staffId = (await rawDb.user.create({ data: { tenantId: clinic, email: `ss-${stamp}@x.com`, passwordHash: "x", role: "STAFF" } })).id;
     await rawDb.staffProfile.create({ data: { tenantId: clinic, userId: staffId, firstName: "S", lastName: "Taff" } });
-    agencyId = (await rawDb.user.create({ data: { email: `sa-${stamp}@x.com`, passwordHash: "x", role: "PLATFORM_ADMIN" } })).id;
+    agencyId = (await rawDb.user.create({ data: { email: `sa-${stamp}@x.com`, passwordHash: "x", role: "PLATFORM_ADMIN", twoFactor: ENROLLED } })).id;
   });
 
   afterAll(async () => {

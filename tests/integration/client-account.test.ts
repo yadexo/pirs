@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
+import { ENROLLED } from "../helpers/enrolled";
 
 const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
 vi.mock("@/auth", () => authMock);
@@ -50,7 +51,7 @@ describe("a client's account credit", () => {
     clinic = (await rawDb.tenant.create({ data: { slug: `acct-${stamp}`, name: "Account Clinic" } })).id;
     await rawDb.tenantBranding.create({ data: { tenantId: clinic, businessName: "Account Clinic", currency: "EUR" } });
 
-    const su = await rawDb.user.create({ data: { tenantId: clinic, email: `s-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } });
+    const su = await rawDb.user.create({ data: { tenantId: clinic, email: `s-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } });
     staffUserId = su.id;
     staffProfileId = (await rawDb.staffProfile.create({ data: { tenantId: clinic, userId: su.id, firstName: "Sam", lastName: "Staff" } })).id;
 
@@ -227,7 +228,7 @@ describe("a client's loyalty points", () => {
     clinic = (await rawDb.tenant.create({ data: { slug: `pts-${stamp}`, name: "Points Clinic" } })).id;
     await rawDb.tenantBranding.create({ data: { tenantId: clinic, businessName: "Points Clinic", currency: "EUR" } });
 
-    const su = await rawDb.user.create({ data: { tenantId: clinic, email: `sp-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } });
+    const su = await rawDb.user.create({ data: { tenantId: clinic, email: `sp-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } });
     staffUserId = su.id;
     staffProfileId = (await rawDb.staffProfile.create({ data: { tenantId: clinic, userId: su.id, firstName: "Pat", lastName: "Points" } })).id;
 

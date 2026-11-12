@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { NextRequest } from "next/server";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
+import { ENROLLED } from "../helpers/enrolled";
 
 const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
 vi.mock("@/auth", () => authMock);
@@ -53,7 +54,7 @@ describe("clinic settings", () => {
 
   beforeAll(async () => {
     clinic = (await rawDb.tenant.create({ data: { slug: `set-${stamp}`, name: "Settings Clinic" } })).id;
-    ownerId = (await rawDb.user.create({ data: { tenantId: clinic, email: `owner-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } })).id;
+    ownerId = (await rawDb.user.create({ data: { tenantId: clinic, email: `owner-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } })).id;
     const role = await rawDb.role.create({ data: { tenantId: clinic, name: "Front desk" } });
     for (const key of ["loyalty.adjust", "appointments.manage"]) {
       const p = await rawDb.permission.findUniqueOrThrow({ where: { key } });

@@ -5,6 +5,7 @@ import { rawDb } from "@/lib/db";
 import { getTenantDb, type TenantDb } from "@/lib/tenant-db";
 import { writeAuditLog } from "@/lib/audit";
 import { loadLiveAccount } from "@/lib/live-account";
+import { mustSetUpTwoFactorFirst, TWO_FACTOR_FIRST } from "@/lib/two-factor";
 import type { PermissionKey } from "@/lib/permissions";
 import type { SessionUserShape } from "@/types/next-auth";
 
@@ -51,6 +52,10 @@ export async function requireMerchantAction(merchantId: string, need: MerchantRe
   // a deactivated account or a removed permission stops working immediately.
   const live = await loadLiveAccount(sessionUser.id, sessionUser.authTime);
   if (!live) throw new ActionError("Please sign in again.");
+  // Before the clinic is even looked up. The pages send an owner or admin
+  // who has not enrolled to the setup screen; this is the same rule for
+  // anyone who skips the pages and calls the action (lib/two-factor.ts).
+  if (mustSetUpTwoFactorFirst(live)) throw new ActionError(TWO_FACTOR_FIRST);
   const user: SessionUserShape = { ...sessionUser, ...live };
 
   const tenant = await rawDb.tenant.findUnique({ where: { id: merchantId }, select: { id: true, status: true } });

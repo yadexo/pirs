@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
+import { ENROLLED } from "../helpers/enrolled";
 
 const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
 vi.mock("@/auth", () => authMock);
@@ -45,11 +46,11 @@ describe("requireMerchantAction", () => {
     other = (await rawDb.tenant.create({ data: { slug: `ma-other-${stamp}`, name: "Other" } })).id;
     suspended = (await rawDb.tenant.create({ data: { slug: `ma-susp-${stamp}`, name: "Suspended", status: "SUSPENDED" } })).id;
 
-    ids.agency = (await rawDb.user.create({ data: { email: `agency-${stamp}@x.com`, passwordHash: "x", role: "PLATFORM_ADMIN" } })).id;
-    ids.owner = (await rawDb.user.create({ data: { tenantId: mine, email: `owner-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } })).id;
-    ids.suspendedOwner = (await rawDb.user.create({ data: { tenantId: suspended, email: `sowner-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } })).id;
+    ids.agency = (await rawDb.user.create({ data: { email: `agency-${stamp}@x.com`, passwordHash: "x", role: "PLATFORM_ADMIN", twoFactor: ENROLLED } })).id;
+    ids.owner = (await rawDb.user.create({ data: { tenantId: mine, email: `owner-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } })).id;
+    ids.suspendedOwner = (await rawDb.user.create({ data: { tenantId: suspended, email: `sowner-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } })).id;
     ids.client = (await rawDb.user.create({ data: { tenantId: mine, email: `client-${stamp}@x.com`, passwordHash: "x", role: "CUSTOMER" } })).id;
-    ids.disabledUser = (await rawDb.user.create({ data: { tenantId: mine, email: `disabled-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", status: "DISABLED" } })).id;
+    ids.disabledUser = (await rawDb.user.create({ data: { tenantId: mine, email: `disabled-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", status: "DISABLED", twoFactor: ENROLLED } })).id;
     ids.noProfile = (await rawDb.user.create({ data: { tenantId: mine, email: `noprofile-${stamp}@x.com`, passwordHash: "x", role: "STAFF" } })).id;
     await staff("catalogStaff", mine, ["catalog.manage"]);
     await staff("noRoleStaff", mine, null);
@@ -72,6 +73,35 @@ describe("requireMerchantAction", () => {
     expect(await allowed(mine, "owner")).toBe(true);
     expect(await allowed(other, "catalog.manage")).toBe(true);
     expect(await allowed(suspended, "owner")).toBe(true);
+  });
+
+  it("refuses an owner or agency admin who has not set up two-factor, for every kind of requirement", async () => {
+    // docs/security/review-2026-11.md, A-1. The pages sent these accounts to
+    // the setup screen; the actions behind the pages answered them anyway.
+    const bareOwner = await rawDb.user.create({ data: { tenantId: mine, email: `bare-owner-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } });
+    const bareAgency = await rawDb.user.create({ data: { email: `bare-agency-${stamp}@x.com`, passwordHash: "x", role: "PLATFORM_ADMIN" } });
+    ids.bareOwner = bareOwner.id;
+    ids.bareAgency = bareAgency.id;
+    try {
+      as("bareOwner", { role: "TENANT_ADMIN" });
+      for (const need of ["owner", "member", "customers.view"] as const) expect(await allowed(mine, need), `owner/${need}`).toBe(false);
+      await expect(requireMerchantAction(mine, "member")).rejects.toThrow("Set up two-factor authentication first.");
+
+      as("bareAgency", { role: "PLATFORM_ADMIN", tenantId: null });
+      for (const clinic of [mine, other]) expect(await allowed(clinic, "member"), "agency").toBe(false);
+
+      // The moment setup is confirmed, the same account is let in.
+      await rawDb.twoFactorSecret.create({ data: { userId: bareOwner.id, secret: "JBSWY3DPEHPK3PXP", confirmedAt: new Date() } });
+      as("bareOwner", { role: "TENANT_ADMIN" });
+      expect(await allowed(mine, "owner")).toBe(true);
+
+      // Started but never confirmed is not set up.
+      await rawDb.twoFactorSecret.create({ data: { userId: bareAgency.id, secret: "JBSWY3DPEHPK3PXP" } });
+      as("bareAgency", { role: "PLATFORM_ADMIN", tenantId: null });
+      expect(await allowed(mine, "member")).toBe(false);
+    } finally {
+      await rawDb.user.deleteMany({ where: { id: { in: [bareOwner.id, bareAgency.id] } } });
+    }
   });
 
   it("confines a clinic owner to their own clinic", async () => {

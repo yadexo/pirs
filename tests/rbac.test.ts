@@ -17,7 +17,7 @@ vi.mock("@/lib/tenant-db", () => ({ getTenantDb: vi.fn(() => ({})) }));
 const { liveMock } = vi.hoisted(() => ({ liveMock: vi.fn() }));
 vi.mock("@/lib/live-account", () => ({ loadLiveAccount: liveMock }));
 
-const { requireSession, requireRole, requirePermission, requireStaffContext, requireCustomerContext, UnauthorizedError, ForbiddenError } = await import("@/lib/rbac");
+const { requireSession, requireRole, requirePermission, requireStaffContext, requireCustomerContext, UnauthorizedError, ForbiddenError, TwoFactorRequiredError } = await import("@/lib/rbac");
 
 function makeUser(overrides: Partial<SessionUserShape> = {}): SessionUserShape {
   return {
@@ -39,7 +39,9 @@ beforeEach(() => {
   liveMock.mockReset();
   liveMock.mockImplementation(async () => {
     const session = await authMock();
-    return session?.user ? { role: session.user.role, tenantId: session.user.tenantId, permissions: session.user.permissions } : null;
+    // Enrolled, as every working owner and admin is; the tests of what
+    // happens before that set this themselves.
+    return session?.user ? { role: session.user.role, tenantId: session.user.tenantId, permissions: session.user.permissions, twoFactorConfirmed: true } : null;
   });
 });
 
@@ -58,7 +60,8 @@ describe("requireSession", () => {
   it("returns the session user when signed in", async () => {
     const user = makeUser();
     authMock.mockResolvedValue({ user });
-    await expect(requireSession()).resolves.toEqual(user);
+    // The session, plus what the live account adds to it.
+    await expect(requireSession()).resolves.toEqual({ ...user, twoFactorConfirmed: true });
   });
 });
 
@@ -127,9 +130,47 @@ describe("separate staff and client sessions", () => {
   });
 
   it("a client signed in alongside does not affect staff checks", async () => {
-    liveMock.mockImplementation(async () => ({ role: "TENANT_ADMIN", tenantId: "tenant_1", permissions: "ALL" }));
+    liveMock.mockImplementation(async () => ({ role: "TENANT_ADMIN", tenantId: "tenant_1", permissions: "ALL", twoFactorConfirmed: true }));
     authMock.mockResolvedValue({ user: makeUser({ role: "TENANT_ADMIN" }) });
     clientAuthMock.mockResolvedValue({ user: makeUser({ role: "CUSTOMER" }) });
     await expect(requireStaffContext()).resolves.toMatchObject({ user: { role: "TENANT_ADMIN" } });
+  });
+});
+
+describe("an owner or admin who has not set up two-factor yet", () => {
+  // docs/security/review-2026-11.md, A-1: the pages redirected such an account
+  // to setup, and the actions behind the pages let it straight through.
+  const notEnrolled = (role: SessionUserShape["role"]) => {
+    const user = makeUser({ role, permissions: "ALL" });
+    authMock.mockResolvedValue({ user });
+    liveMock.mockResolvedValue({ role, tenantId: user.tenantId, permissions: "ALL", twoFactorConfirmed: false });
+  };
+
+  it("is refused by every guard, whichever one an action happens to use", async () => {
+    for (const role of ["TENANT_ADMIN", "PLATFORM_ADMIN"] as const) {
+      notEnrolled(role);
+      await expect(requireSession(), role).rejects.toBeInstanceOf(TwoFactorRequiredError);
+      await expect(requireRole(role), role).rejects.toBeInstanceOf(TwoFactorRequiredError);
+      await expect(requirePermission("customers.view"), role).rejects.toBeInstanceOf(TwoFactorRequiredError);
+    }
+    notEnrolled("TENANT_ADMIN");
+    await expect(requireStaffContext()).rejects.toBeInstanceOf(TwoFactorRequiredError);
+  });
+
+  it("is a kind of Forbidden, so callers that already handle a refusal handle this one", async () => {
+    notEnrolled("PLATFORM_ADMIN");
+    await expect(requireRole("PLATFORM_ADMIN")).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it("may still reach the few actions that are how two-factor gets set up", async () => {
+    notEnrolled("TENANT_ADMIN");
+    await expect(requireSession("staff", { beforeTwoFactor: true })).resolves.toMatchObject({ role: "TENANT_ADMIN" });
+  });
+
+  it("does not apply to staff, who may turn it on but are not required to", async () => {
+    const user = makeUser({ role: "STAFF", permissions: ["customers.view"] });
+    authMock.mockResolvedValue({ user });
+    liveMock.mockResolvedValue({ role: "STAFF", tenantId: user.tenantId, permissions: ["customers.view"], twoFactorConfirmed: false });
+    await expect(requirePermission("customers.view")).resolves.toMatchObject({ role: "STAFF" });
   });
 });

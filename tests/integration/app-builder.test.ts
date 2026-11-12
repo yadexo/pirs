@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
+import { ENROLLED } from "../helpers/enrolled";
 
 const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
 vi.mock("@/auth", () => authMock);
@@ -44,8 +45,8 @@ describe("App Builder actions", () => {
     slug = `ab-${stamp}`;
     clinic = (await rawDb.tenant.create({ data: { slug, name: "Builder Clinic" } })).id;
     rival = (await rawDb.tenant.create({ data: { slug: `ab-rival-${stamp}`, name: "Rival" } })).id;
-    ownerId = (await rawDb.user.create({ data: { tenantId: clinic, email: `o-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } })).id;
-    rivalOwnerId = (await rawDb.user.create({ data: { tenantId: rival, email: `ro-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN" } })).id;
+    ownerId = (await rawDb.user.create({ data: { tenantId: clinic, email: `o-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } })).id;
+    rivalOwnerId = (await rawDb.user.create({ data: { tenantId: rival, email: `ro-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } })).id;
     // Staff permissions are read from the database, so these need real profiles and roles.
     const catalogRole = await rawDb.role.create({ data: { tenantId: clinic, name: "Catalogue" } });
     const catalogPermission = await rawDb.permission.findUniqueOrThrow({ where: { key: "catalog.manage" } });
@@ -54,7 +55,7 @@ describe("App Builder actions", () => {
     await rawDb.staffProfile.create({ data: { tenantId: clinic, userId: catalogStaffId, firstName: "Cat", lastName: "Staff", roleId: catalogRole.id } });
     noRoleStaffId = (await rawDb.user.create({ data: { tenantId: clinic, email: `n-${stamp}@x.com`, passwordHash: "x", role: "STAFF" } })).id;
     await rawDb.staffProfile.create({ data: { tenantId: clinic, userId: noRoleStaffId, firstName: "No", lastName: "Role" } });
-    agencyId = (await rawDb.user.create({ data: { email: `a-${stamp}@x.com`, passwordHash: "x", role: "PLATFORM_ADMIN" } })).id;
+    agencyId = (await rawDb.user.create({ data: { email: `a-${stamp}@x.com`, passwordHash: "x", role: "PLATFORM_ADMIN", twoFactor: ENROLLED } })).id;
   });
 
   afterAll(async () => {
