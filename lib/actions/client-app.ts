@@ -35,6 +35,7 @@ import { recordPromptEvent } from "@/lib/notification-prompt-data";
 import { recordInstallEvent } from "@/lib/install-nudge-data";
 import { rateLimit } from "@/lib/rate-limit";
 import { addableQuantity, chargeableLine, MAX_CART_QUANTITY, settableQuantity } from "@/lib/cart-quantity";
+import { arg, args, INVALID_REQUEST, InvalidActionArgsError, validArgs } from "@/lib/action-args";
 
 /**
  * Every mutating action the client app can perform.
@@ -53,6 +54,7 @@ function revalidateClient(slug: string) {
 // ---------------------------------------------------------------------------
 
 export async function getBookingOptionsForServiceAction(serviceId: string) {
+  if (!validArgs(args([arg.id]), [serviceId])) throw new InvalidActionArgsError();
   const { db } = await requireCustomerContext();
 
   const [service, staff, locations] = await Promise.all([
@@ -74,6 +76,7 @@ export async function getBookingOptionsForServiceAction(serviceId: string) {
 }
 
 export async function getClientSlotsAction(staffProfileId: string, locationId: string, durationMinutes: number, dateIso: string) {
+  if (!validArgs(args([arg.id, arg.id, arg.int(5, 600), arg.isoDate]), [staffProfileId, locationId, durationMinutes, dateIso])) throw new InvalidActionArgsError();
   const { db } = await requireCustomerContext();
   const slots = await getAvailableSlots(db, {
     staffProfileId,
@@ -105,6 +108,7 @@ export async function clientBookAction(
   slug: string,
   input: { serviceId: string; staffProfileId: string; locationId: string; startAtIso: string; appointmentId?: string },
 ): Promise<BookResult> {
+  if (!validArgs(args([arg.slug, z.record(z.unknown())]), [slug, input])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
 
   const parsed = bookSchema.safeParse(input);
@@ -242,6 +246,7 @@ export async function clientBookAction(
 }
 
 export async function clientCancelAppointmentAction(slug: string, appointmentId: string): Promise<{ error: string } | { ok: true }> {
+  if (!validArgs(args([arg.slug, arg.id]), [slug, appointmentId])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
 
   const appt = await db.appointment.findFirst({
@@ -281,13 +286,12 @@ export async function clientAddToCartAction(
   id: string,
   qty: number,
 ): Promise<{ error: string } | { ok: true }> {
+  if (!validArgs(args([arg.slug, z.enum(["product", "service", "package"]), arg.id, z.number()]), [slug, kind, id, qty])) return { error: CART_REFUSED };
   const { db, user } = await requireCustomerContext();
 
   // The signature above is a wish. What arrives is whatever the browser sent,
   // so every argument is checked before it is used — a quantity of minus one
   // used to subtract its price from the rest of the basket (lib/cart-quantity.ts).
-  if (kind !== "product" && kind !== "service" && kind !== "package") return { error: CART_REFUSED };
-  if (typeof id !== "string" || id === "" || id.length > 64) return { error: CART_REFUSED };
   const quantity = addableQuantity(qty);
   if (quantity === null) return { error: CART_REFUSED };
   qty = quantity;
@@ -361,8 +365,8 @@ export async function clientSetCartQtyAction(
   itemId: string,
   qty: number,
 ): Promise<{ error: string } | { ok: true }> {
+  if (!validArgs(args([arg.slug, arg.id, z.number()]), [slug, itemId, qty])) return { error: CART_REFUSED };
   const { db, user } = await requireCustomerContext();
-  if (typeof itemId !== "string" || itemId === "" || itemId.length > 64) return { error: CART_REFUSED };
   const quantity = settableQuantity(qty);
   if (quantity === null) return { error: CART_REFUSED };
   qty = quantity;
@@ -483,6 +487,7 @@ export async function clientCheckoutAction(
   rewardId: string | null,
   options: { useCredit?: boolean } = {},
 ): Promise<CheckoutResult> {
+  if (!validArgs(args([arg.slug, arg.id.nullable(), z.object({ useCredit: z.boolean().optional() }).strict()]), [slug, rewardId, options])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
 
   const basket = await db.basket.findFirst({
@@ -786,6 +791,7 @@ export async function clientOrderStatusAction(
   slug: string,
   orderNumber: string,
 ): Promise<{ error: string } | { ok: true; status: "PAID" | "PENDING" | "FAILED"; pointsEarned: number; totalCents: number }> {
+  if (!validArgs(args([arg.slug, arg.orderNumber]), [slug, orderNumber])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
   const order = await db.order.findFirst({
     where: { orderNumber, customerProfileId: user.customerProfileId! },
@@ -838,6 +844,7 @@ export async function clientOrderReceiptAction(
       toBook: { name: string; url: string }[];
     }
 > {
+  if (!validArgs(args([arg.orderNumber]), [orderNumber])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
   const order = await db.order.findFirst({
     where: { orderNumber, customerProfileId: user.customerProfileId! },
@@ -909,6 +916,7 @@ export async function clientGiveSessionsAction(
   sessions: number,
   contact: string,
 ): Promise<{ error: string } | { ok: true; name: string; sessions: number; remaining: number }> {
+  if (!validArgs(args([arg.slug, arg.id, arg.int(1, 999), arg.text(254)]), [slug, customerPackageId, sessions, contact])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
   const giverId = user.customerProfileId!;
 
@@ -1003,6 +1011,7 @@ export async function clientGiveSessionsAction(
 
 /** The client gave up in the Payment Element: let the stock and points go. */
 export async function clientAbandonOrderAction(slug: string, orderNumber: string): Promise<{ ok: true }> {
+  if (!validArgs(args([arg.slug, arg.orderNumber]), [slug, orderNumber])) throw new InvalidActionArgsError();
   const { db, user } = await requireCustomerContext();
   const order = await db.order.findFirst({ where: { orderNumber, customerProfileId: user.customerProfileId! }, select: { id: true } });
   if (order) await releaseFailedOrder(db, order.id, "cancelled by the client");
@@ -1018,6 +1027,7 @@ export async function clientRedeemRewardAction(
   slug: string,
   rewardId: string,
 ): Promise<{ error: string } | { ok: true; code: string; name: string }> {
+  if (!validArgs(args([arg.slug, arg.id]), [slug, rewardId])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
 
   const reward = await db.loyaltyReward.findFirst({ where: { id: rewardId, active: true } });
@@ -1070,6 +1080,7 @@ export async function clientRedeemRewardAction(
  * the visit, once, like the referral bonus below.
  */
 export async function clientReviewAction(slug: string): Promise<{ error: string } | { ok: true; points: number }> {
+  if (!validArgs(args([arg.slug]), [slug])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
 
   const [programme, settings] = await Promise.all([
@@ -1093,6 +1104,7 @@ export async function clientReviewAction(slug: string): Promise<{ error: string 
 
 /** Referral share — awarded once, tracked through the loyalty ledger. */
 export async function clientReferralAction(slug: string): Promise<{ error: string } | { ok: true; points: number }> {
+  if (!validArgs(args([arg.slug]), [slug])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
 
   const programme = await db.loyaltyProgramme.findFirst({ where: {} });
@@ -1144,6 +1156,7 @@ export type JoinPlanResult =
  * platform's cut rides on each invoice as an application fee.
  */
 export async function clientJoinPlanAction(slug: string, planId: string): Promise<JoinPlanResult> {
+  if (!validArgs(args([arg.slug, arg.id]), [slug, planId])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
 
   const plan = await db.membershipPlan.findFirst({ where: { id: planId, active: true } });
@@ -1313,6 +1326,7 @@ export async function clientJoinPlanAction(slug: string, planId: string): Promis
 }
 
 export async function clientCancelPlanAction(slug: string): Promise<{ error: string } | { ok: true }> {
+  if (!validArgs(args([arg.slug]), [slug])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
 
   const membership = await db.customerMembership.findFirst({
@@ -1385,6 +1399,7 @@ export async function clientSaveProfileAction(
   slug: string,
   input: { firstName: string; lastName?: string; phone?: string; birthdayDay?: number; birthdayMonth?: number; birthdayYear?: number },
 ): Promise<{ error: string } | { ok: true }> {
+  if (!validArgs(args([arg.slug, z.record(z.unknown())]), [slug, input])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
 
   const parsed = profileSchema.safeParse(input);
@@ -1419,6 +1434,7 @@ const SUPPORTED_CLIENT_LOCALES = ["nl", "en"] as const;
  * (see lib/locale.ts).
  */
 export async function clientSaveLocaleAction(slug: string, locale: string): Promise<{ error: string } | { ok: true }> {
+  if (!validArgs(args([arg.slug, arg.text(10)]), [slug, locale])) return { error: INVALID_REQUEST };
   const { user } = await requireCustomerContext();
   if (!(SUPPORTED_CLIENT_LOCALES as readonly string[]).includes(locale)) return { error: "Unsupported language." };
 
@@ -1429,15 +1445,32 @@ export async function clientSaveLocaleAction(slug: string, locale: string): Prom
   return { ok: true };
 }
 
+/**
+ * The four switches on the preferences screen, and nothing else.
+ *
+ * Strict, because what passes this is written straight onto the client's own
+ * profile row. It used to be written unchecked: the argument was spread into
+ * the update, so a request carrying `accountCreditBalanceCents` or
+ * `loyaltyPointsBalance` alongside the four booleans set those too — a client
+ * could give themselves credit (docs/security/review-2026-11.md, R-2).
+ */
+const CONSENT = z
+  .object({ emailConsent: z.boolean(), smsConsent: z.boolean(), pushConsent: z.boolean(), marketingConsent: z.boolean() })
+  .strict();
+
 export async function clientSaveConsentAction(
   slug: string,
   consent: { emailConsent: boolean; smsConsent: boolean; pushConsent: boolean; marketingConsent: boolean },
 ): Promise<{ ok: true }> {
+  if (!validArgs(args([arg.slug, CONSENT]), [slug, consent])) throw new InvalidActionArgsError();
   const { db, user } = await requireCustomerContext();
   await db.customerProfile.updateMany({
     where: { id: user.customerProfileId! },
     data: {
-      ...consent,
+      emailConsent: consent.emailConsent,
+      smsConsent: consent.smsConsent,
+      pushConsent: consent.pushConsent,
+      marketingConsent: consent.marketingConsent,
       // Their own decision, recorded as such: from here on, turning
       // notifications on again must not quietly opt them back into offers.
       marketingConsentChosenAt: new Date(),
@@ -1467,6 +1500,7 @@ export async function clientRecordNotificationPromptAction(
   const parsed = promptEvent.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
 
+  if (!validArgs(args([arg.slug, z.record(z.unknown())]), [slug, input])) return { error: "invalid" };
   const { db, user } = await requireCustomerContext();
   // Cheap, and fine for a person; the cap is for a script. A whole schedule is
   // a handful of events, so this is generous.
@@ -1508,6 +1542,7 @@ export async function clientRecordInstallEventAction(
   const parsed = installEvent.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
 
+  if (!validArgs(args([arg.slug, z.record(z.unknown())]), [slug, input])) return { error: "invalid" };
   const { db, user } = await requireCustomerContext();
   const { ok } = await rateLimit(`install-event:${user.id}`, 30, 60 * 60 * 1000);
   if (!ok) return { error: "rate-limited" };
@@ -1533,6 +1568,7 @@ export async function clientRecordInstallEventAction(
  * deletion request itself is recorded in the audit log.
  */
 export async function clientDeleteAccountAction(slug: string): Promise<{ ok: true }> {
+  if (!validArgs(args([arg.slug]), [slug])) throw new InvalidActionArgsError();
   const { db, user } = await requireCustomerContext();
 
   await db.customerProfile.updateMany({

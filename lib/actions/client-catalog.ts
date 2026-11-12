@@ -1,6 +1,7 @@
 "use server";
 
 import { requireCustomerContext } from "@/lib/rbac";
+import { arg, args, validArgs } from "@/lib/action-args";
 
 export interface CatalogSearchResult {
   id: string;
@@ -10,6 +11,8 @@ export interface CatalogSearchResult {
 }
 
 export async function searchCatalogAction(q: string): Promise<CatalogSearchResult[]> {
+  // A search that is not a short piece of text finds nothing.
+  if (!validArgs(args([arg.text(100)]), [q])) return [];
   const { db } = await requireCustomerContext();
   const filter = { name: { contains: q, mode: "insensitive" as const } };
 
