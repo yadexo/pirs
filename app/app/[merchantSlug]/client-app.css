@@ -11,6 +11,28 @@
  * portal. No component under app/app/** may use a literal colour — add a role
  * to the token file and reference it instead.
  */
+/*
+ * The page itself never scrolls in the client app; the shell inside it does.
+ *
+ * Installed on an iPhone, a scrolling document takes everything with it when
+ * it rubber-bands — "fixed" elements included — and shows whatever colour
+ * the root is underneath. That is how the tab bar came to float above the
+ * bottom edge on a grey strip and move with the page. So the root is pinned
+ * at the screen's height, cannot overscroll, and is painted the app's own
+ * background, and all scrolling happens in .ca-scroll below.
+ *
+ * Scoped with :has() so the clinic portal and the admin console, which share
+ * the root layout, keep scrolling the ordinary way.
+ */
+html:has(.client-app),
+html:has(.client-app) body {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--surface-2);
+}
+
 .client-app {
   /* --- v1 names, now pointing at the v2 roles ------------------------- */
   --bg-app: var(--surface-2);
@@ -68,11 +90,32 @@
   text-size-adjust: 100%;
   line-height: 1.45;
   color: var(--ink);
-  background: var(--backdrop);
+  /* The app's own colour on a phone; the grey backdrop is only for the
+     margins around the phone frame on a wide screen (see below). */
+  background: var(--bg-app);
   display: flex;
   justify-content: center;
-  min-height: 100dvh;
-  overscroll-behavior-y: none;
+  /*
+   * The whole screen, held there. 100dvh where it is understood, with
+   * -webkit-fill-available before it for the iOS versions that predate it —
+   * never 100vh, which on iOS is the height with the browser's bars hidden
+   * and so taller than what is actually on screen.
+   */
+  position: fixed;
+  inset: 0;
+  height: -webkit-fill-available;
+  height: 100dvh;
+  /* Screens without the shell — sign-in, the clinic finder — scroll here.
+     With the shell, .ca-device fills this exactly and nothing overflows. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+@media (min-width: 481px) {
+  .client-app {
+    background: var(--backdrop);
+  }
 }
 
 .client-app *,
@@ -116,20 +159,50 @@
 /* The phone frame. On desktop it gets a shadow so it reads as a device. */
 .ca-device {
   width: 100%;
-  max-width: 420px;
-  min-height: 100dvh;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
   position: relative;
   background: var(--bg-app);
   overflow: hidden;
 }
+/* On a phone the frame is the screen, edge to edge — a Pro Max is 430 points
+   wide, and capping the frame at 420 left a grey sliver down each side. Only
+   a wide screen gets a phone-sized frame with a shadow round it. */
 @media (min-width: 481px) {
   .ca-device {
+    max-width: 420px;
     box-shadow: 0 0 0 1px rgba(16, 20, 32, 0.08), 0 30px 90px rgba(16, 20, 32, 0.28);
   }
 }
 
+/*
+ * The only thing in the app that scrolls.
+ *
+ * It takes the height the header leaves, and overscrolling it bounces this
+ * content alone: the tab bar and the header are not inside it, so they stay
+ * exactly where they are. `contain` stops the bounce handing itself on to
+ * the page underneath.
+ *
+ * The bottom padding is the tab bar's height — which already includes the
+ * home indicator's safe area — and a little more, so the last thing on a
+ * page can always be scrolled clear of the bar and the cart bar above it.
+ */
+.ca-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-bottom: calc(var(--tabh) + var(--space-8));
+}
+
 /* ---------------------------------------------------------------- header */
 .ca-hdr {
+  /* Above the scroller rather than in it, so it never moves. `sticky` no
+     longer does anything here and is left only so the z-index applies. */
+  flex: none;
   position: sticky;
   top: 0;
   z-index: 40;
@@ -196,14 +269,29 @@
  * its proportions on a phone wider than the 390 reference.
  */
 .ca-tabbar {
+  /*
+   * Pinned to the screen, not to the page: the page no longer scrolls, so
+   * there is nothing for it to move with. Its height is the 64 of controls
+   * plus the home indicator's safe area, and the white .bar fills all of it,
+   * so the bar's colour runs right down under the indicator.
+   *
+   * Centred with auto margins rather than a transform, and full width on a
+   * phone — it used to stop at 390 points, leaving gaps either side on a
+   * Plus or Pro Max.
+   */
   position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
   bottom: 0;
+  margin-inline: auto;
   width: 100%;
-  max-width: var(--app-width);
   z-index: 40;
   height: calc(var(--nav-controls) + var(--sab));
+}
+@media (min-width: 481px) {
+  .ca-tabbar {
+    max-width: var(--app-width);
+  }
 }
 /**
  * The white is its own layer because the notch is a mask, and a mask clips

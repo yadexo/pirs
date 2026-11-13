@@ -146,6 +146,17 @@ function Frame({
   const [tappedTab, setTappedTab] = React.useState<string | null>(null);
   const [, startTransition] = React.useTransition();
   React.useEffect(() => setTappedTab(null), [pathname]);
+
+  // A new screen starts at its top. Next does this for the document on every
+  // navigation, but the document no longer scrolls — .ca-scroll does — so it
+  // has to be done here, at the same moments: a new path, or new search
+  // params, which is how Profile switches between its sections. A layout
+  // effect, so it lands after Next's own attempt (which, mid page-enter
+  // animation, would leave the screen a few pixels short of the top).
+  const routeKey = `${pathname}?${search.toString()}`;
+  React.useLayoutEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [routeKey]);
   const active = tappedTab ?? routeTab;
   const showHeader = active !== "scan";
 
@@ -195,7 +206,10 @@ function Frame({
         </header>
       )}
 
-      <div ref={scrollRef} style={{ paddingBottom: "calc(var(--tabh) + var(--space-8))" }}>
+      {/* The one thing that scrolls. The header above and the tab bar below
+          stay where they are; see .ca-scroll in client-app.css for why the
+          document itself must not scroll on an installed iPhone. */}
+      <div ref={scrollRef} className="ca-scroll">
         {children}
       </div>
 
