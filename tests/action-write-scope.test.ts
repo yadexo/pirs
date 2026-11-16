@@ -43,8 +43,8 @@ function writes(): Write[] {
   const found: Write[] = [];
   for (const file of readdirSync(ACTIONS_DIR).filter((f) => f.endsWith(".ts"))) {
     const text = readFileSync(join(ACTIONS_DIR, file), "utf8").replace(/\r/g, "");
-    // `<client>.<model>.<op>(` — a cookie jar's `.delete(` is not a database write.
-    for (const m of text.matchAll(/\b\w+\.(\w+)\.(update|updateMany|delete|deleteMany|upsert)\(/g)) {
+    // `<client>.<model>.<op>(`, also split across lines — a cookie jar's `.delete(` is not a database write.
+    for (const m of text.matchAll(/\b\w+\s*\.(\w+)\s*\.(update|updateMany|delete|deleteMany|upsert)\(/g)) {
       const model = m[1]!;
       let depth = 1;
       let at = m.index! + m[0].length;

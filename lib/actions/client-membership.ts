@@ -3,7 +3,8 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { rawDb } from "@/lib/db";
-import { ActionError, requireMerchantAction, runAction, type ActionResult } from "@/lib/merchant-action";
+import type { Prisma } from "@prisma/client";
+import { ActionError, requireMerchantAction, runAction, type ActionResult, type MerchantActionContext } from "@/lib/merchant-action";
 import { MEMBERSHIP_HOLDS_SLOT, membershipGivesBenefits } from "@/lib/membership-status";
 import {
   addBillingPeriods,
@@ -147,16 +148,40 @@ async function openMembership(merchantId: string, membershipId: string, permissi
   return { ctx, membership, clinic, staffName };
 }
 
-/** One line in the membership's own history, naming who did it and why. */
-async function record(
-  tenantId: string,
-  membershipId: string,
-  description: string,
-  type: "STATUS_CHANGE" | "CHARGE" | "CREDIT_GRANT" = "STATUS_CHANGE",
+const NOT_SAVED = "That couldn't be saved. Nothing has been changed.";
+const STRIPE_AHEAD =
+  "The payment provider accepted the change, but it couldn't be saved here yet. It will show once the provider confirms it — refresh in a minute rather than repeating it.";
+
+/**
+ * Writes one change to a membership: the row, the line in its own history
+ * naming who did it and why, and the audit entry — in one transaction, so
+ * either all three happen or none do. A change that half-happened used to be
+ * reported as "something went wrong" while the row had already changed
+ * (docs/security/review-2026-11-pass2.md, I-4).
+ *
+ * Stripe is told first, by the caller; when it has accepted and this then
+ * fails, the message says so instead of claiming nothing changed. The
+ * webhook that follows Stripe's change brings the row into line.
+ */
+async function commitChange(
+  ctx: MerchantActionContext,
+  membership: { id: string },
+  toldStripe: boolean,
+  change: { data: Prisma.CustomerMembershipUncheckedUpdateManyInput; history: string; audit: string; metadata: Record<string, unknown> },
 ): Promise<void> {
-  await rawDb.membershipBillingEvent.create({
-    data: { tenantId, customerMembershipId: membershipId, type, description, occurredAt: new Date() } as never,
-  });
+  try {
+    await rawDb.$transaction(async (tx) => {
+      const { count } = await tx.customerMembership.updateMany({ where: { id: membership.id, tenantId: ctx.merchantId }, data: change.data });
+      if (count !== 1) throw new Error(`membership ${membership.id} matched ${count} rows`);
+      await tx.membershipBillingEvent.create({
+        data: { tenantId: ctx.merchantId, customerMembershipId: membership.id, type: "STATUS_CHANGE", description: change.history, occurredAt: new Date() } as never,
+      });
+      await ctx.audit(change.audit, "CustomerMembership", membership.id, change.metadata, tx);
+    });
+  } catch (err) {
+    console.error("[membership] change not saved:", err instanceof Error ? err.message : err);
+    throw new ActionError(toldStripe ? STRIPE_AHEAD : NOT_SAVED);
+  }
 }
 
 const cancelInput = z.object({ when: z.enum(["now", "period_end"]), reason }).strict();
@@ -191,19 +216,14 @@ export async function cancelClientMembershipAction(
     }
 
     const status = when === "now" ? "CANCELLED" : membership.status;
-    await ctx.db.customerMembership.updateMany({
-      where: { id: membership.id, tenantId: merchantId },
-      data:
-        when === "now"
-          ? { status: "CANCELLED", cancelledAt: new Date(), cancelAtPeriodEnd: false }
-          : { cancelAtPeriodEnd: true },
-    });
-
     const ends = membership.currentPeriodEnd.toLocaleDateString("en-GB", { day: "numeric", month: "long" });
-    const line = when === "now" ? `Cancelled by ${staffName}: ${why}` : `Set to end on ${ends} by ${staffName}: ${why}`;
-    await record(merchantId, membershipId, line);
-    await ctx.audit("membership.cancelled", "CustomerMembership", membershipId, { when, reason: why });
-    await notifyMembershipChanged(membershipId, when === "now" ? "Your membership has ended." : `Your membership will end on ${ends}.`, why).catch(
+    await commitChange(ctx, membership, Boolean(onStripe), {
+      data: when === "now" ? { status: "CANCELLED", cancelledAt: new Date(), cancelAtPeriodEnd: false } : { cancelAtPeriodEnd: true },
+      history: when === "now" ? `Cancelled by ${staffName}: ${why}` : `Set to end on ${ends} by ${staffName}: ${why}`,
+      audit: "membership.cancelled",
+      metadata: { when, reason: why },
+    });
+    await notifyMembershipChanged(membership.id, when === "now" ? "Your membership has ended." : `Your membership will end on ${ends}.`, why).catch(
       (err) => console.error("[membership] notice not sent:", err instanceof Error ? err.message : err),
     );
 
@@ -228,19 +248,23 @@ export async function pauseClientMembershipAction(
     if (membership.status === "PAUSED") throw new ActionError("That membership is already paused.");
     if (membership.status === "CANCELLED") throw new ActionError("That membership has ended.");
 
-    if (clinic?.stripeAccountId && membership.stripeSubscriptionId?.startsWith("sub_")) {
+    const onStripe = Boolean(clinic?.stripeAccountId && membership.stripeSubscriptionId?.startsWith("sub_"));
+    if (onStripe) {
       try {
-        await pauseCollection(clinic.stripeAccountId, membership.stripeSubscriptionId, true);
+        await pauseCollection(clinic!.stripeAccountId!, membership.stripeSubscriptionId!, true);
       } catch (err) {
         console.error("[membership] Stripe refused the pause:", err instanceof Error ? err.message : err);
         throw new ActionError("The payment provider wouldn't accept that. Nothing has been changed.");
       }
     }
 
-    await ctx.db.customerMembership.updateMany({ where: { id: membership.id, tenantId: merchantId }, data: { status: "PAUSED", pausedAt: new Date() } });
-    await record(merchantId, membershipId, `Paused by ${staffName}: ${why}`);
-    await ctx.audit("membership.paused", "CustomerMembership", membershipId, { reason: why });
-    await notifyMembershipChanged(membershipId, "Your membership is paused — nothing will be charged while it is.", why).catch(() => undefined);
+    await commitChange(ctx, membership, onStripe, {
+      data: { status: "PAUSED", pausedAt: new Date() },
+      history: `Paused by ${staffName}: ${why}`,
+      audit: "membership.paused",
+      metadata: { reason: why },
+    });
+    await notifyMembershipChanged(membership.id, "Your membership is paused — nothing will be charged while it is.", why).catch(() => undefined);
 
     revalidatePath(`/m/${merchantId}/clients`);
     return { status: "PAUSED" };
@@ -260,22 +284,23 @@ export async function resumeClientMembershipAction(
 
     if (membership.status !== "PAUSED") throw new ActionError("That membership isn't paused.");
 
-    if (clinic?.stripeAccountId && membership.stripeSubscriptionId?.startsWith("sub_")) {
+    const onStripe = Boolean(clinic?.stripeAccountId && membership.stripeSubscriptionId?.startsWith("sub_"));
+    if (onStripe) {
       try {
-        await pauseCollection(clinic.stripeAccountId, membership.stripeSubscriptionId, false);
+        await pauseCollection(clinic!.stripeAccountId!, membership.stripeSubscriptionId!, false);
       } catch (err) {
         console.error("[membership] Stripe refused the resume:", err instanceof Error ? err.message : err);
         throw new ActionError("The payment provider wouldn't accept that. Nothing has been changed.");
       }
     }
 
-    await ctx.db.customerMembership.updateMany({
-      where: { id: membership.id, tenantId: merchantId },
+    await commitChange(ctx, membership, onStripe, {
       data: { status: "ACTIVE", pausedAt: null, resumesAt: null },
+      history: `Resumed by ${staffName}: ${why}`,
+      audit: "membership.resumed",
+      metadata: { reason: why },
     });
-    await record(merchantId, membershipId, `Resumed by ${staffName}: ${why}`);
-    await ctx.audit("membership.resumed", "CustomerMembership", membershipId, { reason: why });
-    await notifyMembershipChanged(membershipId, "Your membership is active again.", why).catch(() => undefined);
+    await notifyMembershipChanged(membership.id, "Your membership is active again.", why).catch(() => undefined);
 
     revalidatePath(`/m/${merchantId}/clients`);
     return { status: "ACTIVE" };
@@ -307,6 +332,7 @@ export async function switchClientPlanAction(
     const plan = await ctx.db.membershipPlan.findFirst({ where: { id: planId, active: true, archivedAt: null } });
     if (!plan) throw new ActionError("That plan is no longer available.");
 
+    const onStripe = Boolean(clinic?.stripeAccountId && membership.stripeSubscriptionId?.startsWith("sub_"));
     if (clinic?.stripeAccountId && membership.stripeSubscriptionId?.startsWith("sub_")) {
       try {
         const currency = await tenantCurrency(ctx.db);
@@ -324,12 +350,15 @@ export async function switchClientPlanAction(
 
     // The plan on our row changes now; the price only bites at the next
     // period, which is what Stripe was told and what the client is told.
-    await ctx.db.customerMembership.updateMany({ where: { id: membership.id, tenantId: merchantId }, data: { membershipPlanId: planId } });
+    await commitChange(ctx, membership, onStripe, {
+      data: { membershipPlanId: plan.id },
+      history: `Moved from ${membership.membershipPlan?.name ?? "their plan"} to ${plan.name} by ${staffName}: ${why}`,
+      audit: "membership.plan_changed",
+      metadata: { from: membership.membershipPlanId, to: plan.id, reason: why },
+    });
 
     const from = membership.currentPeriodEnd.toLocaleDateString("en-GB", { day: "numeric", month: "long" });
-    await record(merchantId, membershipId, `Moved from ${membership.membershipPlan?.name ?? "their plan"} to ${plan.name} by ${staffName}: ${why}`);
-    await ctx.audit("membership.plan_changed", "CustomerMembership", membershipId, { from: membership.membershipPlanId, to: planId, reason: why });
-    await notifyMembershipChanged(membershipId, `You're moving to ${plan.name} from ${from}. Nothing changes before then.`, why).catch(() => undefined);
+    await notifyMembershipChanged(membership.id, `You're moving to ${plan.name} from ${from}. Nothing changes before then.`, why).catch(() => undefined);
 
     revalidatePath(`/m/${merchantId}/clients`);
     return { planId };
@@ -365,6 +394,7 @@ export async function giveFreePeriodsAction(
     const frequency = membership.membershipPlan?.billingFrequency ?? "MONTHLY";
     let until = addBillingPeriods(membership.currentPeriodEnd, periods, frequency);
 
+    const onStripe = Boolean(clinic?.stripeAccountId && membership.stripeSubscriptionId?.startsWith("sub_"));
     if (clinic?.stripeAccountId && membership.stripeSubscriptionId?.startsWith("sub_")) {
       try {
         // From what Stripe thinks the period is, not from our copy of it.
@@ -377,16 +407,15 @@ export async function giveFreePeriodsAction(
       }
     }
 
-    await ctx.db.customerMembership.updateMany({
-      where: { id: membership.id, tenantId: merchantId },
-      data: { currentPeriodEnd: until, nextBillingAt: until },
-    });
-
     const when = until.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
     const label = `${periods} ${frequency === "MONTHLY" ? "month" : "year"}${periods === 1 ? "" : "s"}`;
-    await record(merchantId, membershipId, `${label} free, given by ${staffName}: ${why}`);
-    await ctx.audit("membership.free_periods", "CustomerMembership", membershipId, { periods, until: until.toISOString(), reason: why });
-    await notifyMembershipChanged(membershipId, `You've been given ${label} free — your next payment is ${when}.`, why).catch(() => undefined);
+    await commitChange(ctx, membership, onStripe, {
+      data: { currentPeriodEnd: until, nextBillingAt: until },
+      history: `${label} free, given by ${staffName}: ${why}`,
+      audit: "membership.free_periods",
+      metadata: { periods, until: until.toISOString(), reason: why },
+    });
+    await notifyMembershipChanged(membership.id, `You've been given ${label} free — your next payment is ${when}.`, why).catch(() => undefined);
 
     revalidatePath(`/m/${merchantId}/clients`);
     return { nextBillingAt: until.toISOString() };

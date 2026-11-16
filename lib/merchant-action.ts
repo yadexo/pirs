@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/auth";
 import { rawDb } from "@/lib/db";
 import { getTenantDb, type TenantDb } from "@/lib/tenant-db";
@@ -25,7 +26,8 @@ export interface MerchantActionContext {
   merchantId: string;
   db: TenantDb;
   /** Records who did what. Agency admins are logged as such. */
-  audit: (action: string, entityType: string, entityId?: string, metadata?: Record<string, unknown>) => Promise<void>;
+  /** Pass `tx` to write the audit row inside the transaction that makes the change. */
+  audit: (action: string, entityType: string, entityId?: string, metadata?: Record<string, unknown>, tx?: Prisma.TransactionClient) => Promise<void>;
 }
 
 /** Thrown for anything the caller should see as a plain message. */
@@ -81,16 +83,19 @@ export async function requireMerchantAction(merchantId: string, need: MerchantRe
     user,
     merchantId,
     db: getTenantDb(merchantId),
-    audit: (action, entityType, entityId, metadata) =>
-      writeAuditLog({
-        tenantId: merchantId,
-        actorUserId: user.id,
-        actorType: isAgency ? "PLATFORM_ADMIN" : "STAFF",
-        action,
-        entityType,
-        entityId,
-        metadata,
-      }),
+    audit: (action, entityType, entityId, metadata, tx) =>
+      writeAuditLog(
+        {
+          tenantId: merchantId,
+          actorUserId: user.id,
+          actorType: isAgency ? "PLATFORM_ADMIN" : "STAFF",
+          action,
+          entityType,
+          entityId,
+          metadata,
+        },
+        tx,
+      ),
     };
   }
 }

@@ -37,6 +37,22 @@ vi.mock("@/lib/memberships-billing", async (importOriginal) => {
   };
 });
 
+/** The audit write can be made to fail once, to prove a failed change leaves nothing half-done. */
+const auditFault = vi.hoisted(() => ({ next: false }));
+vi.mock("@/lib/audit", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/audit")>();
+  return {
+    ...actual,
+    writeAuditLog: (...a: Parameters<typeof actual.writeAuditLog>) => {
+      if (auditFault.next) {
+        auditFault.next = false;
+        return Promise.reject(new Error("audit write failed"));
+      }
+      return actual.writeAuditLog(...a);
+    },
+  };
+});
+
 const {
   clientMembershipAction,
   cancelClientMembershipAction,
@@ -318,5 +334,36 @@ describe("managing a client's membership", () => {
     expect(await pauseClientMembershipAction(clinic, membershipId, { reason: "" })).toMatchObject({ error: expect.any(String) });
     expect(stripe.cancel).not.toHaveBeenCalled();
     expect(stripe.pause).not.toHaveBeenCalled();
+  });
+
+  describe("a change is all or nothing, and says which (pass-2 review, I-4)", () => {
+    const history = () => rawDb.membershipBillingEvent.count({ where: { tenantId: clinic, customerMembershipId: membershipId } });
+    const audits = () => rawDb.auditLog.count({ where: { tenantId: clinic, entityId: membershipId } });
+
+    it("a failure after the update leaves the membership as it was, and reports a failure", async () => {
+      await member({ stripeSubscriptionId: null });
+      auditFault.next = true;
+      const res = await pauseClientMembershipAction(clinic, membershipId, { reason: "Travelling" });
+      expect(res).toEqual({ error: "That couldn't be saved. Nothing has been changed." });
+      expect((await rawDb.customerMembership.findUniqueOrThrow({ where: { id: membershipId } })).status).toBe("ACTIVE");
+      expect(await history()).toBe(0);
+    });
+
+    it("when Stripe accepted but the record could not be saved, it says so", async () => {
+      await member();
+      auditFault.next = true;
+      const res = await cancelClientMembershipAction(clinic, membershipId, { when: "now", reason: "Fraud" });
+      expect(stripe.cancel).toHaveBeenCalledTimes(1);
+      expect("error" in res && res.error).toMatch(/payment provider accepted/i);
+      expect((await rawDb.customerMembership.findUniqueOrThrow({ where: { id: membershipId } })).status).toBe("ACTIVE");
+    });
+
+    it("a change that works writes exactly one history row and one audit row", async () => {
+      await member();
+      const auditsBefore = await audits();
+      expect(await cancelClientMembershipAction(clinic, membershipId, { when: "now", reason: "Moving away" })).toMatchObject({ ok: true });
+      expect(await history()).toBe(1);
+      expect((await audits()) - auditsBefore).toBe(1);
+    });
   });
 });

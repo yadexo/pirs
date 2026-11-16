@@ -60,14 +60,16 @@ export async function voidClientItemAction(
     if (item.status === "VOIDED") throw new ActionError("That item is already void.");
 
     // Conditional, so an item redeemed a moment ago is not voided from under
-    // the staff member who just handed it over.
-    const { count } = await rawDb.redeemableItem.updateMany({
-      where: { id: itemId, tenantId: merchantId, status: { in: ["AVAILABLE", "EXPIRED"] } },
-      data: { status: "VOIDED", voidedAt: new Date(), voidedReason: why, voidedByStaffProfileId: ctx.user.staffProfileId ?? null },
+    // the staff member who just handed it over. The audit row is written in
+    // the same transaction: the change and its record stand or fall together.
+    await rawDb.$transaction(async (tx) => {
+      const { count } = await tx.redeemableItem.updateMany({
+        where: { id: item.id, tenantId: merchantId, status: { in: ["AVAILABLE", "EXPIRED"] } },
+        data: { status: "VOIDED", voidedAt: new Date(), voidedReason: why, voidedByStaffProfileId: ctx.user.staffProfileId ?? null },
+      });
+      if (count === 0) throw new ActionError("That item was just collected. Nothing has been changed.");
+      await ctx.audit("item.voided", "RedeemableItem", item.id, { reason: why, name: item.name }, tx);
     });
-    if (count === 0) throw new ActionError("That item was just collected. Nothing has been changed.");
-
-    await ctx.audit("item.voided", "RedeemableItem", itemId, { reason: why, name: item.name });
     await notifyItemVoided(item.customerProfileId, item.name, why).catch((err) =>
       console.error("[client-items] void notice not sent:", err instanceof Error ? err.message : err),
     );
@@ -97,25 +99,26 @@ export async function reissueClientItemAction(
     if (item.status === "REDEEMED") throw new ActionError("That item has been collected. Give them a new one instead.");
 
     const code = generateBackupCode();
-    const { count } = await rawDb.redeemableItem.updateMany({
-      where: { id: itemId, tenantId: merchantId, status: { in: ["AVAILABLE", "VOIDED", "EXPIRED"] } },
-      data: {
-        token: generateToken(),
-        code,
-        status: "AVAILABLE",
-        source: "REISSUE",
-        issuedByStaffProfileId: ctx.user.staffProfileId ?? null,
-        issuedReason: why,
-        // It is available again, so what was said about voiding it no longer
-        // describes this item.
-        voidedAt: null,
-        voidedReason: null,
-        voidedByStaffProfileId: null,
-      },
+    await rawDb.$transaction(async (tx) => {
+      const { count } = await tx.redeemableItem.updateMany({
+        where: { id: item.id, tenantId: merchantId, status: { in: ["AVAILABLE", "VOIDED", "EXPIRED"] } },
+        data: {
+          token: generateToken(),
+          code,
+          status: "AVAILABLE",
+          source: "REISSUE",
+          issuedByStaffProfileId: ctx.user.staffProfileId ?? null,
+          issuedReason: why,
+          // It is available again, so what was said about voiding it no longer
+          // describes this item.
+          voidedAt: null,
+          voidedReason: null,
+          voidedByStaffProfileId: null,
+        },
+      });
+      if (count === 0) throw new ActionError("That item can't be reissued.");
+      await ctx.audit("item.reissued", "RedeemableItem", item.id, { reason: why, name: item.name }, tx);
     });
-    if (count === 0) throw new ActionError("That item can't be reissued.");
-
-    await ctx.audit("item.reissued", "RedeemableItem", itemId, { reason: why, name: item.name });
     await notifyItemIssued(item.customerProfileId, item.name, "Your code has been replaced", why).catch((err) =>
       console.error("[client-items] reissue notice not sent:", err instanceof Error ? err.message : err),
     );
@@ -145,26 +148,28 @@ export async function giftClientItemAction(
     const client = await ctx.db.customerProfile.findFirst({ where: { id: customerProfileId }, select: { id: true } });
     if (!client) throw new ActionError("That client no longer exists.");
 
-    const created = await rawDb.redeemableItem.create({
-      data: {
-        tenantId: merchantId,
-        customerProfileId,
-        orderId: null,
-        orderItemId: null,
-        unitIndex: 0,
-        source: "GIFT",
-        itemType,
-        name,
-        token: generateToken(),
-        code: generateBackupCode(),
-        status: "AVAILABLE",
-        issuedByStaffProfileId: ctx.user.staffProfileId ?? null,
-        issuedReason: why,
-      } as never,
-      select: { id: true, code: true },
+    const created = await rawDb.$transaction(async (tx) => {
+      const row = await tx.redeemableItem.create({
+        data: {
+          tenantId: merchantId,
+          customerProfileId: client.id,
+          orderId: null,
+          orderItemId: null,
+          unitIndex: 0,
+          source: "GIFT",
+          itemType,
+          name,
+          token: generateToken(),
+          code: generateBackupCode(),
+          status: "AVAILABLE",
+          issuedByStaffProfileId: ctx.user.staffProfileId ?? null,
+          issuedReason: why,
+        } as never,
+        select: { id: true, code: true },
+      });
+      await ctx.audit("item.gifted", "RedeemableItem", row.id, { reason: why, name, itemType }, tx);
+      return row;
     });
-
-    await ctx.audit("item.gifted", "RedeemableItem", created.id, { reason: why, name, itemType });
     await notifyItemIssued(customerProfileId, name, "A gift from us", why).catch((err) =>
       console.error("[client-items] gift notice not sent:", err instanceof Error ? err.message : err),
     );

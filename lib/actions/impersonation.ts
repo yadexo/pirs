@@ -5,6 +5,7 @@ import { IMPERSONATION_COOKIE, IMPERSONATION_MAX_MS, SESSION_ID_COOKIE } from "@
 import { redirect } from "next/navigation";
 import { rawDb } from "@/lib/db";
 import { requireRole } from "@/lib/rbac";
+import { writeAuditLog } from "@/lib/audit";
 import { arg, args, INVALID_REQUEST, InvalidActionArgsError, validArgs } from "@/lib/action-args";
 
 
@@ -23,6 +24,15 @@ export async function startImpersonationAction(merchantId: string) {
   const session = await rawDb.impersonationSession.create({
     data: { actorUserId: user.id, merchantId },
   });
+  // In the clinic's own log, so its owner can see when the platform looked in.
+  await writeAuditLog({
+    tenantId: merchantId,
+    actorUserId: user.id,
+    actorType: "PLATFORM_ADMIN",
+    action: "impersonation.started",
+    entityType: "ImpersonationSession",
+    entityId: session.id,
+  });
 
   const jar = await cookies();
   jar.set(IMPERSONATION_COOKIE, merchantId, {
@@ -38,18 +48,27 @@ export async function startImpersonationAction(merchantId: string) {
 }
 
 export async function stopImpersonationAction() {
-  await requireRole("PLATFORM_ADMIN");
+  const user = await requireRole("PLATFORM_ADMIN");
 
   const jar = await cookies();
   const sessionId = jar.get(SESSION_ID_COOKIE)?.value;
 
   if (sessionId) {
-    await rawDb.impersonationSession
-      .update({ where: { id: sessionId }, data: { endedAt: new Date() } })
-      .catch(() => {
-        // Session row already closed or pruned — clearing the cookies below
-        // is what actually ends impersonation, so this is not fatal.
+    // Only the admin's own open session: the cookie names it, the where clause owns it.
+    const open = await rawDb.impersonationSession.findFirst({ where: { id: sessionId, actorUserId: user.id, endedAt: null }, select: { id: true, merchantId: true } });
+    if (open) {
+      await rawDb.impersonationSession.updateMany({ where: { id: open.id, actorUserId: user.id }, data: { endedAt: new Date() } });
+      await writeAuditLog({
+        tenantId: open.merchantId,
+        actorUserId: user.id,
+        actorType: "PLATFORM_ADMIN",
+        action: "impersonation.ended",
+        entityType: "ImpersonationSession",
+        entityId: open.id,
       });
+    }
+    // A session already closed or pruned needs nothing: clearing the cookies
+    // below is what actually ends impersonation.
   }
 
   jar.delete(IMPERSONATION_COOKIE);

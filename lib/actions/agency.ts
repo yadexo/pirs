@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { rawDb } from "@/lib/db";
 import { requireRole } from "@/lib/rbac";
+import { writeAuditLog } from "@/lib/audit";
 import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 const schema = z.object({
@@ -23,7 +24,7 @@ const blankToUndefined = (v: FormDataEntryValue | null) => (v && String(v).trim(
 
 export async function saveWhiteLabelAction(_prevState: unknown, formData: FormData) {
   if (!validArgs(args([arg.prevState, arg.formData]), [_prevState, formData])) return { error: INVALID_REQUEST };
-  await requireRole("PLATFORM_ADMIN");
+  const admin = await requireRole("PLATFORM_ADMIN");
 
   const parsed = schema.safeParse({
     name: formData.get("name"),
@@ -46,6 +47,15 @@ export async function saveWhiteLabelAction(_prevState: unknown, formData: FormDa
   } else {
     await rawDb.agencySettings.create({ data: parsed.data });
   }
+  await writeAuditLog({
+    tenantId: null,
+    actorUserId: admin.id,
+    actorType: "PLATFORM_ADMIN",
+    action: "agency.white_label_saved",
+    entityType: "AgencySettings",
+    entityId: existing?.id,
+    metadata: { name: parsed.data.name, customDomain: parsed.data.customDomain ?? null },
+  });
 
   revalidatePath("/agency", "layout");
   return { success: true as const };
