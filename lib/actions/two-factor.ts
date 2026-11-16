@@ -8,6 +8,7 @@ import { generateTotpSecret, totpUri, verifyTotp } from "@/lib/totp";
 import { getTwoFactorStatus, issueBackupCodes, disableTwoFactor, twoFactorRequiredForRole } from "@/lib/two-factor";
 import { qrSvg } from "@/lib/qr";
 import { writeAuditLog } from "@/lib/audit";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 /**
  * The name an authenticator app files the account under. Not exported: this
@@ -47,6 +48,7 @@ export async function startTwoFactorSetupAction(): Promise<{ secret: string; otp
  * shown to the client exactly once, by the page that called this.
  */
 export async function confirmTwoFactorSetupAction(code: string): Promise<{ backupCodes: string[] } | { error: string }> {
+  if (!validArgs(args([arg.text(20)]), [code])) return { error: INVALID_REQUEST };
   const user = await requireSession("staff", { beforeTwoFactor: true });
   const t = await getTranslations("twoFactor.errors");
   const row = await rawDb.twoFactorSecret.findUnique({ where: { userId: user.id } });
@@ -72,6 +74,7 @@ export async function confirmTwoFactorSetupAction(code: string): Promise<{ backu
  * of these accounts is a platform admin's reset (resetTwoFactorForUserAction).
  */
 export async function disableTwoFactorAction(password: string): Promise<{ ok: true } | { error: string }> {
+  if (!validArgs(args([arg.text(200)]), [password])) return { error: INVALID_REQUEST };
   const user = await requireSession("staff");
   const t = await getTranslations("twoFactor");
   if (twoFactorRequiredForRole(user.role)) {
@@ -98,6 +101,7 @@ export async function regenerateBackupCodesAction(): Promise<{ backupCodes: stri
 
 /** Same as resetTwoFactorForUserAction, looked up by email — what the agency settings tool actually has to work with. */
 export async function resetTwoFactorByEmailAction(email: string): Promise<{ ok: true; email: string } | { error: string }> {
+  if (!validArgs(args([arg.text(320)]), [email])) return { error: INVALID_REQUEST };
   await requireRole("PLATFORM_ADMIN");
   const t = await getTranslations("twoFactor.errors");
   const normalized = email.trim().toLowerCase();
@@ -115,6 +119,7 @@ export async function resetTwoFactorByEmailAction(email: string): Promise<{ ok: 
  * look.
  */
 export async function resetTwoFactorForUserAction(userId: string): Promise<{ ok: true; email: string } | { error: string }> {
+  if (!validArgs(args([arg.id]), [userId])) return { error: INVALID_REQUEST };
   const admin = await requireRole("PLATFORM_ADMIN");
   const target = await rawDb.user.findUnique({ where: { id: userId }, select: { id: true, email: true, tenantId: true } });
   if (!target) return { error: (await getTranslations("twoFactor.errors"))("noSuchAccount") };

@@ -5,6 +5,7 @@ import { IMPERSONATION_COOKIE, IMPERSONATION_MAX_MS, SESSION_ID_COOKIE } from "@
 import { redirect } from "next/navigation";
 import { rawDb } from "@/lib/db";
 import { requireRole } from "@/lib/rbac";
+import { arg, args, INVALID_REQUEST, InvalidActionArgsError, validArgs } from "@/lib/action-args";
 
 
 /**
@@ -13,6 +14,7 @@ import { requireRole } from "@/lib/rbac";
  * and a merchant user can never forge their way into one.
  */
 export async function startImpersonationAction(merchantId: string) {
+  if (!validArgs(args([arg.id]), [merchantId])) throw new InvalidActionArgsError();
   const user = await requireRole("PLATFORM_ADMIN");
 
   const merchant = await rawDb.tenant.findUnique({ where: { id: merchantId } });

@@ -12,6 +12,7 @@ import { appUrl } from "@/lib/app-url";
 import { clinicAppOrigin } from "@/lib/clinic-app-link";
 import { chooseAccount, isPortal, portalRoles, type Portal } from "@/lib/portal-scope";
 import { logReset } from "@/lib/signin-log";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 type FormState = { error?: string; sent?: boolean } | undefined;
 
@@ -32,6 +33,7 @@ async function clientIp() {
  * the person was trying to sign in to.
  */
 export async function requestPasswordResetAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  if (!validArgs(args([arg.prevState, arg.formData]), [_prev, fd])) return { error: INVALID_REQUEST };
   const parsed = z.string().trim().toLowerCase().email().max(254).safeParse(fd.get("email"));
   if (!parsed.success) return { error: (await getTranslations("auth"))("enterValidEmail") };
   const email = parsed.data;
@@ -110,6 +112,7 @@ export async function requestPasswordResetAction(_prev: FormState, fd: FormData)
 
 /** Accepts a staff invitation or completes a reset, then sends the person to sign in. */
 export async function setPasswordAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  if (!validArgs(args([arg.prevState, arg.formData]), [_prev, fd])) return { error: INVALID_REQUEST };
   const token = String(fd.get("token") ?? "");
   const password = String(fd.get("password") ?? "");
   const confirm = String(fd.get("confirm") ?? "");

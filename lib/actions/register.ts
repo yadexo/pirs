@@ -13,6 +13,7 @@ import { logRegister } from "@/lib/signin-log";
 import { REGISTRATION_MIN_PASSWORD_LENGTH, setPasswordDirectly } from "@/lib/registration-code";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
 import { SUPPORTED_LOCALES } from "@/lib/locale-cookie";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 /**
  * Self-registration: a clinic with its owner, and a platform admin.
@@ -42,7 +43,7 @@ const passwordSchema = z
   .object({
     password: z.string().min(REGISTRATION_MIN_PASSWORD_LENGTH, `Use at least ${REGISTRATION_MIN_PASSWORD_LENGTH} characters`).max(200, "Keep it under 200 characters"),
     confirm: z.string(),
-  })
+  }).strict()
   .refine((v) => v.password === v.confirm, { path: ["confirm"], message: "Those passwords don't match" });
 
 type ChosenPassword = { password?: string } | { error: string; fieldErrors: Record<string, string> };
@@ -84,9 +85,10 @@ const clinicSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email").max(254),
   locale: z.enum(SUPPORTED_LOCALES),
   currency: z.enum(SUPPORTED_CURRENCIES),
-});
+}).strict();
 
 export async function registerClinicAction(_prev: unknown, fd: FormData): Promise<RegisterResult> {
+  if (!validArgs(args([arg.prevState, arg.formData]), [_prev, fd])) return { error: INVALID_REQUEST };
   const refused = await guardRegistration("clinic", fd);
   if (refused) return refused;
 
@@ -150,7 +152,7 @@ export async function registerClinicAction(_prev: unknown, fd: FormData): Promis
 const adminSchema = z.object({
   name: z.string().trim().min(2, "Enter your name").max(120),
   email: z.string().trim().toLowerCase().email("Enter a valid email").max(254),
-});
+}).strict();
 
 /**
  * Registers a full platform admin: every clinic, the same as every platform
@@ -159,6 +161,7 @@ const adminSchema = z.object({
  * store it — see lib/platform-admin-create.ts.
  */
 export async function registerPlatformAdminAction(_prev: unknown, fd: FormData): Promise<RegisterResult> {
+  if (!validArgs(args([arg.prevState, arg.formData]), [_prev, fd])) return { error: INVALID_REQUEST };
   const refused = await guardRegistration("admin", fd);
   if (refused) return refused;
 

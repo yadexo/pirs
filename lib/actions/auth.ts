@@ -20,6 +20,7 @@ import { getEmailProvider } from "@/lib/providers/notifications";
 import { senderFor } from "@/lib/emails/sender";
 import { accountExistsEmail, welcomeClientEmail } from "@/lib/emails/templates";
 import { resolveLocale } from "@/lib/locale";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 export type ActionResult = { error: string } | never;
 
@@ -69,6 +70,7 @@ async function signInOrError(params: Record<string, string>, redirectTo: string,
 }
 
 export async function customerSignInAction(tenantSlug: string, _prevState: unknown, formData: FormData) {
+  if (!validArgs(args([arg.slug, arg.prevState, arg.formData]), [tenantSlug, _prevState, formData])) return { error: INVALID_REQUEST };
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
   // `next` is form input, so only a same-origin path is honoured; the default
@@ -96,6 +98,7 @@ export async function customerSignInAction(tenantSlug: string, _prevState: unkno
  * visitor does not choose.
  */
 export async function unifiedSignInAction(_prevState: unknown, formData: FormData) {
+  if (!validArgs(args([arg.prevState, arg.formData]), [_prevState, formData])) return { error: INVALID_REQUEST };
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
   // Present only on the form's second step — see LoginForm. Absent, the
@@ -157,7 +160,7 @@ const registerSchema = z.object({
   phone: z.string().max(30).optional(),
   password: z.string().min(8, "Password must be at least 8 characters"),
   marketingConsent: z.boolean().optional(),
-});
+}).strict();
 
 /**
  * One answer whenever sign-up cannot go ahead for a reason we will not name.
@@ -207,6 +210,7 @@ async function tellExistingClient(params: {
 }
 
 export async function customerRegisterAction(tenantSlug: string, _prevState: unknown, formData: FormData) {
+  if (!validArgs(args([arg.slug, arg.prevState, arg.formData]), [tenantSlug, _prevState, formData])) return { error: INVALID_REQUEST };
   const parsed = registerSchema.safeParse({
     firstName: formData.get("firstName"),
     lastName: formData.get("lastName"),

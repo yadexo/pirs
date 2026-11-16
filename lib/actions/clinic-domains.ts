@@ -11,6 +11,7 @@ import { checkClinicDomain, dnsRecordsFor, refusalMessage, type DnsRecord, type 
 import { describeError, vercelConfig, vercelDomainsApi, type VercelDomainsApi } from "@/lib/vercel-domains";
 import { logDomain } from "@/lib/signin-log";
 import { forgetClinicHosts } from "@/lib/clinic-hosts";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 /**
  * Attaching, re-checking and removing a clinic's own domain.
@@ -101,6 +102,7 @@ async function registerDomainForApplePay(tenantId: string, host: string): Promis
 }
 
 export async function attachClinicDomainAction(merchantId: string, fd: FormData): Promise<ActionResult<{ domain: DomainView }>> {
+  if (!validArgs(args([arg.id, arg.formData]), [merchantId, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const actor = await requirePlatformAdminAction();
     if (!(await rateLimit(`domain-attach:${actor.id}`, ATTACHES_PER_HOUR, 60 * 60 * 1000)).ok) {
@@ -169,6 +171,7 @@ export async function attachClinicDomainAction(merchantId: string, fd: FormData)
 
 /** Asks Vercel to look at DNS again now, and writes down what it said. */
 export async function checkClinicDomainAction(merchantId: string): Promise<ActionResult<{ domain: DomainView }>> {
+  if (!validArgs(args([arg.id]), [merchantId])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const actor = await requirePlatformAdminAction();
     if (!(await rateLimit(`domain-check:${actor.id}`, CHECKS_PER_HOUR, 60 * 60 * 1000)).ok) {
@@ -233,6 +236,7 @@ export async function checkClinicDomainAction(merchantId: string): Promise<Actio
 }
 
 export async function removeClinicDomainAction(merchantId: string): Promise<ActionResult> {
+  if (!validArgs(args([arg.id]), [merchantId])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const actor = await requirePlatformAdminAction();
     const row = await rawDb.clinicDomain.findUnique({ where: clientDomainOf(merchantId) });

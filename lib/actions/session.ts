@@ -7,6 +7,7 @@ import { isClinicSlug } from "@/lib/clinic-link";
 import { currentClientBasePath } from "@/lib/public-clinic";
 import { isClientHost } from "@/lib/portal-hosts";
 import { headers } from "next/headers";
+import { arg, args, INVALID_REQUEST, InvalidActionArgsError, validArgs } from "@/lib/action-args";
 
 export async function signOutAction() {
   await signOut({ redirectTo: "/" });
@@ -14,6 +15,7 @@ export async function signOutAction() {
 
 /** A client logging out stays in their clinic's app, on its sign-in screen. */
 export async function signOutOfClinicAction(merchantSlug: string) {
+  if (!validArgs(args([arg.slug]), [merchantSlug])) throw new InvalidActionArgsError();
   if (isClinicSlug(merchantSlug)) {
     await clientSignOut({ redirectTo: await currentClientBasePath(merchantSlug) });
     return;
@@ -30,6 +32,7 @@ export async function signOutOfClinicAction(merchantSlug: string) {
  * sign-out, a trip to the index, and a second click.
  */
 export async function switchAccountAction(formData: FormData) {
+  if (!validArgs(args([arg.formData]), [formData])) throw new InvalidActionArgsError();
   const target = safeNext(String(formData.get("next") ?? "") || undefined);
   await signOut({ redirectTo: target ? `/login?next=${encodeURIComponent(target)}` : "/login" });
 }

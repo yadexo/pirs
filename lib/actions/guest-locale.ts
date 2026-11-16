@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { SUPPORTED_LOCALES, setLocaleCookie, type AppLocale } from "@/lib/locale-cookie";
+import { arg, args, INVALID_REQUEST, InvalidActionArgsError, validArgs } from "@/lib/action-args";
 
 /**
  * The pre-auth language toggle on /login, /forgot-password and
@@ -10,6 +11,7 @@ import { SUPPORTED_LOCALES, setLocaleCookie, type AppLocale } from "@/lib/locale
  * and reloads the same page in the new language.
  */
 export async function guestSaveLocaleAction(formData: FormData): Promise<void> {
+  if (!validArgs(args([arg.formData]), [formData])) throw new InvalidActionArgsError();
   const locale = String(formData.get("locale") ?? "");
   const redirectTo = String(formData.get("redirectTo") ?? "/login");
   if ((SUPPORTED_LOCALES as readonly string[]).includes(locale)) {

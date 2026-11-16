@@ -9,6 +9,7 @@ import { deleteTenantCompletely } from "@/lib/tenant-deletion";
 import { createClinicWithOwner } from "@/lib/clinic-create";
 import { SUPPORTED_LOCALES } from "@/lib/locale-cookie";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
+import { arg, args, INVALID_REQUEST, InvalidActionArgsError, validArgs } from "@/lib/action-args";
 
 const createSchema = z.object({
   name: z.string().min(2, "Business name is required").max(120),
@@ -20,9 +21,10 @@ const createSchema = z.object({
   currency: z.enum(SUPPORTED_CURRENCIES).default("EUR"),
   timezone: z.string().min(1).default("Europe/Amsterdam"),
   locale: z.enum(SUPPORTED_LOCALES).optional(),
-});
+}).strict();
 
 export async function createMerchantAction(_prevState: unknown, formData: FormData) {
+  if (!validArgs(args([arg.prevState, arg.formData]), [_prevState, formData])) return { error: INVALID_REQUEST };
   const user = await requireRole("PLATFORM_ADMIN");
 
   const parsed = createSchema.safeParse({
@@ -73,6 +75,7 @@ export async function createMerchantAction(_prevState: unknown, formData: FormDa
 }
 
 export async function setMerchantActiveAction(merchantId: string, active: boolean) {
+  if (!validArgs(args([arg.id, arg.bool]), [merchantId, active])) throw new InvalidActionArgsError();
   const user = await requireRole("PLATFORM_ADMIN");
 
   await rawDb.tenant.update({
@@ -108,6 +111,7 @@ export async function setMembershipFeeAction(
   merchantId: string,
   percent: number | null,
 ): Promise<{ error: string } | { ok: true; percent: number | null }> {
+  if (!validArgs(args([arg.id, arg.formNumber.nullable()]), [merchantId, percent])) return { error: INVALID_REQUEST };
   const user = await requireRole("PLATFORM_ADMIN");
 
   if (percent !== null) {
@@ -134,6 +138,7 @@ export async function setMembershipFeeAction(
 }
 
 export async function deleteMerchantAction(merchantId: string) {
+  if (!validArgs(args([arg.id]), [merchantId])) throw new InvalidActionArgsError();
   const user = await requireRole("PLATFORM_ADMIN");
 
   const merchant = await rawDb.tenant.findUnique({ where: { id: merchantId }, select: { name: true } });

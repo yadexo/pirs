@@ -27,17 +27,6 @@ const ACTIONS_DIR = join(process.cwd(), "lib", "actions");
 const EXEMPT: Record<string, string> = {};
 
 /**
- * Files not yet brought under these rules. Temporary: each commit of the
- * pass-2 fixes empties part of it, and the last one deletes it.
- */
-const PENDING_FILES = new Set([
-  "account.ts", "agency.ts", "auth.ts", 
-  
-  "clinic-domains.ts", "guest-locale.ts", "impersonation.ts", "merchants.ts", "password.ts",
-  "platform-admins.ts", "register.ts", "session.ts", "two-factor.ts",
-]);
-
-/**
  * Schema pieces that accept an object of any shape, or anything at all.
  * `arg.prevState` (lib/action-args.ts) is the one sanctioned "anything": it
  * is the ignored first argument React's useActionState passes, and it is
@@ -52,12 +41,8 @@ interface Action {
   body: string;
 }
 
-function allActionFiles(): string[] {
-  return readdirSync(ACTIONS_DIR).filter((f) => f.endsWith(".ts"));
-}
-
 function actionFiles(): string[] {
-  return allActionFiles().filter((f) => !PENDING_FILES.has(f));
+  return readdirSync(ACTIONS_DIR).filter((f) => f.endsWith(".ts"));
 }
 
 function source(file: string): string {
@@ -153,11 +138,9 @@ describe("every server action validates what it is sent", () => {
   const all = files.flatMap(actionsIn);
 
   it("finds the actions at all (a reader that finds nothing would pass everything)", () => {
-    const everything = allActionFiles().flatMap(actionsIn);
-    expect(allActionFiles().length).toBeGreaterThan(25);
-    expect(everything.length).toBeGreaterThan(100);
-    expect(everything.find((a) => a.name === "cancelClientMembershipAction")?.params).toEqual(["merchantId", "membershipId", "input"]);
-    for (const pending of PENDING_FILES) expect(allActionFiles(), `${pending} is pending but does not exist`).toContain(pending);
+    expect(files.length).toBeGreaterThan(25);
+    expect(all.length).toBeGreaterThan(100);
+    expect(all.find((a) => a.name === "cancelClientMembershipAction")?.params).toEqual(["merchantId", "membershipId", "input"]);
     expect(all.find((a) => a.name === "clientAddToCartAction")?.params).toEqual(["slug", "kind", "id", "qty"]);
     expect(all.find((a) => a.name === "clientCheckoutAction")?.params).toEqual(["slug", "rewardId", "options"]);
   });

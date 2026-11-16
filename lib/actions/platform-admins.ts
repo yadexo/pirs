@@ -13,6 +13,7 @@ import { requirePlatformAdminAction } from "@/lib/platform-admin-action";
 import { rateLimit } from "@/lib/rate-limit";
 import { writeAuditLog } from "@/lib/audit";
 import { createPlatformAdminInvite, PlatformAdminExistsError } from "@/lib/platform-admin-create";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 /**
  * Inviting and deactivating platform admins — the agency's own "Team" page,
@@ -37,7 +38,7 @@ const inviteSchema = z.object({
   firstName: z.string().trim().min(1, "First name is required").max(80),
   lastName: z.string().trim().min(1, "Last name is required").max(80),
   email: z.string().trim().toLowerCase().email("Enter a valid email").max(254),
-});
+}).strict();
 
 export interface InvitedAdmin {
   email: string;
@@ -48,6 +49,7 @@ export interface InvitedAdmin {
 export async function inviteAdminAction(
   fd: FormData,
 ): Promise<ActionResult<InvitedAdmin>> {
+  if (!validArgs(args([arg.formData]), [fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const actor = await requirePlatformAdminAction();
 
@@ -98,6 +100,7 @@ export async function setAdminActiveAction(
   userId: string,
   active: boolean,
 ): Promise<ActionResult> {
+  if (!validArgs(args([arg.id, arg.bool]), [userId, active])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const actor = await requirePlatformAdminAction();
 
