@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { rawDb } from "@/lib/db";
 import { requireMerchantAction, runAction, ActionError, type ActionResult } from "@/lib/merchant-action";
@@ -8,6 +9,7 @@ import { recordVisit, searchClientsForCheckIn } from "@/lib/check-in";
 import { startOfDayIn } from "@/lib/zoned-time";
 import { DEFAULT_TIME_ZONE } from "@/lib/time-zone";
 import type { TenantDb } from "@/lib/tenant-db";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 /**
  * Clinic-side check-in. A client shows the signed code on their app's Scan
@@ -17,6 +19,9 @@ import type { TenantDb } from "@/lib/tenant-db";
 
 /** Scanned code or picked from search. A code proves the client is present. */
 export type CheckInTarget = { token: string } | { customerProfileId: string };
+
+/** A scanned token or a chosen client, and nothing else. */
+const checkInTarget = z.union([z.object({ token: arg.text(1000) }).strict(), z.object({ customerProfileId: arg.id }).strict()]);
 
 export interface ClientCard {
   customerProfileId: string;
@@ -69,6 +74,7 @@ async function loadCard(db: TenantDb, customerProfileId: string): Promise<Client
 
 /** Shows who the code or search result is, before anything is recorded. */
 export async function lookupClientForCheckInAction(merchantId: string, target: CheckInTarget): Promise<ActionResult<{ client: ClientCard }>> {
+  if (!validArgs(args([arg.id, checkInTarget]), [merchantId, target])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const { db } = await requireMerchantAction(merchantId, "customers.view");
     return { client: await loadCard(db, await resolveTarget(db, merchantId, target)) };
@@ -80,6 +86,7 @@ export async function searchClientsForCheckInAction(
   merchantId: string,
   query: string,
 ): Promise<ActionResult<{ results: { customerProfileId: string; name: string; email: string | null }[] }>> {
+  if (!validArgs(args([arg.id, arg.text(200)]), [merchantId, query])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const { db } = await requireMerchantAction(merchantId, "customers.view");
     return { results: await searchClientsForCheckIn(db, query) };
@@ -90,6 +97,7 @@ export async function checkInClientAction(
   merchantId: string,
   target: CheckInTarget,
 ): Promise<ActionResult<{ client: ClientCard; points: number; alreadyToday: boolean }>> {
+  if (!validArgs(args([arg.id, checkInTarget]), [merchantId, target])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "customers.view");
     const customerProfileId = await resolveTarget(ctx.db, merchantId, target);

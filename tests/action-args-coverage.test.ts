@@ -31,10 +31,10 @@ const EXEMPT: Record<string, string> = {};
  * pass-2 fixes empties part of it, and the last one deletes it.
  */
 const PENDING_FILES = new Set([
-  "account.ts", "activity.ts", "agency.ts", "app-builder.ts", "appointments.ts", "auth.ts", "campaigns.ts",
-  "check-in.ts", "client-account.ts", "client-items.ts", "client-membership.ts", "clinic-broadcast.ts",
-  "clinic-domains.ts", "clinic-settings.ts", "guest-locale.ts", "impersonation.ts", "merchants.ts", "password.ts",
-  "personal-discount.ts", "platform-admins.ts", "redeem.ts", "refund-order.ts", "register.ts", "session.ts", "two-factor.ts",
+  "account.ts", "agency.ts", "auth.ts", 
+  
+  "clinic-domains.ts", "guest-locale.ts", "impersonation.ts", "merchants.ts", "password.ts",
+  "platform-admins.ts", "register.ts", "session.ts", "two-factor.ts",
 ]);
 
 /**
@@ -113,7 +113,8 @@ function validatedNames(body: string): string[] | null {
 /** Every `z.object(` in a file, with whether `.strict()` follows its closing parenthesis. */
 function objectSchemas(text: string): { line: number; strict: boolean }[] {
   const found: { line: number; strict: boolean }[] = [];
-  for (const match of text.matchAll(/z\.object\(/g)) {
+  // `z\n  .object(` too: a line break must not hide a schema from this test.
+  for (const match of text.matchAll(/\bz\s*\.object\(/g)) {
     let depth = 1;
     let at = match.index! + match[0].length;
     while (depth > 0 && at < text.length) {

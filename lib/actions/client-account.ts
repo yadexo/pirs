@@ -6,6 +6,7 @@ import { ActionError, requireMerchantAction, runAction, type ActionResult } from
 import { adjustAccountCredit, InsufficientCreditError } from "@/lib/account-credit";
 import { adjustLoyaltyPoints, InsufficientPointsError } from "@/lib/loyalty";
 import { notifyCreditChanged, notifyPointsChanged } from "@/lib/client-notifications";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 /**
  * A client's balances, as the clinic's own staff see and change them.
@@ -33,7 +34,7 @@ const adjustment = z.object({
   direction: z.enum(["add", "remove"]),
   amount,
   reason: z.string().trim().min(1, "A reason is required").max(200, "Keep the reason under 200 characters"),
-});
+}).strict();
 
 export interface LedgerRow {
   id: string;
@@ -59,6 +60,7 @@ const staffName = (staff: { firstName: string | null; lastName: string | null } 
 
 /** The balance and the whole story behind it. */
 export async function clientAccountAction(merchantId: string, customerProfileId: string): Promise<ActionResult<{ account: ClientAccount }>> {
+  if (!validArgs(args([arg.id, arg.id]), [merchantId, customerProfileId])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "customers.view");
 
@@ -139,6 +141,7 @@ export async function adjustClientCreditAction(
   customerProfileId: string,
   input: z.input<typeof adjustment>,
 ): Promise<ActionResult<{ balanceCents: number }>> {
+  if (!validArgs(args([arg.id, arg.id, z.object({ direction: arg.text(10), amount: arg.text(40), reason: arg.text(1000) }).strict()]), [merchantId, customerProfileId, input])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "customers.edit");
     const { direction, amount: amountCents, reason } = adjustment.parse(input);
@@ -193,7 +196,7 @@ const pointsAdjustment = z.object({
     .transform((v) => Number(v))
     .refine((n) => Number.isInteger(n) && n > 0, "Points are whole numbers above zero"),
   reason: z.string().trim().min(1, "A reason is required").max(200, "Keep the reason under 200 characters"),
-});
+}).strict();
 
 /**
  * Adds or takes back loyalty points.
@@ -207,6 +210,7 @@ export async function adjustClientPointsAction(
   customerProfileId: string,
   input: z.input<typeof pointsAdjustment>,
 ): Promise<ActionResult<{ balance: number }>> {
+  if (!validArgs(args([arg.id, arg.id, z.object({ direction: arg.text(10), points: arg.text(40), reason: arg.text(1000) }).strict()]), [merchantId, customerProfileId, input])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "loyalty.adjust");
     const { direction, points, reason } = pointsAdjustment.parse(input);

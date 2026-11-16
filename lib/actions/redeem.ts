@@ -7,6 +7,7 @@ import { ActionError, requireMerchantAction, runAction, type ActionResult } from
 import { notifyItemRedeemed, notifySessionUsed } from "@/lib/client-notifications";
 import { spendPackageSession } from "@/lib/package-redemption";
 import { findItem, isBackupCode, normaliseCode, redeemItem, tokenFromScan, toView, type ItemView } from "@/lib/redeemable";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 /**
  * Redeeming a client's paid-for item at the clinic — by scanning their code,
@@ -25,11 +26,12 @@ import { findItem, isBackupCode, normaliseCode, redeemItem, tokenFromScan, toVie
 const NOT_VALID_HERE = "Not valid at this clinic.";
 
 /** What staff scanned or typed, whichever it turns out to be. */
-const scanned = z.object({ value: z.string().trim().min(1, "Scan a code or type one").max(200) });
+const scanned = z.object({ value: z.string().trim().min(1, "Scan a code or type one").max(200) }).strict();
 
 export type LookupResult = ActionResult<{ item: ItemView }>;
 
 export async function lookupRedeemableAction(merchantId: string, value: string): Promise<LookupResult> {
+  if (!validArgs(args([arg.id, arg.text(500)]), [merchantId, value])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     await requireMerchantAction(merchantId, "sales.manage");
     const input = scanned.parse({ value });
@@ -49,11 +51,12 @@ const confirm = z.object({
   itemId: z.string().min(1),
   method: z.enum(["QR", "BACKUP_CODE", "MANUAL"]),
   note: z.string().trim().max(200, "Keep the note under 200 characters").optional(),
-});
+}).strict();
 
 export type RedeemResult = ActionResult<{ item: ItemView }>;
 
 export async function redeemItemAction(merchantId: string, input: z.input<typeof confirm>): Promise<RedeemResult> {
+  if (!validArgs(args([arg.id, z.object({ itemId: arg.id, method: arg.text(20), note: arg.text(1000).optional() }).strict()]), [merchantId, input])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "sales.manage");
     const { itemId, method, note } = confirm.parse(input);
@@ -103,6 +106,7 @@ export async function redeemItemAction(merchantId: string, input: z.input<typeof
 
 /** Every item belonging to one client of this clinic, newest purchase first. */
 export async function clientItemsAction(merchantId: string, customerProfileId: string): Promise<ActionResult<{ items: ItemView[] }>> {
+  if (!validArgs(args([arg.id, arg.id]), [merchantId, customerProfileId])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     await requireMerchantAction(merchantId, "sales.manage");
     const rows = await rawDb.redeemableItem.findMany({
@@ -156,6 +160,7 @@ export interface StaffPackageView {
 }
 
 export async function clientPackagesAction(merchantId: string, customerProfileId: string): Promise<ActionResult<{ packages: StaffPackageView[] }>> {
+  if (!validArgs(args([arg.id, arg.id]), [merchantId, customerProfileId])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     await requireMerchantAction(merchantId, "sales.manage");
     const rows = await rawDb.customerPackage.findMany({
@@ -216,7 +221,7 @@ const spendSession = z.object({
   customerPackageId: z.string().min(1),
   serviceId: z.string().min(1, "Choose the treatment"),
   note: z.string().trim().max(200, "Keep the note under 200 characters").optional(),
-});
+}).strict();
 
 export type SpendSessionResult = ActionResult<{ remainingUses: number; totalUses: number; packageName: string; serviceName: string }>;
 
@@ -229,6 +234,7 @@ export type SpendSessionResult = ActionResult<{ remainingUses: number; totalUses
  * happened and cannot undo it.
  */
 export async function spendPackageSessionAction(merchantId: string, input: z.input<typeof spendSession>): Promise<SpendSessionResult> {
+  if (!validArgs(args([arg.id, z.object({ customerPackageId: arg.id, serviceId: arg.idOrBlank, note: arg.text(1000).optional() }).strict()]), [merchantId, input])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "sales.manage");
     const { customerPackageId, serviceId, note } = spendSession.parse(input);

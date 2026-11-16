@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { vapidConfigured } from "@/lib/web-push";
 import { marketingAudience, sendMarketingCampaign } from "@/lib/marketing";
 import { describeOutcome } from "@/lib/campaign-send";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 /**
  * A clinic sending one notification to its own clients' devices.
@@ -27,9 +28,10 @@ const schema = z.object({
   body: z.string().trim().min(1, "Write a message").max(200, "Keep the message under 200 characters"),
   /** Optional product to open — a product of this clinic, checked below. */
   productId: z.string().trim().max(60).optional(),
-});
+}).strict();
 
 export async function sendClinicBroadcastAction(merchantId: string, fd: FormData): Promise<ActionResult<{ devices: number }>> {
+  if (!validArgs(args([arg.id, arg.formData]), [merchantId, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "messages.send");
     if (!vapidConfigured()) throw new ActionError("Push notifications aren't set up on this platform yet.");

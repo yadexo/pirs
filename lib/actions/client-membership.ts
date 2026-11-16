@@ -18,6 +18,7 @@ import {
 } from "@/lib/memberships-billing";
 import { notifyMembershipChanged } from "@/lib/client-notifications";
 import { tenantCurrency } from "@/lib/currency";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 /**
  * A clinic managing one client's membership.
@@ -75,6 +76,7 @@ export async function clientMembershipAction(
   merchantId: string,
   customerProfileId: string,
 ): Promise<ActionResult<{ membership: ClientMembershipView | null; plans: PlanOption[] }>> {
+  if (!validArgs(args([arg.id, arg.id]), [merchantId, customerProfileId])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "customers.view");
 
@@ -157,7 +159,7 @@ async function record(
   });
 }
 
-const cancelInput = z.object({ when: z.enum(["now", "period_end"]), reason });
+const cancelInput = z.object({ when: z.enum(["now", "period_end"]), reason }).strict();
 
 /**
  * Ends a membership, either on the spot or when the paid-for period runs out.
@@ -170,6 +172,7 @@ export async function cancelClientMembershipAction(
   membershipId: string,
   input: z.input<typeof cancelInput>,
 ): Promise<ActionResult<{ status: string }>> {
+  if (!validArgs(args([arg.id, arg.id, z.object({ when: arg.text(20), reason: arg.text(1000) }).strict()]), [merchantId, membershipId, input])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const { ctx, membership, clinic, staffName } = await openMembership(merchantId, membershipId, "memberships.manage");
     const { when, reason: why } = cancelInput.parse(input);
@@ -209,7 +212,7 @@ export async function cancelClientMembershipAction(
   });
 }
 
-const pauseInput = z.object({ reason });
+const pauseInput = z.object({ reason }).strict();
 
 /** Stops the billing and the benefits, without ending the membership. */
 export async function pauseClientMembershipAction(
@@ -217,6 +220,7 @@ export async function pauseClientMembershipAction(
   membershipId: string,
   input: z.input<typeof pauseInput>,
 ): Promise<ActionResult<{ status: string }>> {
+  if (!validArgs(args([arg.id, arg.id, z.object({ reason: arg.text(1000) }).strict()]), [merchantId, membershipId, input])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const { ctx, membership, clinic, staffName } = await openMembership(merchantId, membershipId, "memberships.manage");
     const { reason: why } = pauseInput.parse(input);
@@ -249,6 +253,7 @@ export async function resumeClientMembershipAction(
   membershipId: string,
   input: z.input<typeof pauseInput>,
 ): Promise<ActionResult<{ status: string }>> {
+  if (!validArgs(args([arg.id, arg.id, z.object({ reason: arg.text(1000) }).strict()]), [merchantId, membershipId, input])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const { ctx, membership, clinic, staffName } = await openMembership(merchantId, membershipId, "memberships.manage");
     const { reason: why } = pauseInput.parse(input);
@@ -277,7 +282,7 @@ export async function resumeClientMembershipAction(
   });
 }
 
-const switchInput = z.object({ planId: z.string().min(1, "Pick a plan"), reason });
+const switchInput = z.object({ planId: z.string().min(1, "Pick a plan"), reason }).strict();
 
 /**
  * Moves the client onto another plan from their next billing period.
@@ -291,6 +296,7 @@ export async function switchClientPlanAction(
   membershipId: string,
   input: z.input<typeof switchInput>,
 ): Promise<ActionResult<{ planId: string }>> {
+  if (!validArgs(args([arg.id, arg.id, z.object({ planId: arg.idOrBlank, reason: arg.text(1000) }).strict()]), [merchantId, membershipId, input])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const { ctx, membership, clinic, staffName } = await openMembership(merchantId, membershipId, "memberships.manage");
     const { planId, reason: why } = switchInput.parse(input);
@@ -338,7 +344,7 @@ const freeInput = z.object({
     .transform((v) => Number(v))
     .refine((n) => Number.isInteger(n) && n > 0 && n <= 12, "Between 1 and 12 periods"),
   reason,
-});
+}).strict();
 
 /**
  * Gives the client free time: the next payments are skipped and the benefits
@@ -349,6 +355,7 @@ export async function giveFreePeriodsAction(
   membershipId: string,
   input: z.input<typeof freeInput>,
 ): Promise<ActionResult<{ nextBillingAt: string }>> {
+  if (!validArgs(args([arg.id, arg.id, z.object({ periods: arg.text(10), reason: arg.text(1000) }).strict()]), [merchantId, membershipId, input])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const { ctx, membership, clinic, staffName } = await openMembership(merchantId, membershipId, "memberships.manage");
     const { periods, reason: why } = freeInput.parse(input);

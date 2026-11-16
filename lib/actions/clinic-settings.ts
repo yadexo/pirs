@@ -13,6 +13,7 @@ import { WEEKDAYS, type OpeningHours } from "@/lib/opening-hours";
 import { appUrl } from "@/lib/app-url";
 import { checkWindow, DEFAULT_WINDOW_END, DEFAULT_WINDOW_START } from "@/lib/marketing-window";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 /**
  * App Builder → Settings. Each section saves through one action here, named
@@ -91,9 +92,10 @@ const generalSchema = z.object({
   cancellationPolicy: optionalText(5000),
   defaultClientLocale: z.enum(["nl", "en"]),
   clientFormality: z.enum(["INFORMAL", "FORMAL"]),
-});
+}).strict();
 
 export async function saveGeneralSettingsAction(merchantId: string, fd: FormData): Promise<ActionResult> {
+  if (!validArgs(args([arg.id, arg.formData]), [merchantId, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
     const data = generalSchema.parse({
@@ -175,9 +177,10 @@ const brandingSchema = z.object({
   country: optionalText(80),
   currency: z.string().refine((c) => CURRENCIES.has(c), "Choose a currency"),
   timeZone: z.string().refine((t) => TIME_ZONES.has(t), "Choose a time zone"),
-});
+}).strict();
 
 export async function saveBrandingAction(merchantId: string, fd: FormData): Promise<ActionResult> {
+  if (!validArgs(args([arg.id, arg.formData]), [merchantId, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
     const data = brandingSchema.parse({
@@ -291,7 +294,7 @@ const inviteSchema = z.object({
   email: z.string({ required_error: "Enter an email" }).trim().toLowerCase().email("Enter a valid email").max(254),
   title: optionalText(80),
   roleId: z.string().optional(),
-});
+}).strict();
 
 /**
  * Adds a staff member who sets their own password from an emailed link. The
@@ -299,6 +302,7 @@ const inviteSchema = z.object({
  * configured yet.
  */
 export async function inviteStaffAction(merchantId: string, fd: FormData): Promise<ActionResult<{ inviteLink: string; emailed: boolean }>> {
+  if (!validArgs(args([arg.id, arg.formData]), [merchantId, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
     await limitTeamInvites(ctx.user.id);
@@ -379,6 +383,7 @@ async function assertNotLastOwner(tx: Prisma.TransactionClient, merchantId: stri
 }
 
 export async function resendInviteAction(merchantId: string, staffProfileId: string): Promise<ActionResult<{ inviteLink: string; emailed: boolean }>> {
+  if (!validArgs(args([arg.id, arg.id]), [merchantId, staffProfileId])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
     await limitTeamWrites(ctx.user.id);
@@ -391,6 +396,7 @@ export async function resendInviteAction(merchantId: string, staffProfileId: str
 }
 
 export async function setStaffRoleAction(merchantId: string, staffProfileId: string, roleId: string | null): Promise<ActionResult> {
+  if (!validArgs(args([arg.id, arg.id, arg.id.nullable()]), [merchantId, staffProfileId, roleId])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
     await limitTeamWrites(ctx.user.id);
@@ -419,6 +425,7 @@ export async function setStaffRoleAction(merchantId: string, staffProfileId: str
  * cut-off a password reset may have set since. They sign in again.
  */
 export async function setStaffActiveAction(merchantId: string, staffProfileId: string, active: boolean): Promise<ActionResult> {
+  if (!validArgs(args([arg.id, arg.id, arg.bool]), [merchantId, staffProfileId, active])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
     await limitTeamWrites(ctx.user.id);
@@ -446,9 +453,10 @@ export async function setStaffActiveAction(merchantId: string, staffProfileId: s
 const roleSchema = z.object({
   name: z.string({ required_error: "Enter a role name" }).min(1, "Enter a role name").max(60),
   permissions: z.array(z.string().refine(isPermissionKey, "Unknown permission")),
-});
+}).strict();
 
 export async function saveRoleAction(merchantId: string, roleId: string | null, fd: FormData): Promise<ActionResult<{ id: string }>> {
+  if (!validArgs(args([arg.id, arg.id.nullable(), arg.formData]), [merchantId, roleId, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
     await limitTeamWrites(ctx.user.id);
@@ -477,6 +485,7 @@ export async function saveRoleAction(merchantId: string, roleId: string | null, 
 }
 
 export async function deleteRoleAction(merchantId: string, roleId: string): Promise<ActionResult> {
+  if (!validArgs(args([arg.id, arg.id]), [merchantId, roleId])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
     await limitTeamWrites(ctx.user.id);
@@ -530,9 +539,10 @@ const locationSchema = z.object({
   country: optionalText(80),
   phone: z.string().max(40).regex(/^[+\d\s().-]*$/, "Digits, spaces, + and - only").optional(),
   isPrimary: z.boolean(),
-});
+}).strict();
 
 export async function saveLocationAction(merchantId: string, id: string | null, fd: FormData): Promise<ActionResult<{ id: string }>> {
+  if (!validArgs(args([arg.id, arg.id.nullable(), arg.formData]), [merchantId, id, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
     const data = locationSchema.parse({
@@ -578,6 +588,7 @@ export async function saveLocationAction(merchantId: string, id: string | null, 
 }
 
 export async function archiveLocationAction(merchantId: string, id: string): Promise<ActionResult> {
+  if (!validArgs(args([arg.id, arg.id]), [merchantId, id])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
     const location = await ctx.db.location.findFirst({ where: { id, active: true } });
@@ -613,9 +624,10 @@ const loyaltySchema = z.object({
   reviewPoints: wholeNumber("review points", 0, 100_000),
   googleReviewUrl: httpsUrl.optional(),
   pointsExpiryDays: wholeNumber("an expiry", 1, 3650).optional(),
-});
+}).strict();
 
 export async function saveLoyaltyRulesAction(merchantId: string, fd: FormData): Promise<ActionResult> {
+  if (!validArgs(args([arg.id, arg.formData]), [merchantId, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "loyalty.adjust");
     const data = loyaltySchema.parse({
@@ -660,7 +672,7 @@ const bookingSchema = z
     appointmentReminderHours: wholeNumber("a reminder time", 0, 24 * 14),
     bookingDepositPercent: wholeNumber("a deposit percentage", 0, 100),
     bookingDepositFixedCents: moneyCents("a deposit amount").optional(),
-  })
+  }).strict()
   .superRefine((b, ctx) => {
     if (b.bookingMode === "EXTERNAL" && !b.externalBookingUrl) {
       ctx.addIssue({ code: "custom", path: ["externalBookingUrl"], message: "Add the link clients should book on" });
@@ -668,6 +680,7 @@ const bookingSchema = z
   });
 
 export async function saveBookingSettingsAction(merchantId: string, fd: FormData): Promise<ActionResult> {
+  if (!validArgs(args([arg.id, arg.formData]), [merchantId, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "appointments.manage");
     const data = bookingSchema.parse({
@@ -717,6 +730,7 @@ function marketingWindow(fd: FormData): { marketingWindowStartMinutes: number; m
 }
 
 export async function saveNotificationSettingsAction(merchantId: string, fd: FormData): Promise<ActionResult> {
+  if (!validArgs(args([arg.id, arg.formData]), [merchantId, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
     const data = {

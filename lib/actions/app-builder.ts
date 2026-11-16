@@ -23,6 +23,7 @@ import { assertTextIsPublishable } from "@/lib/text-check-guard";
 import { sendCampaignNow } from "@/lib/campaign-send";
 import { marketingAudience, marketingWindowFor } from "@/lib/marketing";
 import { instantFromLocal, isWithinWindow, nextSendableTime } from "@/lib/marketing-window";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 /**
  * Every create/edit/archive behind the App Builder tabs. Each action names the
@@ -32,6 +33,9 @@ import { instantFromLocal, isWithinWindow, nextSendableTime } from "@/lib/market
  */
 
 export type ItemKind = "service" | "product" | "package" | "promotion" | "membershipPlan" | "reward" | "campaign";
+
+/** The kinds as a schema, so an unknown kind is refused before it can index NEEDS. */
+const itemKind = z.enum(["service", "product", "package", "promotion", "membershipPlan", "reward", "campaign"]);
 
 const NEEDS: Record<ItemKind, MerchantRequirement> = {
   service: "catalog.manage",
@@ -137,6 +141,7 @@ function assertFound<T>(found: T | null | undefined): T {
 // ---------------------------------------------------------------------------
 
 export async function getAppBuilderOptionsAction(merchantId: string, kind: ItemKind) {
+  if (!validArgs(args([arg.id, itemKind]), [merchantId, kind])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, NEEDS[kind]);
     const { db } = ctx;
@@ -176,6 +181,7 @@ export async function getAppBuilderOptionsAction(merchantId: string, kind: ItemK
 // ---------------------------------------------------------------------------
 
 export async function getAppBuilderItemAction(merchantId: string, kind: ItemKind, id: string) {
+  if (!validArgs(args([arg.id, itemKind, arg.id]), [merchantId, kind, id])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const { db } = await requireMerchantAction(merchantId, NEEDS[kind]);
     let item: object | null = null;
@@ -257,14 +263,14 @@ const tagInputSchema = z.object({
   name: name("a tag name"),
   icon: z.string().max(40).optional(),
   description: shortText,
-});
+}).strict();
 
 const clientResultSchema = z
   .object({
     beforeImageUrl: imageUrl,
     afterImageUrl: imageUrl,
     testimonial: longText,
-  })
+  }).strict()
   // A row with nothing in it is dropped rather than saved as an empty result.
   .refine((r) => r.beforeImageUrl || r.afterImageUrl || r.testimonial, { message: "Add a photo or a testimonial" });
 
@@ -283,7 +289,7 @@ const shopItemSchema = z.object({
   pricingOptions: jsonField(pricingOptionsSchema, EMPTY_PRICING),
   tags: jsonField(z.array(tagInputSchema).max(12, "Up to 12 tags"), []),
   clientResults: jsonField(z.array(clientResultSchema).max(20, "Up to 20 results"), []),
-});
+}).strict();
 
 type ShopItemInput = z.infer<typeof shopItemSchema>;
 
@@ -384,9 +390,10 @@ const serviceSchema = z.object({
   imageUrl,
   taxable: z.boolean(),
   active: z.boolean(),
-});
+}).strict();
 
 export async function saveServiceAction(merchantId: string, id: string | null, fd: FormData): Promise<ActionResult<{ id: string }>> {
+  if (!validArgs(args([arg.id, arg.id.nullable(), arg.formData]), [merchantId, id, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, NEEDS.service);
     const data = serviceSchema.parse({
@@ -467,9 +474,10 @@ const productSchema = z.object({
   images: z.array(imageUrlString).max(6, "Up to 6 images"),
   taxable: z.boolean(),
   active: z.boolean(),
-});
+}).strict();
 
 export async function saveProductAction(merchantId: string, id: string | null, fd: FormData): Promise<ActionResult<{ id: string }>> {
+  if (!validArgs(args([arg.id, arg.id.nullable(), arg.formData]), [merchantId, id, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, NEEDS.product);
     const data = productSchema.parse({
@@ -559,9 +567,10 @@ const packageSchema = z.object({
   imageUrl,
   active: z.boolean(),
   serviceIds: z.array(z.string().min(1)).min(1, "Choose at least one treatment"),
-});
+}).strict();
 
 export async function savePackageAction(merchantId: string, id: string | null, fd: FormData): Promise<ActionResult<{ id: string }>> {
+  if (!validArgs(args([arg.id, arg.id.nullable(), arg.formData]), [merchantId, id, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, NEEDS.package);
     const data = packageSchema.parse({
@@ -660,7 +669,7 @@ const promotionSchema = z
     notifyAgain: z.boolean().default(false),
     /** Reaches clients who have already had their allowance today. */
     notifyIgnoreDailyLimit: z.boolean().default(false),
-  })
+  }).strict()
   .superRefine((p, ctx) => {
     // The dates themselves are checked in the action, where the clinic's
     // timezone is known — "15:30" means nothing without one.
@@ -680,6 +689,7 @@ const promotionSchema = z
   });
 
 export async function savePromotionAction(merchantId: string, id: string | null, fd: FormData): Promise<ActionResult<{ id: string }>> {
+  if (!validArgs(args([arg.id, arg.id.nullable(), arg.formData]), [merchantId, id, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, NEEDS.promotion);
     const data = promotionSchema.parse({
@@ -917,6 +927,7 @@ export async function savePromotionAction(merchantId: string, id: string | null,
  * the offer form so a clinic knows whether it is talking to anybody.
  */
 export async function offerAudienceCountAction(merchantId: string, customerProfileId?: string | null): Promise<ActionResult<{ clients: number }>> {
+  if (!validArgs(args([arg.id, arg.id.nullish()]), [merchantId, customerProfileId])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     await requireMerchantAction(merchantId, NEEDS.promotion);
     const audience = await marketingAudience(merchantId, customerProfileId ?? null);
@@ -945,13 +956,14 @@ const planSchema = z.object({
   benefits: z
     .array(z.string().min(1).max(200, "Keep each benefit under 200 characters"))
     .max(20, "Up to 20 benefits"),
-});
+}).strict();
 
 export async function saveMembershipPlanAction(
   merchantId: string,
   id: string | null,
   fd: FormData,
 ): Promise<ActionResult<{ id: string; priceRollout?: RolloutResult }>> {
+  if (!validArgs(args([arg.id, arg.id.nullable(), arg.formData]), [merchantId, id, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, NEEDS.membershipPlan);
     const data = planSchema.parse({
@@ -1077,7 +1089,7 @@ const rewardSchema = z
     serviceId: z.string().optional(),
     productId: z.string().optional(),
     active: z.boolean(),
-  })
+  }).strict()
   .superRefine((r, ctx) => {
     if (r.rewardType === "DISCOUNT_PERCENT" && !r.discountPercent)
       ctx.addIssue({ code: "custom", path: ["discountPercent"], message: "Enter a percentage" });
@@ -1088,6 +1100,7 @@ const rewardSchema = z
   });
 
 export async function saveRewardAction(merchantId: string, id: string | null, fd: FormData): Promise<ActionResult<{ id: string }>> {
+  if (!validArgs(args([arg.id, arg.id.nullable(), arg.formData]), [merchantId, id, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, NEEDS.reward);
     const data = rewardSchema.parse({
@@ -1142,6 +1155,7 @@ export async function saveRewardAction(merchantId: string, id: string | null, fd
 
 /** Shows or hides an item in the client app without deleting anything. */
 export async function setItemActiveAction(merchantId: string, kind: ItemKind, id: string, active: boolean): Promise<ActionResult> {
+  if (!validArgs(args([arg.id, itemKind, arg.id, arg.bool]), [merchantId, kind, id, active])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, NEEDS[kind]);
     const where = { id };
@@ -1204,6 +1218,7 @@ export async function archiveItemAction(
   kind: ItemKind,
   id: string,
 ): Promise<ActionResult<{ hidden: boolean; usage: PromotionUsage }>> {
+  if (!validArgs(args([arg.id, itemKind, arg.id]), [merchantId, kind, id])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, NEEDS[kind]);
     const archived = { active: false, archivedAt: new Date() };

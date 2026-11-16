@@ -7,6 +7,7 @@ import { ActionError, requireMerchantAction, runAction, type ActionResult } from
 import { marketingAudience, marketingWindowFor, sendMarketingCampaign } from "@/lib/marketing";
 import { isWithinWindow, nextSendableTime } from "@/lib/marketing-window";
 import { vapidConfigured } from "@/lib/web-push";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 /**
  * A discount for one client, given from their record in the dashboard.
@@ -27,11 +28,12 @@ const schema = z.object({
   days: z.coerce.number().int().min(1, "At least a day").max(365, "A year at most"),
   reason: z.string().trim().max(60, "Keep it under 60 characters").optional(),
   notify: z.boolean().default(true),
-});
+}).strict();
 
 export type PersonalDiscountResult = ActionResult<{ promotionId: string; notified: number; heldUntil: string | null }>;
 
 export async function givePersonalDiscountAction(merchantId: string, input: z.input<typeof schema>): Promise<PersonalDiscountResult> {
+  if (!validArgs(args([arg.id, z.object({ customerProfileId: arg.id, percent: arg.formNumber, days: arg.formNumber, reason: arg.text(500).optional(), notify: arg.bool.optional() }).strict()]), [merchantId, input])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "promotions.create");
     const data = schema.parse(input);

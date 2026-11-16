@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { ActionError, requireMerchantAction, runAction, type ActionResult } from "@/lib/merchant-action";
 import { refundPayment, refundableRemainder } from "@/lib/refunds";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 /**
  * Refunding an order from the clinic's dashboard.
@@ -19,7 +20,7 @@ const schema = z.object({
   /** Blank means everything still refundable. */
   amount: z.string().trim().max(20).optional(),
   reason: z.string().trim().max(200, "Keep the reason under 200 characters").optional(),
-});
+}).strict();
 
 export interface RefundableOrder {
   orderId: string;
@@ -32,6 +33,7 @@ export interface RefundableOrder {
 
 /** What the dashboard needs before offering a refund: is there anything left? */
 export async function refundableForOrderAction(merchantId: string, orderId: string): Promise<ActionResult<{ order: RefundableOrder | null }>> {
+  if (!validArgs(args([arg.id, arg.id]), [merchantId, orderId])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "sales.manage");
     const order = await ctx.db.order.findFirst({
@@ -67,6 +69,7 @@ export interface ClientOrderRow {
 
 /** One client's orders, for the record staff already have open. */
 export async function clientOrdersAction(merchantId: string, customerProfileId: string): Promise<ActionResult<{ orders: ClientOrderRow[] }>> {
+  if (!validArgs(args([arg.id, arg.id]), [merchantId, customerProfileId])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     // Reading a client's orders is part of managing sales, like refunding one.
     const ctx = await requireMerchantAction(merchantId, "sales.manage");
@@ -109,6 +112,7 @@ export async function clientOrdersAction(merchantId: string, customerProfileId: 
 export type RefundOrderResult = ActionResult<{ amountCents: number; fully: boolean; pending: boolean }>;
 
 export async function refundOrderAction(merchantId: string, input: z.input<typeof schema>): Promise<RefundOrderResult> {
+  if (!validArgs(args([arg.id, z.object({ orderId: arg.id, amount: arg.text(40).optional(), reason: arg.text(1000).optional() }).strict()]), [merchantId, input])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "sales.manage");
     const data = schema.parse(input);

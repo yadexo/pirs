@@ -9,6 +9,7 @@ import { sendCampaignNow } from "@/lib/campaign-send";
 import { marketingWindowFor } from "@/lib/marketing";
 import { instantFromLocal, isWithinWindow, nextSendableTime } from "@/lib/marketing-window";
 import { vapidConfigured } from "@/lib/web-push";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 /**
  * A clinic's own messages to its clients: send now, or schedule for later.
@@ -36,7 +37,7 @@ const schema = z
     customerProfileId: z.string().trim().max(60).optional(),
     /** Reaches clients who have already had their allowance today. */
     ignoreDailyLimit: z.boolean().default(false),
-  });
+  }).strict();
 
 /** Checks a product or promotion belongs to this clinic before linking to it. */
 async function ownedLinks(merchantId: string, productId?: string, promotionId?: string) {
@@ -52,6 +53,7 @@ async function ownedLinks(merchantId: string, productId?: string, promotionId?: 
 export type CampaignResult = ActionResult<{ id: string; devices: number; scheduledFor: string | null; heldUntil: string | null }>;
 
 export async function saveCampaignAction(merchantId: string, input: z.input<typeof schema>): Promise<CampaignResult> {
+  if (!validArgs(args([arg.id, z.object({ title: arg.text(500), body: arg.text(2000), productId: arg.idOrBlank.optional(), promotionId: arg.idOrBlank.optional(), scheduledAt: arg.text(40).optional(), customerProfileId: arg.idOrBlank.optional(), ignoreDailyLimit: arg.bool.optional() }).strict()]), [merchantId, input])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "messages.send");
     if (!vapidConfigured()) throw new ActionError("Push notifications aren't set up on this platform yet.");
@@ -134,6 +136,7 @@ export async function saveCampaignAction(merchantId: string, input: z.input<type
 
 /** Calls off something that hasn't gone out yet. A sent message can't be unsent. */
 export async function cancelCampaignAction(merchantId: string, campaignId: string): Promise<ActionResult> {
+  if (!validArgs(args([arg.id, arg.id]), [merchantId, campaignId])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "messages.send");
     const { count } = await rawDb.notificationCampaign.updateMany({

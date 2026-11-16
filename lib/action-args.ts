@@ -61,6 +61,14 @@ export const arg = {
   int: (min: number, max: number) => z.number().int().min(min).max(max),
   /** On or off. Not "true", not 1. */
   bool: z.boolean(),
+  /** An optional id from a form's select: an id, or blank for "none". */
+  idOrBlank: z.string().regex(/^[A-Za-z0-9_-]{0,64}$/),
+  /**
+   * A number a form turned into one: a number, or NaN for a box left empty
+   * (Number("")), so the action's own rules can say what is missing instead
+   * of a blanket refusal. Never an object or a string.
+   */
+  formNumber: z.number().or(z.nan()),
   /**
    * A form post. Its fields are read one by one, by name, and each goes
    * through a schema — never spread into a query — so the form itself is

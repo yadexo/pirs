@@ -6,6 +6,7 @@ import { rawDb } from "@/lib/db";
 import { ActionError, requireMerchantAction, runAction, type ActionResult } from "@/lib/merchant-action";
 import { generateBackupCode, generateToken } from "@/lib/redeemable";
 import { notifyItemIssued, notifyItemVoided } from "@/lib/client-notifications";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 /**
  * The items a client can collect, as the clinic's own staff manage them.
@@ -19,13 +20,13 @@ import { notifyItemIssued, notifyItemVoided } from "@/lib/client-notifications";
 
 const reason = z.string().trim().min(1, "A reason is required").max(200, "Keep the reason under 200 characters");
 
-const voidInput = z.object({ reason });
-const reissueInput = z.object({ reason });
+const voidInput = z.object({ reason }).strict();
+const reissueInput = z.object({ reason }).strict();
 const giftInput = z.object({
   name: z.string().trim().min(1, "What are you giving them?").max(120),
   itemType: z.enum(["PRODUCT", "SERVICE", "PACKAGE"]),
   reason,
-});
+}).strict();
 
 /** The item, and the clinic it belongs to. Another clinic's is simply absent. */
 async function openItem(merchantId: string, itemId: string) {
@@ -50,6 +51,7 @@ export async function voidClientItemAction(
   itemId: string,
   input: z.input<typeof voidInput>,
 ): Promise<ActionResult<{ status: string }>> {
+  if (!validArgs(args([arg.id, arg.id, z.object({ reason: arg.text(1000) }).strict()]), [merchantId, itemId, input])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const { ctx, item } = await openItem(merchantId, itemId);
     const { reason: why } = voidInput.parse(input);
@@ -87,6 +89,7 @@ export async function reissueClientItemAction(
   itemId: string,
   input: z.input<typeof reissueInput>,
 ): Promise<ActionResult<{ code: string }>> {
+  if (!validArgs(args([arg.id, arg.id, z.object({ reason: arg.text(1000) }).strict()]), [merchantId, itemId, input])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const { ctx, item } = await openItem(merchantId, itemId);
     const { reason: why } = reissueInput.parse(input);
@@ -134,6 +137,7 @@ export async function giftClientItemAction(
   customerProfileId: string,
   input: z.input<typeof giftInput>,
 ): Promise<ActionResult<{ id: string; code: string }>> {
+  if (!validArgs(args([arg.id, arg.id, z.object({ name: arg.text(500), itemType: arg.text(20), reason: arg.text(1000) }).strict()]), [merchantId, customerProfileId, input])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "sales.manage");
     const { name, itemType, reason: why } = giftInput.parse(input);
