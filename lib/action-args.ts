@@ -59,6 +59,20 @@ export const arg = {
   text: (max: number) => z.string().max(max),
   /** A whole number in a stated range. Not NaN, not a fraction, not Infinity. */
   int: (min: number, max: number) => z.number().int().min(min).max(max),
+  /** On or off. Not "true", not 1. */
+  bool: z.boolean(),
+  /**
+   * A form post. Its fields are read one by one, by name, and each goes
+   * through a schema — never spread into a query — so the form itself is
+   * only checked for being one.
+   */
+  formData: z.instanceof(FormData),
+  /**
+   * The previous state React's useActionState passes as an action's first
+   * argument. Never read, so anything is acceptable; this is the one place a
+   * schema may say so (tests/action-args-coverage.test.ts).
+   */
+  prevState: z.unknown(),
 } as const;
 
 /** `z.tuple`, re-exported so action files need one import for this. */

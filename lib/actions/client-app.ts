@@ -1386,6 +1386,18 @@ export async function clientCancelPlanAction(slug: string): Promise<{ error: str
 // Profile & account
 // ---------------------------------------------------------------------------
 
+/** What the profile form sends, by type only; the rules and their messages are below. */
+const profileShape = z
+  .object({
+    firstName: arg.text(200),
+    lastName: arg.text(200).optional(),
+    phone: arg.text(80).optional(),
+    birthdayDay: z.number().optional(),
+    birthdayMonth: z.number().optional(),
+    birthdayYear: z.number().optional(),
+  })
+  .strict();
+
 const profileSchema = z
   .object({
     firstName: z.string().min(1, "First name is required").max(80),
@@ -1397,6 +1409,7 @@ const profileSchema = z
     birthdayMonth: z.coerce.number().int().min(1).max(12).optional(),
     birthdayYear: z.coerce.number().int().min(1900).max(new Date().getFullYear()).optional(),
   })
+  .strict()
   .superRefine((p, ctx) => {
     const hasDay = p.birthdayDay !== undefined;
     const hasMonth = p.birthdayMonth !== undefined;
@@ -1418,7 +1431,7 @@ export async function clientSaveProfileAction(
   slug: string,
   input: { firstName: string; lastName?: string; phone?: string; birthdayDay?: number; birthdayMonth?: number; birthdayYear?: number },
 ): Promise<{ error: string } | { ok: true }> {
-  if (!validArgs(args([arg.slug, z.record(z.unknown())]), [slug, input])) return { error: INVALID_REQUEST };
+  if (!validArgs(args([arg.slug, profileShape]), [slug, input])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
 
   const parsed = profileSchema.safeParse(input);
@@ -1506,20 +1519,22 @@ export async function clientSaveConsentAction(
  * it is written by /api/push when a device actually subscribes, so it can't be
  * claimed without a subscription to show for it.
  */
-const promptEvent = z.object({
-  kind: z.enum(["SHOWN", "NOT_NOW", "BLOCKED"]),
-  surface: z.enum(["SHEET", "CARD", "INSTALL", "SETTINGS_HELP"]),
-  stage: z.number().int().min(0).max(5),
-});
+const promptEvent = z
+  .object({
+    kind: z.enum(["SHOWN", "NOT_NOW", "BLOCKED"]),
+    surface: z.enum(["SHEET", "CARD", "INSTALL", "SETTINGS_HELP"]),
+    stage: z.number().int().min(0).max(5),
+  })
+  .strict();
 
 export async function clientRecordNotificationPromptAction(
   slug: string,
   input: z.input<typeof promptEvent>,
 ): Promise<{ ok: true } | { error: string }> {
+  if (!validArgs(args([arg.slug, promptEvent]), [slug, input])) return { error: "invalid" };
   const parsed = promptEvent.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
 
-  if (!validArgs(args([arg.slug, z.record(z.unknown())]), [slug, input])) return { error: "invalid" };
   const { db, user } = await requireCustomerContext();
   // Cheap, and fine for a person; the cap is for a script. A whole schedule is
   // a handful of events, so this is generous.
@@ -1547,21 +1562,23 @@ export async function clientRecordNotificationPromptAction(
  * "I installed from the clinic's domain" when it did not would silence the
  * nudge on an address the client never visited.
  */
-const installEvent = z.object({
-  kind: z.enum(["SHOWN", "STARTED", "ACCEPTED", "OPENED", "DISMISSED", "NEVER"]),
-  os: z.enum(["IOS", "IPADOS", "ANDROID", "MACOS", "WINDOWS", "OTHER"]),
-  browser: z.enum(["SAFARI", "CHROME", "EDGE", "SAMSUNG", "FIREFOX", "OPERA", "OTHER"]),
-  stage: z.number().int().min(0).max(9),
-});
+const installEvent = z
+  .object({
+    kind: z.enum(["SHOWN", "STARTED", "ACCEPTED", "OPENED", "DISMISSED", "NEVER"]),
+    os: z.enum(["IOS", "IPADOS", "ANDROID", "MACOS", "WINDOWS", "OTHER"]),
+    browser: z.enum(["SAFARI", "CHROME", "EDGE", "SAMSUNG", "FIREFOX", "OPERA", "OTHER"]),
+    stage: z.number().int().min(0).max(9),
+  })
+  .strict();
 
 export async function clientRecordInstallEventAction(
   slug: string,
   input: z.input<typeof installEvent>,
 ): Promise<{ ok: true } | { error: string }> {
+  if (!validArgs(args([arg.slug, installEvent]), [slug, input])) return { error: "invalid" };
   const parsed = installEvent.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
 
-  if (!validArgs(args([arg.slug, z.record(z.unknown())]), [slug, input])) return { error: "invalid" };
   const { db, user } = await requireCustomerContext();
   const { ok } = await rateLimit(`install-event:${user.id}`, 30, 60 * 60 * 1000);
   if (!ok) return { error: "rate-limited" };

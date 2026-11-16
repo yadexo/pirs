@@ -162,6 +162,21 @@ describe("client actions refuse what the app would never send", () => {
     expect(Array.isArray(await searchCatalogAction("facial"))).toBe(true);
   });
 
+  it("objects are strict: a key the app never sends is refused, and nothing is written", async () => {
+    // docs/security/review-2026-11-pass2.md: an object of any shape used to
+    // pass the check, and then reached Prisma.
+    const before = await profile();
+    for (const extra of [{ accountCreditBalanceCents: 100000 }, { loyaltyPointsBalance: 99999 }, { firstName: { set: "x" } }]) {
+      expect(await call(clientApp.clientSaveProfileAction, slug, { firstName: "Ada", ...extra }), JSON.stringify(extra)).toEqual({ error: INVALID_REQUEST });
+    }
+    const after = await profile();
+    expect([after.firstName, after.accountCreditBalanceCents, after.loyaltyPointsBalance]).toEqual([before.firstName, before.accountCreditBalanceCents, before.loyaltyPointsBalance]);
+    expect(await call(clientApp.clientRecordInstallEventAction, slug, { kind: "SHOWN", os: "IOS", browser: "SAFARI", stage: 0, origin: "https://evil.example" })).toEqual({ error: "invalid" });
+    expect(await call(clientApp.clientRecordNotificationPromptAction, slug, { kind: "SHOWN", surface: "CARD", stage: 0, tenantId: "other" })).toEqual({ error: "invalid" });
+    // What the profile form really sends still saves.
+    expect(await clientApp.clientSaveProfileAction(slug, { firstName: "Ada", lastName: "Client", phone: "", birthdayDay: 3, birthdayMonth: 4, birthdayYear: undefined })).toEqual({ ok: true });
+  });
+
   it("the language and the recorded events keep their own refusals", async () => {
     expect(await call(clientApp.clientSaveLocaleAction, slug, { $ne: null })).toEqual({ error: INVALID_REQUEST });
     expect(await call(clientApp.clientRecordInstallEventAction, slug, "SHOWN")).toEqual({ error: "invalid" });

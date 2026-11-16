@@ -1,23 +1,23 @@
 /**
- * Every client-side server action checks every argument it is given.
+ * Every server action in the app checks every argument it is given, strictly.
  *
  * A server action is a public endpoint; its TypeScript signature is not a
  * check on what a browser sends (lib/action-args.ts). This test is what makes
- * "every action validates its arguments" a fact rather than an intention: it
- * reads the action files and fails for any exported action with a parameter
- * that is not named in a `validArgs(...)` call.
+ * "every action validates its arguments" a fact rather than an intention.
  *
- * It was written after a quantity of minus one made an order free and an
- * unchecked object let a client write to any column of their own profile
- * (docs/security/review-2026-11.md, P-1 and R-2) — both in files where every
- * argument had a perfectly good type.
+ * History. The first version (R-2, after a quantity of minus one made an
+ * order free) read four client-side files and accepted any schema at all,
+ * including `z.record(z.unknown())`. An object sent where an appointment id
+ * belonged then rewrote every appointment of a clinic, and one sent where a
+ * membership id belonged cancelled every membership
+ * (docs/security/review-2026-11-pass2.md, I-3 and I-4). So it now reads every
+ * action file, and refuses the schemas that let an object through.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
 
-/** The files whose exported actions a signed-in client — or anyone — can call. */
-const CLIENT_ACTION_FILES = ["client-app.ts", "client-catalog.ts", "client-scan.ts", "clinic-directory.ts"];
+const ACTIONS_DIR = join(process.cwd(), "lib", "actions");
 
 /**
  * Parameters that are deliberately not in a validArgs call, by
@@ -26,6 +26,25 @@ const CLIENT_ACTION_FILES = ["client-app.ts", "client-catalog.ts", "client-scan.
  */
 const EXEMPT: Record<string, string> = {};
 
+/**
+ * Files not yet brought under these rules. Temporary: each commit of the
+ * pass-2 fixes empties part of it, and the last one deletes it.
+ */
+const PENDING_FILES = new Set([
+  "account.ts", "activity.ts", "agency.ts", "app-builder.ts", "appointments.ts", "auth.ts", "campaigns.ts",
+  "check-in.ts", "client-account.ts", "client-items.ts", "client-membership.ts", "clinic-broadcast.ts",
+  "clinic-domains.ts", "clinic-settings.ts", "guest-locale.ts", "impersonation.ts", "merchants.ts", "password.ts",
+  "personal-discount.ts", "platform-admins.ts", "redeem.ts", "refund-order.ts", "register.ts", "session.ts", "two-factor.ts",
+]);
+
+/**
+ * Schema pieces that accept an object of any shape, or anything at all.
+ * `arg.prevState` (lib/action-args.ts) is the one sanctioned "anything": it
+ * is the ignored first argument React's useActionState passes, and it is
+ * never read.
+ */
+const LOOSE = [/z\.record\(/, /z\.any\(/, /z\.unknown\(/, /z\.custom\b/, /\.passthrough\(/, /\.catchall\(/];
+
 interface Action {
   file: string;
   name: string;
@@ -33,23 +52,34 @@ interface Action {
   body: string;
 }
 
+function allActionFiles(): string[] {
+  return readdirSync(ACTIONS_DIR).filter((f) => f.endsWith(".ts"));
+}
+
+function actionFiles(): string[] {
+  return allActionFiles().filter((f) => !PENDING_FILES.has(f));
+}
+
+function source(file: string): string {
+  return readFileSync(join(ACTIONS_DIR, file), "utf8").replace(/\r/g, "");
+}
+
 /** The exported async functions of one file, with their parameter names and bodies. */
 function actionsIn(file: string): Action[] {
-  const source = readFileSync(join(process.cwd(), "lib", "actions", file), "utf8").replace(/\r/g, "");
-  const starts = [...source.matchAll(/^export async function (\w+)\(/gm)];
+  const text = source(file);
+  const starts = [...text.matchAll(/^export async function (\w+)\(/gm)];
   return starts.map((match, index) => {
     const open = match.index! + match[0].length;
-    // Walk to the parenthesis that closes the parameter list.
     let depth = 1;
     let at = open;
-    while (depth > 0 && at < source.length) {
-      const ch = source[at++];
+    while (depth > 0 && at < text.length) {
+      const ch = text[at++];
       if (ch === "(") depth++;
       else if (ch === ")") depth--;
     }
-    const list = source.slice(open, at - 1);
-    const end = index + 1 < starts.length ? starts[index + 1]!.index! : source.length;
-    return { file, name: match[1]!, params: paramNames(list), body: source.slice(at, end) };
+    const list = text.slice(open, at - 1);
+    const end = index + 1 < starts.length ? starts[index + 1]!.index! : text.length;
+    return { file, name: match[1]!, params: paramNames(list), body: text.slice(at, end) };
   });
 }
 
@@ -80,15 +110,62 @@ function validatedNames(body: string): string[] | null {
     .filter(Boolean);
 }
 
-describe("client-side actions validate what they are sent", () => {
-  const all = CLIENT_ACTION_FILES.flatMap(actionsIn);
+/** Every `z.object(` in a file, with whether `.strict()` follows its closing parenthesis. */
+function objectSchemas(text: string): { line: number; strict: boolean }[] {
+  const found: { line: number; strict: boolean }[] = [];
+  for (const match of text.matchAll(/z\.object\(/g)) {
+    let depth = 1;
+    let at = match.index! + match[0].length;
+    while (depth > 0 && at < text.length) {
+      const ch = text[at++];
+      if (ch === "(") depth++;
+      else if (ch === ")") depth--;
+    }
+    found.push({ line: text.slice(0, match.index).split("\n").length, strict: /^\s*\.strict\(\)/.test(text.slice(at)) });
+  }
+  return found;
+}
+
+/** Source files outside lib/actions that are, or contain, server actions. */
+function useServerElsewhere(): { file: string; fileLevel: boolean; inline: string[] }[] {
+  const out: { file: string; fileLevel: boolean; inline: string[] }[] = [];
+  const walk = (dir: string) => {
+    for (const name of readdirSync(dir)) {
+      if (name === "node_modules" || name.startsWith(".")) continue;
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) walk(path);
+      else if (/\.(ts|tsx)$/.test(name)) {
+        const text = readFileSync(path, "utf8").replace(/\r/g, "");
+        const fileLevel = /^\s*(\/\/[^\n]*\n|\/\*[\s\S]*?\*\/\s*)*["']use server["']/.test(text);
+        // An inline action: a function whose body opens with "use server".
+        const inline = [...text.matchAll(/function\s+(\w+)\(([^)]*)\)[^{]*\{\s*["']use server["']/g)].map((m) => `${m[1]}(${m[2]!.trim()})`);
+        if (fileLevel || inline.length) out.push({ file: relative(process.cwd(), path).replace(/\\/g, "/"), fileLevel, inline });
+      }
+    }
+  };
+  for (const root of ["app", "lib", "components"]) walk(join(process.cwd(), root));
+  return out;
+}
+
+describe("every server action validates what it is sent", () => {
+  const files = actionFiles();
+  const all = files.flatMap(actionsIn);
 
   it("finds the actions at all (a reader that finds nothing would pass everything)", () => {
-    expect(all.length).toBeGreaterThan(20);
-    const add = all.find((a) => a.name === "clientAddToCartAction");
-    expect(add?.params).toEqual(["slug", "kind", "id", "qty"]);
-    // A parameter whose type contains commas and braces is still one parameter.
+    const everything = allActionFiles().flatMap(actionsIn);
+    expect(allActionFiles().length).toBeGreaterThan(25);
+    expect(everything.length).toBeGreaterThan(100);
+    expect(everything.find((a) => a.name === "cancelClientMembershipAction")?.params).toEqual(["merchantId", "membershipId", "input"]);
+    for (const pending of PENDING_FILES) expect(allActionFiles(), `${pending} is pending but does not exist`).toContain(pending);
+    expect(all.find((a) => a.name === "clientAddToCartAction")?.params).toEqual(["slug", "kind", "id", "qty"]);
     expect(all.find((a) => a.name === "clientCheckoutAction")?.params).toEqual(["slug", "rewardId", "options"]);
+  });
+
+  it("server actions live in lib/actions, and inline ones take no arguments", () => {
+    const stray = useServerElsewhere().filter((f) => !f.file.startsWith("lib/actions/"));
+    expect(stray.filter((f) => f.fileLevel).map((f) => f.file)).toEqual([]);
+    const withArgs = stray.flatMap((f) => f.inline.filter((sig) => !/\(\)$/.test(sig)).map((sig) => `${f.file}: ${sig}`));
+    expect(withArgs).toEqual([]);
   });
 
   it("every parameter of every action is named in its validArgs call, in order", () => {
@@ -110,16 +187,34 @@ describe("client-side actions validate what they are sent", () => {
     expect(problems).toEqual([]);
   });
 
-  it("the check comes before anything is read from the database", () => {
+  it("the check comes before anything else is done", () => {
     const late = all
       .filter((action) => action.params.length > 0)
       .filter((action) => {
         const check = action.body.indexOf("validArgs(");
-        const firstQuery = action.body.search(/\b(db|rawDb|tx)\.\w+\.\w+\(/);
-        return check >= 0 && firstQuery >= 0 && firstQuery < check;
+        const firstEffect = action.body.search(/\b(db|rawDb|tx)\.\w+\.\w+\(|\brequire\w*\(|\bawait\b/);
+        return check >= 0 && firstEffect >= 0 && firstEffect < check;
       })
       .map((action) => `${action.file}: ${action.name}`);
     expect(late).toEqual([]);
+  });
+
+  it("no action file uses a schema that lets an arbitrary object through", () => {
+    const loose: string[] = [];
+    for (const file of files) {
+      source(file)
+        .split("\n")
+        .forEach((line, i) => {
+          if (LOOSE.some((re) => re.test(line))) loose.push(`${file}:${i + 1}: ${line.trim()}`);
+        });
+    }
+    expect(loose).toEqual([]);
+  });
+
+  it("every object schema in an action file is strict, so unknown keys are refused", () => {
+    const lax = files.flatMap((file) => objectSchemas(source(file)).filter((o) => !o.strict).map((o) => `${file}:${o.line}`));
+    // z.object({...}).strict() — then .extend/.refine as needed.
+    expect(lax).toEqual([]);
   });
 
   it("has no stale exemptions", () => {
