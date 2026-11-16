@@ -134,6 +134,27 @@ export async function createDirectCharge(params: {
 }
 
 /**
+ * Stops a payment the client never finished, so it cannot succeed later.
+ *
+ * Returns what the payment now is: "cancelled" (it can no longer take money,
+ * including when it already was), or "succeeded" / "processing" when it is too
+ * late to stop — the money is taken or on its way, and the webhook decides
+ * what happens to the order. Only "cancelled" makes it safe to release an
+ * order's stock, points and credit (docs/security/review-2026-11-pass2.md, P-8).
+ */
+export async function cancelDirectCharge(params: {
+  stripeAccountId: string;
+  paymentIntentId: string;
+}): Promise<"cancelled" | "succeeded" | "processing"> {
+  const intent = await stripe().paymentIntents.retrieve(params.paymentIntentId, {}, { stripeAccount: params.stripeAccountId });
+  if (intent.status === "canceled") return "cancelled";
+  if (intent.status === "succeeded") return "succeeded";
+  if (intent.status === "processing") return "processing";
+  const cancelled = await stripe().paymentIntents.cancel(params.paymentIntentId, { cancellation_reason: "abandoned" }, { stripeAccount: params.stripeAccountId });
+  return cancelled.status === "canceled" ? "cancelled" : cancelled.status === "succeeded" ? "succeeded" : "processing";
+}
+
+/**
  * Refunds a charge on the clinic's account, giving back the platform's fee in
  * proportion. Without `refund_application_fee` the clinic would refund the
  * client in full while the platform kept its cut.

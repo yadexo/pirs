@@ -1,6 +1,7 @@
 import "server-only";
 import type { TenantDb } from "@/lib/tenant-db";
 import { adjustLoyaltyPoints } from "@/lib/loyalty";
+import { adjustAccountCredit } from "@/lib/account-credit";
 import { recordActivity } from "@/lib/activity";
 import { notifyOrderConfirmation } from "@/lib/client-notifications";
 
@@ -92,8 +93,15 @@ export async function completePaidOrder(db: TenantDb, orderId: string): Promise<
 }
 
 /**
- * Gives back everything a pending order was holding: redeemed points and the
- * stock it took. The basket is left OPEN so the client can try again.
+ * Gives back everything a pending order was holding: redeemed points, the
+ * account credit applied to it, and the stock it took. The basket is left
+ * OPEN so the client can try again.
+ *
+ * Exactly once: the conditional PENDING→FAILED claim means only one caller —
+ * the client abandoning, the failed-payment webhook, or the hourly cleanup —
+ * gets past it, however many arrive. Credit was once left out of this, and a
+ * client who paid part with credit and then had a card declined lost it
+ * (docs/security/review-2026-11-pass2.md, P-7).
  */
 export async function releaseFailedOrder(db: TenantDb, orderId: string, reason: string): Promise<boolean> {
   const claimed = await db.order.updateMany({ where: { id: orderId, status: "PENDING" }, data: { status: "FAILED" } });
@@ -112,6 +120,15 @@ export async function releaseFailedOrder(db: TenantDb, orderId: string, reason: 
       customerProfileId: order.customerProfileId,
       points: order.loyaltyPointsRedeemed,
       type: "REFUNDED",
+      reason: `Order ${order.orderNumber} did not complete: ${reason}`,
+      relatedOrderId: order.id,
+    });
+  }
+  if (order.creditAppliedCents > 0) {
+    await adjustAccountCredit(db, {
+      customerProfileId: order.customerProfileId,
+      amountCents: order.creditAppliedCents,
+      type: "REFUND",
       reason: `Order ${order.orderNumber} did not complete: ${reason}`,
       relatedOrderId: order.id,
     });

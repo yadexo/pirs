@@ -4,6 +4,7 @@ import { sweepExpiredRateLimits } from "@/lib/rate-limit";
 import { IMPERSONATION_MAX_MS } from "@/lib/impersonation-policy";
 import { getTenantDb } from "@/lib/tenant-db";
 import { releaseFailedOrder } from "@/lib/order-completion";
+import { cancelDirectCharge } from "@/lib/stripe-payments";
 import { runMarketing } from "@/lib/cron/marketing";
 import { PAST_DUE_GRACE_MS } from "@/lib/membership-status";
 import { notifyMembershipSuspended } from "@/lib/client-notifications";
@@ -75,6 +76,21 @@ export const CRON_JOBS: Record<string, () => Promise<CronResult>> = {
       take: 200,
     });
     for (const order of abandoned) {
+      // A card payment is stopped first, so it cannot succeed after the order
+      // has given its stock and credit back (pass-2 review, P-8). One that is
+      // too late to stop is left for the payment webhook to settle.
+      const card = await rawDb.payment.findFirst({
+        where: { orderId: order.id, tenantId: order.tenantId, provider: "STRIPE", providerPaymentId: { not: null }, stripeAccountId: { not: null } },
+        select: { id: true, providerPaymentId: true, stripeAccountId: true },
+      });
+      if (card) {
+        const outcome = await cancelDirectCharge({ stripeAccountId: card.stripeAccountId!, paymentIntentId: card.providerPaymentId! }).catch((err) => {
+          console.error(`[cron] could not cancel ${card.providerPaymentId}:`, err instanceof Error ? err.message : err);
+          return "unknown" as const;
+        });
+        if (outcome !== "cancelled") continue;
+        await rawDb.payment.updateMany({ where: { id: card.id, tenantId: order.tenantId }, data: { status: "CANCELLED", failureReason: "The payment was never completed." } });
+      }
       await releaseFailedOrder(getTenantDb(order.tenantId), order.id, "the payment was never completed");
     }
 

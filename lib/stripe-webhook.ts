@@ -16,7 +16,7 @@ import { graceEndsAt } from "@/lib/membership-status";
 import { adjustAccountCredit } from "@/lib/account-credit";
 import { createItemsForOrder, voidItemsForOrder } from "@/lib/redeemable";
 import { createPackagesForOrder } from "@/lib/customer-packages";
-import { stripe } from "@/lib/stripe-payments";
+import { refundDirectCharge, stripe } from "@/lib/stripe-payments";
 
 /**
  * What each Stripe event does to our records. Split out of the route so the
@@ -346,6 +346,23 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       });
       if (payment.orderId) {
         await completePaidOrder(getTenantDb(payment.tenantId), payment.orderId);
+        const settled = await rawDb.order.findFirst({ where: { id: payment.orderId, tenantId: payment.tenantId }, select: { status: true, orderNumber: true } });
+        if (settled?.status === "FAILED") {
+          // Paid after the order had already given back its stock, points and
+          // credit (the client gave up, or the cleanup released it). Nothing
+          // is issued for it; the money goes back. Keyed by the payment, so a
+          // repeated event gets Stripe's first refund rather than a second.
+          console.error(`[stripe-webhook] ${intent.id} succeeded on failed order ${settled.orderNumber}; refunding in full`);
+          await refundDirectCharge({
+            stripeAccountId: payment.stripeAccountId!,
+            paymentIntentId: intent.id,
+            amountCents: payment.amountCents,
+            reason: `Order ${settled.orderNumber} had already been cancelled`,
+            hasApplicationFee: (payment.applicationFeeCents ?? 0) > 0,
+            idempotencyKey: `late-${payment.id}`,
+          });
+          return;
+        }
         // Paid for means collectable: one code per unit bought. Safe to
         // repeat, because Stripe can deliver the same event twice.
         await createItemsForOrder(payment.orderId);
