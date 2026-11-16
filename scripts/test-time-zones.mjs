@@ -23,6 +23,13 @@ export const TIME_SENSITIVE_TESTS = [
   "tests/zoned-time.test.ts",
   "tests/marketing-window.test.ts",
   "tests/local-time.test.ts",
+  "tests/integration/slot-time-zones.test.ts",
+  "tests/integration/reschedule-safety.test.ts",
+  "tests/integration/once-only-races.test.ts",
+  "tests/integration/client-app-roundtrip.test.ts",
+  "tests/integration/business-flows.test.ts",
+  "tests/integration/client-payments.test.ts",
+  "tests/integration/check-in.test.ts",
 ];
 
 const files = [...TIME_SENSITIVE_TESTS, ...process.argv.slice(2)];

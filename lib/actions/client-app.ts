@@ -6,6 +6,8 @@ import { requireCustomerContext } from "@/lib/rbac";
 import { rawDb } from "@/lib/db";
 import { getAvailableSlots } from "@/lib/availability";
 import { bookingProblem, holdSlot, SLOT_TAKEN } from "@/lib/booking-rules";
+import { clinicZone } from "@/lib/clinic-zone";
+import { addDays, todayIn } from "@/lib/clinic-time";
 import { lockRow, LOCKED_CLAIM } from "@/lib/row-lock";
 import type { TenantDb } from "@/lib/tenant-db";
 import { adjustLoyaltyPoints, InsufficientPointsError, rewardDiscountCents } from "@/lib/loyalty";
@@ -71,21 +73,27 @@ export async function getBookingOptionsForServiceAction(serviceId: string) {
   ]);
   if (!service) return null;
 
+  // The clinic's next seven days, decided here in the clinic's zone: the
+  // phone builds no dates, so its own zone and clock cannot shift them.
+  const today = todayIn(await clinicZone(db));
   return {
     durationMinutes: service.durationMinutes,
     staff: staff.map((s) => ({ id: s.id, name: `${s.firstName} ${s.lastName}`.trim() })),
     locations,
+    days: Array.from({ length: 7 }, (_, i) => addDays(today, i + 1)),
   };
 }
 
-export async function getClientSlotsAction(staffProfileId: string, locationId: string, durationMinutes: number, dateIso: string) {
-  if (!validArgs(args([arg.id, arg.id, arg.int(5, 600), arg.isoDate]), [staffProfileId, locationId, durationMinutes, dateIso])) throw new InvalidActionArgsError();
+/** The free start times on one of the clinic's calendar days ("2026-11-19"). */
+export async function getClientSlotsAction(staffProfileId: string, locationId: string, durationMinutes: number, day: string) {
+  if (!validArgs(args([arg.id, arg.id, arg.int(5, 600), arg.day]), [staffProfileId, locationId, durationMinutes, day])) throw new InvalidActionArgsError();
   const { db } = await requireCustomerContext();
   const slots = await getAvailableSlots(db, {
     staffProfileId,
     locationId,
     serviceDurationMinutes: durationMinutes,
-    date: new Date(dateIso),
+    day,
+    timeZone: await clinicZone(db),
   });
   return slots.map((s) => s.toISOString());
 }

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vites
 import { rawDb } from "@/lib/db";
 import { getTenantDb, type TenantDb } from "@/lib/tenant-db";
 import { hashPassword } from "@/lib/password";
+import { addDays, dayRange, instantAt, todayIn, wallMinutes } from "@/lib/clinic-time";
 
 const rbacMocks = vi.hoisted(() => ({
   requireCustomerContext: vi.fn(),
@@ -296,39 +297,36 @@ describe("business-critical workflows", () => {
 
   describe("appointment availability", () => {
     it("returns slots within staff working hours and excludes an already-booked slot", async () => {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      tomorrow.setHours(0, 0, 0, 0);
+      // The clinic's tomorrow and the clinic's hours: the process's own zone plays no part.
+      const zone = "Europe/Amsterdam";
+      const tomorrow = addDays(todayIn(zone), 1);
 
-      const slotsBefore = await getAvailableSlots(db, { staffProfileId, locationId, serviceDurationMinutes: 30, date: tomorrow });
+      const slotsBefore = await getAvailableSlots(db, { staffProfileId, locationId, serviceDurationMinutes: 30, day: tomorrow, timeZone: zone });
       expect(slotsBefore.length).toBeGreaterThan(0);
       for (const slot of slotsBefore) {
-        expect(slot.getHours()).toBeGreaterThanOrEqual(9);
-        expect(slot.getHours()).toBeLessThan(17);
+        expect(wallMinutes(zone, slot, tomorrow)).toBeGreaterThanOrEqual(9 * 60);
+        expect(wallMinutes(zone, slot, tomorrow)).toBeLessThan(17 * 60);
       }
 
-      const bookedStart = new Date(tomorrow);
-      bookedStart.setHours(10, 0, 0, 0);
+      const bookedStart = instantAt(zone, tomorrow, 10 * 60)!;
       const bookedEnd = new Date(bookedStart.getTime() + 30 * 60000);
       await rawDb.appointment.create({
         data: { tenantId, customerProfileId, serviceId, staffProfileId, locationId, startAt: bookedStart, endAt: bookedEnd, status: "CONFIRMED" },
       });
 
-      const slotsAfter = await getAvailableSlots(db, { staffProfileId, locationId, serviceDurationMinutes: 30, date: tomorrow });
+      const slotsAfter = await getAvailableSlots(db, { staffProfileId, locationId, serviceDurationMinutes: 30, day: tomorrow, timeZone: zone });
       const stillOffered = slotsAfter.some((s) => s.getTime() === bookedStart.getTime());
       expect(stillOffered).toBe(false);
     });
 
     it("returns no slots on a day with a tenant-wide blocked time covering the whole day", async () => {
-      const future = new Date();
-      future.setDate(future.getDate() + 10);
-      future.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(future);
-      dayEnd.setHours(23, 59, 0, 0);
+      const zone = "Europe/Amsterdam";
+      const future = addDays(todayIn(zone), 10);
+      const { start, end } = dayRange(zone, future);
 
-      await rawDb.blockedTime.create({ data: { tenantId, startAt: future, endAt: dayEnd, reason: "Clinic closed for holiday" } });
+      await rawDb.blockedTime.create({ data: { tenantId, startAt: start, endAt: end, reason: "Clinic closed for holiday" } });
 
-      const slots = await getAvailableSlots(db, { staffProfileId, locationId, serviceDurationMinutes: 30, date: future });
+      const slots = await getAvailableSlots(db, { staffProfileId, locationId, serviceDurationMinutes: 30, day: future, timeZone: zone });
       expect(slots).toHaveLength(0);
     });
   });

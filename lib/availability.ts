@@ -1,5 +1,6 @@
 import "server-only";
 import type { TenantDb } from "@/lib/tenant-db";
+import { dayRange, instantAt, todayIn, wallMinutes, weekdayOf, type DayKey } from "@/lib/clinic-time";
 
 export interface FreeWindow {
   start: number; // minutes after midnight
@@ -19,34 +20,40 @@ function subtractInterval(windows: FreeWindow[], busyStart: number, busyEnd: num
   return result.filter((w) => w.end > w.start);
 }
 
-function startOfDay(date: Date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function minutesToDate(day: Date, minutes: number) {
-  const d = startOfDay(day);
-  d.setMinutes(d.getMinutes() + minutes);
-  return d;
-}
-
 const SLOT_INCREMENT_MINUTES = 15;
 
+/**
+ * The times a practitioner can start a treatment on one of the clinic's
+ * calendar days.
+ *
+ * Everything is the clinic's: the day is a "YYYY-MM-DD" in the clinic's time
+ * zone, the practitioner's hours are minutes of that day, and appointments
+ * and blocked times are read as minutes of that day too (lib/clinic-time.ts).
+ * Only the free wall-clock times are turned into instants, at the end. This
+ * once worked from an instant and the server's own zone, so a client in
+ * Amsterdam picking Thursday got Wednesday's hours, an hour or two off.
+ *
+ * A wall-clock time the clocks skip is not offered; one that happens twice is
+ * offered once. A past day has no slots; today has none before "now".
+ */
 export async function getAvailableSlots(
   db: TenantDb,
   params: {
     staffProfileId: string;
     locationId: string;
     serviceDurationMinutes: number;
-    date: Date;
+    day: DayKey;
+    timeZone: string;
     /** The appointment being moved: it does not stand in its own way. */
     excludeAppointmentId?: string;
+    now?: Date;
   },
 ): Promise<Date[]> {
-  const dayStart = startOfDay(params.date);
-  const dayEnd = minutesToDate(params.date, 24 * 60);
-  const dayOfWeek = dayStart.getDay();
+  const { day, timeZone } = params;
+  const now = params.now ?? new Date();
+  if (day < todayIn(timeZone, now)) return [];
+  const { start: dayStart, end: dayEnd } = dayRange(timeZone, day);
+  const dayOfWeek = weekdayOf(day);
 
   const [availabilityRows, appointments, blockedTimes] = await Promise.all([
     db.staffAvailability.findMany({
@@ -82,24 +89,18 @@ export async function getAvailableSlots(
     }
   }
 
-  const toMinutes = (d: Date) => Math.round((d.getTime() - dayStart.getTime()) / 60000);
-
-  for (const appt of appointments) {
-    windows = subtractInterval(windows, Math.max(0, toMinutes(appt.startAt)), Math.min(24 * 60, toMinutes(appt.endAt)));
-  }
-  for (const block of blockedTimes) {
-    windows = subtractInterval(windows, Math.max(0, toMinutes(block.startAt)), Math.min(24 * 60, toMinutes(block.endAt)));
+  for (const busy of [...appointments, ...blockedTimes]) {
+    windows = subtractInterval(windows, wallMinutes(timeZone, busy.startAt, day), wallMinutes(timeZone, busy.endAt, day));
   }
 
-  const now = new Date();
-  const isToday = dayStart.toDateString() === now.toDateString();
-  const nowMinutes = isToday ? now.getHours() * 60 + now.getMinutes() : -1;
-
+  const seen = new Set<number>();
   const slots: Date[] = [];
   for (const w of windows) {
     for (let t = w.start; t + params.serviceDurationMinutes <= w.end; t += SLOT_INCREMENT_MINUTES) {
-      if (t <= nowMinutes) continue;
-      slots.push(minutesToDate(params.date, t));
+      const at = instantAt(timeZone, day, t);
+      if (!at || at.getTime() <= now.getTime() || seen.has(at.getTime())) continue;
+      seen.add(at.getTime());
+      slots.push(at);
     }
   }
   return slots.sort((a, b) => a.getTime() - b.getTime());

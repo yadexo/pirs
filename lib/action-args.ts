@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isDayKey } from "@/lib/clinic-time";
 
 /**
  * Checking what a server action was actually sent.
@@ -55,6 +56,8 @@ export const arg = {
     .string()
     .max(40)
     .refine((value) => !Number.isNaN(Date.parse(value))),
+  /** A calendar day, "2026-11-19", that exists. Days are passed as days, never as instants. */
+  day: z.string().refine(isDayKey),
   /** Free text someone typed: a search, an email address, a phone number. */
   text: (max: number) => z.string().max(max),
   /** A whole number in a stated range. Not NaN, not a fraction, not Infinity. */

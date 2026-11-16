@@ -4,6 +4,8 @@ import type { Prisma } from "@prisma/client";
 import { rawDb } from "@/lib/db";
 import { getAvailableSlots } from "@/lib/availability";
 import { lockRow, LOCKED_CLAIM } from "@/lib/row-lock";
+import { clinicZone } from "@/lib/clinic-zone";
+import { todayIn } from "@/lib/clinic-time";
 
 export const SLOT_TAKEN = "That time was just taken. Please pick another.";
 export const CHOOSE_AGAIN = "That staff member or location isn't available any more. Please choose again.";
@@ -45,11 +47,15 @@ export async function bookingProblem(
   if (!staff || !location) return CHOOSE_AGAIN;
   if (assigned > 0 && staff.services.length === 0) return CHOOSE_AGAIN;
 
+  // The clinic's calendar day of the time asked for: the same day, and the
+  // same slots, the client was shown.
+  const timeZone = await clinicZone(db);
   const slots = await getAvailableSlots(db, {
     staffProfileId: staff.id,
     locationId: location.id,
     serviceDurationMinutes: params.durationMinutes,
-    date: params.startAt,
+    day: todayIn(timeZone, params.startAt),
+    timeZone,
     excludeAppointmentId: params.excludeAppointmentId,
   });
   if (!slots.some((s) => s.getTime() === params.startAt.getTime())) return SLOT_TAKEN;

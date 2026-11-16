@@ -8,6 +8,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { rawDb } from "@/lib/db";
 import { getTenantDb, type TenantDb } from "@/lib/tenant-db";
 import { hashPassword } from "@/lib/password";
+import { addDays, todayIn } from "@/lib/clinic-time";
 
 const rbacMocks = vi.hoisted(() => ({
   requireCustomerContext: vi.fn(),
@@ -155,9 +156,7 @@ describe("client app -> clinic portal round trip", () => {
    */
   async function nextSlot(): Promise<string> {
     for (let dayOffset = 3; dayOffset <= 12; dayOffset++) {
-      const date = new Date();
-      date.setDate(date.getDate() + dayOffset);
-      const slots = await getClientSlotsAction(staffProfileId, locationId, 60, date.toISOString());
+      const slots = await getClientSlotsAction(staffProfileId, locationId, 60, addDays(todayIn("Europe/Amsterdam"), dayOffset));
       if (slots.length > 0) return slots[0]!;
     }
     throw new Error("Availability engine offered no slots in the next 12 days");

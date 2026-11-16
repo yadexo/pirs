@@ -138,6 +138,9 @@ describe("client actions refuse what the app would never send", () => {
       [2, -30],
       [2, 100_000],
       [3, "tomorrow-ish"],
+      // A day is a calendar day: an instant would be read in some zone, and moved.
+      [3, "2026-11-12T00:00:00.000Z"],
+      [3, "2026-02-30"],
     ] as const) {
       const given: unknown[] = [...good];
       given[index] = bad;

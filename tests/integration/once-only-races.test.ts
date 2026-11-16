@@ -14,6 +14,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { rawDb } from "@/lib/db";
 import { getTenantDb, type TenantDb } from "@/lib/tenant-db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
+import { addDays, instantAt, todayIn } from "@/lib/clinic-time";
 
 // Each parallel call runs as its own signed-in client.
 const who = new AsyncLocalStorage<{ db: TenantDb; user: Record<string, unknown> }>();
@@ -156,10 +157,9 @@ describe("once-only claims under simultaneous requests", () => {
       for (let dayOfWeek = 0; dayOfWeek <= 6; dayOfWeek++) {
         await rawDb.staffAvailability.create({ data: { tenantId, staffProfileId: staff.id, dayOfWeek, startMinute: 9 * 60, endMinute: 17 * 60 } });
       }
-      const day = new Date();
-      day.setDate(day.getDate() + 5);
-      day.setHours(10, 0, 0, 0);
-      return { locationId: location.id, serviceId: service.id, staffProfileId: staff.id, startAtIso: day.toISOString() };
+      // 10:00 in the clinic's zone five days out, whatever zone this process runs in.
+      const at = instantAt("Europe/Amsterdam", addDays(todayIn("Europe/Amsterdam"), 5), 10 * 60)!;
+      return { locationId: location.id, serviceId: service.id, staffProfileId: staff.id, startAtIso: at.toISOString() };
     }
 
     it("8 simultaneous bookings of one slot give one appointment", async () => {

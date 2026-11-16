@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { rawDb } from "@/lib/db";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
 import { ENROLLED } from "../helpers/enrolled";
+import { addDays, todayIn } from "@/lib/clinic-time";
 
 const authMock = vi.hoisted(() => ({ auth: vi.fn() }));
 const clientAuthMock = vi.hoisted(() => ({ clientAuth: vi.fn(), clientSignIn: vi.fn(), clientSignOut: vi.fn() }));
@@ -215,8 +216,7 @@ describe("client payments on the clinic's Stripe account", () => {
       data: [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({ tenantId: clinic, staffProfileId, dayOfWeek, startMinute: 9 * 60, endMinute: 17 * 60 })),
     });
 
-    const day = new Date(Date.now() + 3 * 86_400_000);
-    const slots = await clientApp.getClientSlotsAction(staffProfileId, location.id, 30, day.toISOString());
+    const slots = await clientApp.getClientSlotsAction(staffProfileId, location.id, 30, addDays(todayIn("Europe/Amsterdam"), 3));
     expect(slots.length).toBeGreaterThan(0);
 
     const res = await clientApp.clientBookAction(`pay-${stamp}`, {

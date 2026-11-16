@@ -12,6 +12,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { rawDb } from "@/lib/db";
 import { getTenantDb, type TenantDb } from "@/lib/tenant-db";
 import { getAvailableSlots } from "@/lib/availability";
+import { addDays, instantAt, todayIn } from "@/lib/clinic-time";
 
 const rbacMocks = vi.hoisted(() => ({
   requireCustomerContext: vi.fn(),
@@ -25,6 +26,7 @@ const { clientBookAction } = await import("@/lib/actions/client-app");
 const { INVALID_REQUEST } = await import("@/lib/action-args");
 
 const SLUG = "reschedule-safety";
+const ZONE = "Europe/Amsterdam";
 
 async function makeClinic(label: string) {
   const tenant = await rawDb.tenant.create({ data: { slug: `${SLUG}-${label}-${Date.now()}`, name: `Clinic ${label}` } });
@@ -58,6 +60,7 @@ describe("rescheduling follows the booking rules", () => {
   let mine: string;
   let theirs: string;
   let slots: Date[];
+  let slotDay: string;
 
   function signInAs(client: Awaited<ReturnType<typeof makeClient>>) {
     rbacMocks.requireCustomerContext.mockResolvedValue({
@@ -77,9 +80,9 @@ describe("rescheduling follows the booking rules", () => {
     db = getTenantDb(clinic.tenantId);
 
     // Four free slots, a few days out, so "now" never gets in the way.
-    const day = new Date();
-    day.setDate(day.getDate() + 4);
-    slots = await getAvailableSlots(db, { staffProfileId: clinic.staffProfileId, locationId: clinic.locationId, serviceDurationMinutes: 60, date: day });
+    const day = addDays(todayIn(ZONE), 4);
+    slotDay = day;
+    slots = await getAvailableSlots(db, { staffProfileId: clinic.staffProfileId, locationId: clinic.locationId, serviceDurationMinutes: 60, day, timeZone: ZONE });
     slots = slots.filter((s) => s.getMinutes() === 0);
     expect(slots.length).toBeGreaterThanOrEqual(4);
 
@@ -136,8 +139,8 @@ describe("rescheduling follows the booking rules", () => {
   });
 
   it("refuses a closed hour (B-1)", async () => {
-    const night = new Date(slots[0]!);
-    night.setHours(3, 0, 0, 0);
+    // 03:00 in the clinic's zone, whatever zone this process runs in.
+    const night = instantAt(ZONE, slotDay, 3 * 60)!;
     const res = await move({ startAtIso: night.toISOString() });
     expect(res).toEqual({ error: "That time was just taken. Please pick another." });
   });

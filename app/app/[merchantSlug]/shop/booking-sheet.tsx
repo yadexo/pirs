@@ -19,6 +19,8 @@ interface Options {
   durationMinutes: number;
   staff: { id: string; name: string }[];
   locations: { id: string; name: string }[];
+  /** The clinic's next seven calendar days, "YYYY-MM-DD". */
+  days: string[];
 }
 
 /**
@@ -49,7 +51,8 @@ export function BookingSheet({
   const [options, setOptions] = React.useState<Options | null>(null);
   const [staffId, setStaffId] = React.useState("");
   const [locationId, setLocationId] = React.useState("");
-  const [date, setDate] = React.useState(() => nextDays(timeZone)[0]!.iso);
+  /** One of the clinic's calendar days, "2026-11-19", as the server listed them. */
+  const [date, setDate] = React.useState("");
   const [slots, setSlots] = React.useState<string[]>([]);
   const [slot, setSlot] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -66,16 +69,17 @@ export function BookingSheet({
     getBookingOptionsForServiceAction(service.id).then((o) => {
       if (!o) return;
       setOptions(o);
+      setDate((current) => (o.days.includes(current) ? current : (o.days[0] ?? "")));
       setStaffId(o.staff[0]?.id ?? "");
       setLocationId(o.locations[0]?.id ?? "");
     });
   }, [service]);
 
   React.useEffect(() => {
-    if (!service || !options || !staffId || !locationId) return;
+    if (!service || !options || !staffId || !locationId || !date) return;
     setLoading(true);
     setSlot(null);
-    getClientSlotsAction(staffId, locationId, options.durationMinutes, new Date(date).toISOString())
+    getClientSlotsAction(staffId, locationId, options.durationMinutes, date)
       .then(setSlots)
       .catch(() => setSlots([]))
       .finally(() => setLoading(false));
@@ -131,7 +135,7 @@ export function BookingSheet({
     setDeposit(null);
   }
 
-  const days = nextDays(timeZone);
+  const days = (options?.days ?? []).map((iso) => ({ iso, label: dayLabel(iso) }));
 
   return (
     <Sheet
@@ -227,14 +231,10 @@ export function BookingSheet({
   );
 }
 
-function nextDays(timeZone: string) {
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1 + i);
-    d.setHours(0, 0, 0, 0);
-    return {
-      iso: d.toISOString(),
-      label: formatWeekday(d, timeZone),
-    };
-  });
+/**
+ * "Thu 19 Nov" for a calendar day. Formatted as a date in UTC, because the
+ * day is already the clinic's: reading it in any real zone could move it.
+ */
+function dayLabel(day: string) {
+  return formatWeekday(new Date(`${day}T12:00:00Z`), "UTC");
 }
