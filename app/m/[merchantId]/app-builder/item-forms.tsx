@@ -21,6 +21,7 @@ import { FieldIssues, TextCheckPanel, useTextCheck } from "@/components/merchant
 import { Info } from "lucide-react";
 import { packageSaving } from "@/lib/package-pricing";
 import { formatMoney } from "@/lib/utils";
+import { useClinicTimeZone } from "@/components/clinic-time-zone";
 
 export interface FormOptions {
   serviceCategories: string[];
@@ -177,7 +178,8 @@ export function PackageForm({ merchantId, currency, item, options, errors }: Ite
  * timezone instead, so a clinic manager abroad still sets the clinic's hours.
  */
 function DateTimeField({ label, name, iso, errors, disabled }: { label: string; name: string; iso: string | undefined; errors: FieldErrors; disabled?: boolean }) {
-  const [local, setLocal] = React.useState(toLocalInput(iso));
+  const timeZone = useClinicTimeZone();
+  const [local, setLocal] = React.useState(toLocalInput(iso, timeZone));
   return (
     <TextField
       label={label}

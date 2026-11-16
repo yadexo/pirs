@@ -11,9 +11,12 @@ import { getHomeMetrics } from "@/lib/home-metrics";
 import { resolveLocale } from "@/lib/locale";
 import { ActivityFeed } from "./activity-feed";
 import { StatsGrid } from "./stats-grid";
+import { clinicZone } from "@/lib/clinic-zone";
+import { todayIn, wallMinutes } from "@/lib/clinic-time";
 
-function greeting(t: (key: string) => string, now = new Date()) {
-  const h = now.getHours();
+/** By the clinic's clock: "good morning" is the clinic's morning, not the server's. */
+function greeting(t: (key: string) => string, timeZone: string, now = new Date()) {
+  const h = Math.floor(wallMinutes(timeZone, now, todayIn(timeZone, now)) / 60);
   if (h < 12) return t("goodMorning");
   if (h < 18) return t("goodAfternoon");
   return t("goodEvening");
@@ -52,7 +55,7 @@ export default async function MerchantHomePage({
   return (
     <div className="mx-auto max-w-[1180px]">
       <MerchantPageHeader
-        title={`${greeting(t)}, ${ctx.merchantName}`}
+        title={`${greeting(t, await clinicZone(ctx.db))}, ${ctx.merchantName}`}
         description={t("howIsDoing", { name: ctx.merchantName })}
       />
 

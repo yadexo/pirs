@@ -15,6 +15,7 @@ import { viewerCan } from "@/lib/viewer";
 import type { MerchantRequirement } from "@/lib/merchant-action";
 import type { SettingsSection } from "@/lib/nav";
 import { defaultFilterFor } from "@/lib/app-builder-filters";
+import { clinicZone } from "@/lib/clinic-zone";
 
 // lib/nav.ts's APP_BUILDER_TABS key → messages/*.json portal.appBuilder.tabs key.
 // Same reasoning as components/shell/app-shell.tsx's MERCHANT_NAV_KEYS: the
@@ -196,7 +197,8 @@ async function loadItems(
       },
     });
     const now = Date.now();
-    const shortDate = (d: Date | null) => (d ? d.toLocaleDateString("en-US", { dateStyle: "medium" }) : "");
+    const timeZone = await clinicZone(db);
+    const shortDate = (d: Date | null) => (d ? d.toLocaleDateString("en-US", { dateStyle: "medium", timeZone }) : "");
     return rows.map((r) => {
       const notice = r.campaigns[0];
       const notified = !notice

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toaster";
 import { updateAppointmentStatusAction } from "@/lib/actions/appointments";
 import { cn } from "@/lib/utils";
+import { useClinicTimeZone } from "@/components/clinic-time-zone";
 
 export interface AppointmentRow {
   id: string;
@@ -28,8 +29,8 @@ const CHIP_KEYS = ["upcoming", "requested", "confirmed", "completed", "cancelled
 const tone = (s: string) =>
   s === "CONFIRMED" ? "green" : s === "REQUESTED" ? "amber" : s === "CANCELLED" || s === "NO_SHOW" ? "red" : "neutral";
 
-function when(iso: string, locale: string) {
-  return new Date(iso).toLocaleString(locale === "nl" ? "nl-NL" : "en-US", { dateStyle: "medium", timeStyle: "short" });
+function when(iso: string, locale: string, timeZone: string) {
+  return new Date(iso).toLocaleString(locale === "nl" ? "nl-NL" : "en-US", { dateStyle: "medium", timeStyle: "short", timeZone });
 }
 
 export function AppointmentsView({
@@ -45,6 +46,7 @@ export function AppointmentsView({
   q: string;
   appointments: AppointmentRow[];
 }) {
+  const timeZone = useClinicTimeZone();
   const router = useRouter();
   const t = useTranslations("portal.appointments");
   const locale = useLocale();
@@ -133,7 +135,7 @@ export function AppointmentsView({
                       {a.client} · {a.service}
                     </p>
                     <p className="truncate text-[11px] text-ink-muted">
-                      {when(a.startAt, locale)} · {a.staff} · {a.location}
+                      {when(a.startAt, locale, timeZone)} · {a.staff} · {a.location}
                     </p>
                   </div>
                   <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -175,14 +177,14 @@ export function AppointmentsView({
         open={!!selected}
         onClose={() => setSelected(null)}
         title={selected ? `${selected.client} · ${selected.service}` : ""}
-        subtitle={selected ? when(selected.startAt, locale) : undefined}
+        subtitle={selected ? when(selected.startAt, locale, timeZone) : undefined}
       >
         {selected && (
           <dl className="space-y-3 text-[13px]">
             <Row label={t("status")} value={t(`statusLabel.${selected.status}`)} />
             <Row label={t("staff")} value={selected.staff} />
             <Row label={t("location")} value={selected.location} />
-            <Row label={t("ends")} value={when(selected.endAt, locale)} />
+            <Row label={t("ends")} value={when(selected.endAt, locale, timeZone)} />
             <Row label={t("notes")} value={selected.notes || "-"} />
           </dl>
         )}
@@ -201,10 +203,11 @@ function CalendarView({
   onSelect: (a: AppointmentRow) => void;
   locale: string;
 }) {
+  const timeZone = useClinicTimeZone();
   const intlLocale = locale === "nl" ? "nl-NL" : "en-US";
   const byDay = new Map<string, AppointmentRow[]>();
   for (const a of appointments) {
-    const key = new Date(a.startAt).toLocaleDateString(intlLocale, { weekday: "long", month: "short", day: "numeric" });
+    const key = new Date(a.startAt).toLocaleDateString(intlLocale, { weekday: "long", month: "short", day: "numeric", timeZone });
     byDay.set(key, [...(byDay.get(key) ?? []), a]);
   }
 
@@ -222,7 +225,7 @@ function CalendarView({
                   className="w-full rounded-[10px] border border-border px-3 py-2 text-left hover:bg-app"
                 >
                   <p className="text-[12px] font-medium">
-                    {new Date(a.startAt).toLocaleTimeString(intlLocale, locale === "nl" ? { hour: "2-digit", minute: "2-digit" } : { hour: "numeric", minute: "2-digit" })} · {a.client}
+                    {new Date(a.startAt).toLocaleTimeString(intlLocale, { ...(locale === "nl" ? { hour: "2-digit", minute: "2-digit" } : { hour: "numeric", minute: "2-digit" }), timeZone })} · {a.client}
                   </p>
                   <p className="text-[11px] text-ink-muted">{a.service}</p>
                 </button>

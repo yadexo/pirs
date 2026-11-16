@@ -8,6 +8,7 @@ import { formatMoney } from "@/lib/utils";
 import { describeActionFailure } from "@/lib/action-failure";
 import { clientOrdersAction, type ClientOrderRow } from "@/lib/actions/refund-order";
 import { RefundButton } from "../shop/refund-button";
+import { useClinicTimeZone } from "@/components/clinic-time-zone";
 
 /**
  * A client's orders, inside the record staff already have open — so refunding
@@ -41,9 +42,10 @@ function statusLabel(status: string, t: ReturnType<typeof useTranslations>): str
 }
 
 export function ClientOrders({ merchantId, customerProfileId, canRefund }: { merchantId: string; customerProfileId: string; canRefund: boolean }) {
+  const timeZone = useClinicTimeZone();
   const t = useTranslations("portal.clients.clientOrders");
   const locale = useLocale();
-  const when = (iso: string) => new Date(iso).toLocaleDateString(locale === "nl" ? "nl-NL" : "en-US", { dateStyle: "medium" });
+  const when = (iso: string) => new Date(iso).toLocaleDateString(locale === "nl" ? "nl-NL" : "en-US", { dateStyle: "medium", timeZone });
   const [orders, setOrders] = React.useState<ClientOrderRow[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 

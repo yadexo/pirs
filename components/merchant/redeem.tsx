@@ -13,6 +13,7 @@ import { lookupRedeemableAction, redeemItemAction } from "@/lib/actions/redeem";
 import type { ItemView } from "@/lib/redeemable";
 import { ClientPackages } from "@/components/merchant/client-packages";
 import { searchClientsForCheckInAction } from "@/lib/actions/check-in";
+import { useClinicTimeZone } from "@/components/clinic-time-zone";
 
 /**
  * Handing a client the thing they bought: scan the code in their app, or type
@@ -195,9 +196,10 @@ export function ItemCard({
   note?: string;
   onNoteChange?: (value: string) => void;
 }) {
+  const timeZone = useClinicTimeZone();
   const t = useTranslations("merchant.redeem");
-  const purchased = new Date(item.purchasedAt).toLocaleDateString();
-  const redeemed = item.redeemedAt ? new Date(item.redeemedAt).toLocaleString() : null;
+  const purchased = new Date(item.purchasedAt).toLocaleDateString(undefined, { timeZone });
+  const redeemed = item.redeemedAt ? new Date(item.redeemedAt).toLocaleString(undefined, { timeZone }) : null;
 
   return (
     <div className="space-y-4">

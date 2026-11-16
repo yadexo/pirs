@@ -10,6 +10,8 @@ import { FormSection, TextAreaField, TextField, type FieldErrors } from "@/compo
 import { cancelCampaignAction } from "@/lib/actions/campaigns";
 import { offerAudienceCountAction } from "@/lib/actions/app-builder";
 import { describeActionFailure } from "@/lib/action-failure";
+import { toInputValue } from "@/lib/clinic-time";
+import { useClinicTimeZone } from "@/components/clinic-time-zone";
 
 /**
  * Telling clients about an offer, from the form where the offer is written.
@@ -27,12 +29,12 @@ export interface OfferCampaign {
   devicesReached: number;
 }
 
-const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "—");
+const when = (iso: string | null, timeZone: string) => (iso ? new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone }) : "—");
 
 /** The datetime-local value for an instant, in the browser's own timezone. */
-function localInput(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+/** The clinic's wall clock for a datetime-local input; the server reads it back in the same zone. */
+function localInput(d: Date, timeZone: string): string {
+  return toInputValue(timeZone, d);
 }
 
 export function NotifyOffer({
@@ -56,6 +58,7 @@ export function NotifyOffer({
   canSend: boolean;
   errors: FieldErrors;
 }) {
+  const timeZone = useClinicTimeZone();
   const router = useRouter();
   const t = useTranslations("portal.appBuilder.notifyOffer");
   const [mode, setMode] = React.useState<"none" | "now" | "schedule">("none");
@@ -97,7 +100,7 @@ export function NotifyOffer({
       <FormSection title={t("title")}>
         <input type="hidden" name="notifyMode" value="none" />
         <p className="text-[12px] text-ink-muted">{t("needsSendPermission")}</p>
-        {sent && <p className="text-[12px] text-ink-muted">{t("notifiedOn", { when: when(sent.sentAt) })}</p>}
+        {sent && <p className="text-[12px] text-ink-muted">{t("notifiedOn", { when: when(sent.sentAt, timeZone) })}</p>}
       </FormSection>
     );
   }
@@ -108,13 +111,13 @@ export function NotifyOffer({
         <div className="flex items-center gap-2 rounded-[10px] bg-app px-3 py-2 text-[12px]">
           {sent && (
             <span>
-              {t("sentOnTo", { when: when(sent.sentAt), count: sent.devicesReached })}
+              {t("sentOnTo", { when: when(sent.sentAt, timeZone), count: sent.devicesReached })}
             </span>
           )}
           {scheduled && (
             <>
               <Pill tone="amber">{t("scheduledPill")}</Pill>
-              <span>{t("goesOut", { when: when(scheduled.scheduledAt) })}</span>
+              <span>{t("goesOut", { when: when(scheduled.scheduledAt, timeZone) })}</span>
               <Button type="button" size="sm" variant="outline" onClick={cancelScheduled}>
                 {t("cancelIt")}
               </Button>
@@ -145,10 +148,10 @@ export function NotifyOffer({
               label={t("when")}
               name="notifyAt"
               type="datetime-local"
-              min={startsLater ? localInput(start) : undefined}
-              defaultValue={localInput(startsLater ? start : new Date(Date.now() + 60 * 60 * 1000))}
+              min={startsLater ? localInput(start, timeZone) : undefined}
+              defaultValue={localInput(startsLater ? start : new Date(Date.now() + 60 * 60 * 1000), timeZone)}
               errors={errors}
-              hint={startsLater ? t("notBeforeStart", { when: when(startAt) }) : t("outsideSendingHours")}
+              hint={startsLater ? t("notBeforeStart", { when: when(startAt, timeZone) }) : t("outsideSendingHours")}
             />
           )}
 
@@ -198,7 +201,7 @@ export function NotifyOffer({
           {sent && (
             <label className="flex items-center gap-2 text-[12px]">
               <input type="checkbox" name="notifyAgain" checked={again} onChange={(e) => setAgain(e.target.checked)} className="h-3.5 w-3.5" />
-              {t("alreadyGotOne", { when: when(sent.sentAt) })}
+              {t("alreadyGotOne", { when: when(sent.sentAt, timeZone) })}
             </label>
           )}
         </>

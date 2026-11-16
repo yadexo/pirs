@@ -10,6 +10,7 @@ import { Pill } from "@/components/ui/primitives";
 import { FormSection, SelectField, TextAreaField, TextField, type FieldErrors } from "@/components/merchant/form";
 import { cancelCampaignAction, saveCampaignAction } from "@/lib/actions/campaigns";
 import { describeActionFailure } from "@/lib/action-failure";
+import { useClinicTimeZone } from "@/components/clinic-time-zone";
 
 /**
  * Messages to this clinic's clients: now, or at a time the clinic picks.
@@ -49,7 +50,7 @@ const STATUS_LABEL_KEYS: Record<string, string> = {
   DRAFT: "draft",
 };
 
-const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "—");
+const when = (iso: string | null, timeZone: string) => (iso ? new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone }) : "—");
 
 export function BroadcastForm({
   merchantId,
@@ -62,6 +63,7 @@ export function BroadcastForm({
   products: { id: string; name: string }[];
   campaigns: CampaignRow[];
 }) {
+  const timeZone = useClinicTimeZone();
   const router = useRouter();
   const t = useTranslations("portal.appBuilder.settings.broadcast");
   const tStatus = useTranslations("portal.appBuilder.settings.broadcast.status");
@@ -95,7 +97,7 @@ export function BroadcastForm({
 
     if (result.scheduledFor) {
       toast.success(
-        result.heldUntil ? t("scheduledHeldUntil", { when: when(result.heldUntil) }) : t("scheduledFor", { when: when(result.scheduledFor) }),
+        result.heldUntil ? t("scheduledHeldUntil", { when: when(result.heldUntil, timeZone) }) : t("scheduledFor", { when: when(result.scheduledFor, timeZone) }),
       );
     } else {
       toast.success(t("sentToDevices", { count: result.devices }));
@@ -174,9 +176,9 @@ export function BroadcastForm({
                   <p className="truncate text-[13px] font-medium">{c.name}</p>
                   <p className="truncate text-[11px] text-ink-muted">
                     {c.status === "SENT"
-                      ? t("sentDevices", { when: when(c.sentAt), count: c.devicesReached })
+                      ? t("sentDevices", { when: when(c.sentAt, timeZone), count: c.devicesReached })
                       : c.status === "SCHEDULED"
-                        ? t("goesOut", { when: when(c.scheduledAt) })
+                        ? t("goesOut", { when: when(c.scheduledAt, timeZone) })
                         : statusLabel(c.status)}
                     {c.clientName ? t("clientOnly", { name: c.clientName }) : ""}
                   </p>

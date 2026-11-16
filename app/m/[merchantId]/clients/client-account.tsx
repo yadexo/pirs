@@ -14,6 +14,7 @@ import {
   type ClientAccount,
   type LedgerRow,
 } from "@/lib/actions/client-account";
+import { useClinicTimeZone } from "@/components/clinic-time-zone";
 
 /**
  * A client's balances: what they have, where it came from, and the controls
@@ -217,6 +218,7 @@ function Ledger({
   locale: string;
   t: ReturnType<typeof useTranslations>;
 }) {
+  const timeZone = useClinicTimeZone();
   const ledgerLabel = (type: string): string => {
     switch (type) {
       case "MANUAL_ADJUSTMENT":
@@ -237,7 +239,7 @@ function Ledger({
         return type;
     }
   };
-  const when = (iso: string) => new Date(iso).toLocaleString(locale === "nl" ? "nl-NL" : "en-US", { dateStyle: "medium", timeStyle: "short" });
+  const when = (iso: string) => new Date(iso).toLocaleString(locale === "nl" ? "nl-NL" : "en-US", { dateStyle: "medium", timeStyle: "short", timeZone });
   const show = (value: number) => (currency ? formatMoney(value, currency) : String(value));
   if (rows.length === 0) return <p className="py-6 text-center text-[12px] text-ink-muted">{t("nothingHere")}</p>;
 

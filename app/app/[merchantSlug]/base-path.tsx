@@ -28,22 +28,8 @@ export function useBasePath(): string {
   return base;
 }
 
-/**
- * The clinic's time zone, for every date and time the app prints.
- *
- * It comes from the server with the rest of the clinic, so the first render
- * and the hydrated one agree — which the phone's own time zone could not
- * promise. See lib/client-format.ts for why that matters.
- */
-const TimeZone = React.createContext<string>("");
-
-export function ClinicTimeZoneProvider({ timeZone, children }: { timeZone: string; children: React.ReactNode }) {
-  return <TimeZone.Provider value={timeZone}>{children}</TimeZone.Provider>;
-}
-
-export function useClinicTimeZone(): string {
-  return React.useContext(TimeZone);
-}
+/** The clinic's time zone, shared with the clinic portal (components/clinic-time-zone.tsx). */
+export { ClinicTimeZoneProvider, useClinicTimeZone } from "@/components/clinic-time-zone";
 
 /**
  * The clinic's app home, as an href. Same as the base path everywhere except

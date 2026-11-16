@@ -41,6 +41,7 @@ import { BroadcastForm } from "./broadcast";
 import { DailyLimitField } from "./daily-limit";
 import { DEFAULT_WINDOW_END, DEFAULT_WINDOW_START } from "@/lib/marketing-window";
 import { SendingWindowFields } from "./sending-window";
+import { useClinicTimeZone } from "@/components/clinic-time-zone";
 
 type Data<S extends SettingsData["section"]> = Extract<SettingsData, { section: S }>;
 type SaveFn = (merchantId: string, fd: FormData) => Promise<ActionResult>;
@@ -1053,6 +1054,7 @@ function stripeStatusMap(
 }
 
 function StripeConnectCard({ merchantId, stripe, isOwner }: { merchantId: string; stripe: Data<"integrations">["stripe"]; isOwner: boolean }) {
+  const timeZone = useClinicTimeZone();
   const t = useTranslations("portal.appBuilder.settings.sections.integrations");
   const tc = useTranslations("common");
   const [confirming, setConfirming] = React.useState(false);
@@ -1090,7 +1092,7 @@ function StripeConnectCard({ merchantId, stripe, isOwner }: { merchantId: string
           {stripe.checkedAt && (
             <div>
               <dt className="text-ink-muted">{t("lastCheckedLabel")}</dt>
-              <dd className="font-medium">{new Date(stripe.checkedAt).toLocaleString()}</dd>
+              <dd className="font-medium">{new Date(stripe.checkedAt).toLocaleString(undefined, { timeZone })}</dd>
             </div>
           )}
         </dl>
@@ -1237,6 +1239,7 @@ export function IntegrationsSection({
 // ---------------------------------------------------------------------------
 
 export function AuditLogSection({ data }: { data: Data<"audit-log"> }) {
+  const timeZone = useClinicTimeZone();
   const t = useTranslations("portal.appBuilder.settings.sections.auditLog");
   if (data.rows.length === 0) return <p className="text-[12px] text-ink-muted">{t("empty")}</p>;
   return (
@@ -1252,7 +1255,7 @@ export function AuditLogSection({ data }: { data: Data<"audit-log"> }) {
         <tbody className="divide-y divide-border">
           {data.rows.map((r) => (
             <tr key={r.id}>
-              <td className="whitespace-nowrap px-3 py-2 text-ink-muted">{new Date(r.createdAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</td>
+              <td className="whitespace-nowrap px-3 py-2 text-ink-muted">{new Date(r.createdAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone })}</td>
               <td className="px-3 py-2">
                 {r.actorUser?.email ?? (r.actorType === "SYSTEM" ? t("systemActor") : "—")}
                 {r.actorType === "PLATFORM_ADMIN" && <span className="ml-1 text-ink-faint">{t("agencySuffix")}</span>}

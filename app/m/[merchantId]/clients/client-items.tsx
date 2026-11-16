@@ -12,6 +12,7 @@ import { clientItemsAction, redeemItemAction } from "@/lib/actions/redeem";
 import { giftClientItemAction, reissueClientItemAction, voidClientItemAction } from "@/lib/actions/client-items";
 import { ClientPackages } from "@/components/merchant/client-packages";
 import type { ItemView } from "@/lib/redeemable";
+import { useClinicTimeZone } from "@/components/clinic-time-zone";
 
 /**
  * A client's items inside the record staff already open to look them up — so
@@ -30,6 +31,7 @@ import type { ItemView } from "@/lib/redeemable";
 const TONE = { AVAILABLE: "green", REDEEMED: "amber", VOIDED: "red", EXPIRED: "neutral" } as const;
 
 export function ClientItems({ merchantId, customerProfileId }: { merchantId: string; customerProfileId: string }) {
+  const timeZone = useClinicTimeZone();
   const router = useRouter();
   const t = useTranslations("portal.clients.clientItems");
   const tc = useTranslations("common");
@@ -115,7 +117,7 @@ export function ClientItems({ merchantId, customerProfileId }: { merchantId: str
 
   if (error) return <p className="rounded-[10px] bg-[var(--accent-red)]/10 px-3 py-2 text-[12px] text-ink">{error}</p>;
 
-  const dateFmt = (iso: Date | string) => new Date(iso).toLocaleDateString(locale === "nl" ? "nl-NL" : "en-US");
+  const dateFmt = (iso: Date | string) => new Date(iso).toLocaleDateString(locale === "nl" ? "nl-NL" : "en-US", { timeZone });
 
   if (confirming) {
     return (

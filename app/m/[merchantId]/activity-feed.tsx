@@ -4,11 +4,12 @@ import * as React from "react";
 import { useLocale, useTranslations } from "next-intl";
 import type { ActivityItem } from "@/lib/home-metrics";
 import { getActivityFeedAction } from "@/lib/actions/activity";
+import { useClinicTimeZone } from "@/components/clinic-time-zone";
 
 const POLL_MS = 20_000;
 
-function formatWhen(iso: string, locale: string) {
-  return new Date(iso).toLocaleString(locale === "nl" ? "nl-NL" : "en-GB", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+function formatWhen(iso: string, locale: string, timeZone: string) {
+  return new Date(iso).toLocaleString(locale === "nl" ? "nl-NL" : "en-GB", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone });
 }
 
 /**
@@ -17,6 +18,7 @@ function formatWhen(iso: string, locale: string) {
  * briefly highlighted.
  */
 export function ActivityFeed({ merchantId, initial }: { merchantId: string; initial: ActivityItem[] }) {
+  const timeZone = useClinicTimeZone();
   const t = useTranslations("portal.activityFeed");
   const locale = useLocale();
   const [items, setItems] = React.useState(initial);
@@ -69,7 +71,7 @@ export function ActivityFeed({ merchantId, initial }: { merchantId: string; init
             <p className="truncate text-[13px] font-medium">{item.actor}</p>
             <p className="truncate text-[11px] text-ink-muted">{item.event}</p>
           </div>
-          <span className="shrink-0 text-[11px] text-ink-faint">{formatWhen(item.at, locale)}</span>
+          <span className="shrink-0 text-[11px] text-ink-faint">{formatWhen(item.at, locale, timeZone)}</span>
         </li>
       ))}
     </ul>

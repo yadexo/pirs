@@ -11,6 +11,8 @@ import { TypeFilter } from "./type-filter";
 import { RefundButton } from "./refund-button";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
 import { resolveLocale } from "@/lib/locale";
+import { clinicZone } from "@/lib/clinic-zone";
+import { addDays, todayIn } from "@/lib/clinic-time";
 
 export default async function ShopSummaryPage({
   params,
@@ -76,20 +78,18 @@ export default async function ShopSummaryPage({
     return true;
   });
 
+  // The clinic's last seven calendar days, ending today in its own zone.
   const days = 7;
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - (days - 1));
+  const timeZone = await clinicZone(ctx.db);
+  const dayKeys = Array.from({ length: days }, (_, i) => addDays(todayIn(timeZone), i - (days - 1)));
   const series = Array.from({ length: days }, () => 0);
   for (const o of orders) {
     if (o.status !== "PAID" || !o.paidAt) continue;
-    const idx = Math.floor((o.paidAt.getTime() - start.getTime()) / 86_400_000);
+    const idx = dayKeys.indexOf(todayIn(timeZone, o.paidAt));
     if (idx >= 0 && idx < days) series[idx] = (series[idx] ?? 0) + o.totalCents;
   }
-  const dayLabels = Array.from({ length: days }, (_, i) => {
-    const d = new Date(start.getTime() + i * 86_400_000);
-    return d.toLocaleDateString(intlLocale, { weekday: "short", month: "short", day: "numeric" });
-  });
+  // A calendar day is already the clinic's; formatted in UTC so nothing moves it.
+  const dayLabels = dayKeys.map((day) => new Date(`${day}T12:00:00Z`).toLocaleDateString(intlLocale, { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }));
 
   return (
     <div className="mx-auto max-w-[1180px]">
@@ -148,7 +148,7 @@ export default async function ShopSummaryPage({
                   {filtered.map((o) => (
                     <tr key={o.id} className="border-b border-border text-[12px] last:border-b-0 hover:bg-app">
                       <td className="px-5 py-3 text-ink-muted">
-                        {o.placedAt.toLocaleDateString(intlLocale, { dateStyle: "medium" })}
+                        {o.placedAt.toLocaleDateString(intlLocale, { dateStyle: "medium", timeZone })}
                       </td>
                       <td className="px-5 py-3 font-medium">
                         {o.customerProfile.firstName} {o.customerProfile.lastName}
@@ -199,7 +199,7 @@ export default async function ShopSummaryPage({
                     return (
                       <tr key={r.id} className="border-b border-border text-[12px] last:border-b-0 hover:bg-app">
                         <td className="px-5 py-3 text-ink-muted">
-                          {r.redeemedAt ? r.redeemedAt.toLocaleString(intlLocale, { dateStyle: "medium", timeStyle: "short" }) : "-"}
+                          {r.redeemedAt ? r.redeemedAt.toLocaleString(intlLocale, { dateStyle: "medium", timeStyle: "short", timeZone }) : "-"}
                         </td>
                         <td className="px-5 py-3 font-medium">
                           {r.name}

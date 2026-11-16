@@ -12,6 +12,7 @@ import { ClientAccountPanel } from "./client-account";
 import { ClientMembershipPanel } from "./client-membership";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatMoney } from "@/lib/utils";
+import { useClinicTimeZone } from "@/components/clinic-time-zone";
 
 export interface ClientRow {
   id: string;
@@ -57,10 +58,11 @@ export function ClientsTable({
   page: number;
   pageCount: number;
 }) {
+  const timeZone = useClinicTimeZone();
   const router = useRouter();
   const t = useTranslations("portal.clients.clientsTable");
   const locale = useLocale();
-  const date = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(locale === "nl" ? "nl-NL" : "en-US", { dateStyle: "medium" }) : "-");
+  const date = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(locale === "nl" ? "nl-NL" : "en-US", { dateStyle: "medium", timeZone }) : "-");
   const [selected, setSelected] = React.useState<ClientRow | null>(null);
 
   function navigate(next: Partial<{ q: string; sort: string; status: string; page: number }>) {
@@ -190,9 +192,10 @@ function ClientDrawer({
   client: ClientRow | null;
   onClose: () => void;
 }) {
+  const timeZone = useClinicTimeZone();
   const t = useTranslations("portal.clients.clientsTable");
   const locale = useLocale();
-  const date = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(locale === "nl" ? "nl-NL" : "en-US", { dateStyle: "medium" }) : "-");
+  const date = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(locale === "nl" ? "nl-NL" : "en-US", { dateStyle: "medium", timeZone }) : "-");
   const [tab, setTab] = React.useState<"profile" | "account" | "membership" | "orders" | "items" | "messages">("profile");
 
   const TAB_LABEL: Record<typeof tab, string> = {

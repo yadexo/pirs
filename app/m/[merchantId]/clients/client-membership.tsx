@@ -18,6 +18,7 @@ import {
   type ClientMembershipView,
   type PlanOption,
 } from "@/lib/actions/client-membership";
+import { useClinicTimeZone } from "@/components/clinic-time-zone";
 
 /**
  * One client's membership, and everything a clinic can do to it.
@@ -50,12 +51,13 @@ export function ClientMembershipPanel({
   /** memberships.manage — without it this is a read-only record. */
   canManage: boolean;
 }) {
+  const timeZone = useClinicTimeZone();
   const router = useRouter();
   const t = useTranslations("portal.clients.clientMembership");
   const tc = useTranslations("common");
   const locale = useLocale();
   const WHEN = React.useCallback(
-    (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(locale === "nl" ? "nl-NL" : "en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—"),
+    (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(locale === "nl" ? "nl-NL" : "en-GB", { day: "numeric", month: "long", year: "numeric", timeZone }) : "—"),
     [locale],
   );
   const TITLE: Record<Action, string> = {
@@ -285,7 +287,7 @@ export function ClientMembershipPanel({
                 <span className="min-w-0">
                   <span className="block text-[12px]">{row.description ?? row.type}</span>
                   <span className="block text-[11px] text-ink-faint">
-                    {new Date(row.at).toLocaleString(locale === "nl" ? "nl-NL" : "en-GB", { dateStyle: "medium", timeStyle: "short" })}
+                    {new Date(row.at).toLocaleString(locale === "nl" ? "nl-NL" : "en-GB", { dateStyle: "medium", timeStyle: "short", timeZone })}
                   </span>
                 </span>
                 {row.amountCents !== null && row.amountCents > 0 && <span className="tabular shrink-0 text-[12px] font-medium">{money(row.amountCents)}</span>}

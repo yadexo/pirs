@@ -8,6 +8,7 @@ import { ClientImageError, prepareForUpload } from "@/lib/client-image";
 import { specFor } from "@/lib/image-spec";
 import { ImageCrop, type CropChoice } from "@/components/merchant/image-crop";
 import type { UploadErrorCode } from "@/lib/upload-error";
+import { toInputValue } from "@/lib/clinic-time";
 
 /**
  * Form building blocks for clinic-portal drawers. Styled on the portal's
@@ -442,13 +443,16 @@ export function ImageField({
   );
 }
 
-/** "2026-10-01T09:00" in the browser's local time, for datetime-local inputs. */
-export function toLocalInput(iso: string | null | undefined): string {
+/**
+ * "2026-10-01T09:00" in the clinic's zone, for datetime-local inputs. The
+ * server reads the value back in the same zone, so a staff member whose
+ * laptop is set to another zone does not shift what they edit.
+ */
+export function toLocalInput(iso: string | null | undefined, timeZone: string): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return toInputValue(timeZone, d);
 }
 
 /** Cents to the "49.50" a person types; whole amounts without decimals. */
