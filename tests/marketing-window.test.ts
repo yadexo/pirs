@@ -218,3 +218,14 @@ describe("local calendar", () => {
     expect(localDayAndMonth(utc("2026-03-14T10:00:00Z"))).toEqual({ day: 14, month: 3 });
   });
 });
+
+describe("a local day on the nights the clocks change", () => {
+  // localDayRange assumed every day is 24 hours; the two DST days are not.
+  it("is 23 hours when the clocks go forward and 25 when they go back", async () => {
+    const { localDayRange } = await import("@/lib/marketing-window");
+    const spring = localDayRange(new Date("2026-03-29T12:00:00Z"), "Europe/Amsterdam");
+    const autumn = localDayRange(new Date("2026-10-25T12:00:00Z"), "Europe/Amsterdam");
+    expect([spring.start.toISOString(), spring.end.toISOString()]).toEqual(["2026-03-28T23:00:00.000Z", "2026-03-29T22:00:00.000Z"]);
+    expect([autumn.start.toISOString(), autumn.end.toISOString()]).toEqual(["2026-10-24T22:00:00.000Z", "2026-10-25T23:00:00.000Z"]);
+  });
+});

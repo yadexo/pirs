@@ -1,3 +1,4 @@
+import { dayRange, fromInputValue, todayIn, toInputValue } from "@/lib/clinic-time";
 /**
  * When a marketing notification may be sent.
  *
@@ -185,8 +186,7 @@ export function nextSendableTime(at: Date, window: SendingWindow = DEFAULT_WINDO
 
 /** The calendar day in a timezone, as "2026-09-28". */
 export function localDayKey(at: Date, timeZone: string = MARKETING_TIMEZONE): string {
-  const { year, month, day } = parts(at, timeZone);
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return todayIn(timeZone, at);
 }
 
 /** The local calendar year, for the once-a-year birthday guarantee. */
@@ -206,10 +206,8 @@ export function localDayAndMonth(at: Date, timeZone: string = MARKETING_TIMEZONE
  * strings in the database.
  */
 export function localDayRange(at: Date, timeZone: string = MARKETING_TIMEZONE): { start: Date; end: Date } {
-  const { hour, minute } = parts(at, timeZone);
-  const start = new Date(at.getTime() - (hour * 60 + minute) * 60 * 1000);
-  start.setUTCSeconds(0, 0);
-  return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
+  // 23 or 25 hours on the days the clocks change (lib/clinic-time.ts).
+  return dayRange(timeZone, todayIn(timeZone, at));
 }
 
 /**
@@ -226,33 +224,12 @@ export function localDayRange(at: Date, timeZone: string = MARKETING_TIMEZONE): 
  * Returns null for anything that isn't a wall-clock string.
  */
 export function instantFromLocal(wallClock: string, timeZone: string): Date | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(wallClock.trim());
-  if (!m) return null;
-  const [, year, month, day, hour, minute] = m.map(Number) as [number, number, number, number, number, number];
-
-  // Start from the same wall clock read as UTC, then subtract the zone's
-  // offset at that moment. One correction is enough for every hour except the
-  // ones the clocks skip, so it is applied twice and the second is trusted.
-  const naive = Date.UTC(year, month - 1, day, hour, minute);
-  let guess = new Date(naive - offsetAt(new Date(naive), timeZone));
-  guess = new Date(naive - offsetAt(guess, timeZone));
-  return Number.isNaN(guess.getTime()) ? null : guess;
-}
-
-/** How far ahead of UTC a zone is at an instant, in milliseconds. */
-function offsetAt(at: Date, timeZone: string): number {
-  const p = parts(at, timeZone);
-  const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute);
-  // Seconds and milliseconds are not part of a wall-clock input.
-  const rounded = Math.floor(at.getTime() / 60000) * 60000;
-  return asUtc - rounded;
+  return fromInputValue(timeZone, wallClock);
 }
 
 /** The wall-clock string for an instant in a timezone, for a datetime-local input. */
 export function localInputValue(at: Date, timeZone: string): string {
-  const p = parts(at, timeZone);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
+  return toInputValue(timeZone, at);
 }
 
 /** "09:00" for 540 — used by the settings form and in messages to clinics. */
