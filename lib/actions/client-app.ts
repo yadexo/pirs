@@ -279,7 +279,7 @@ export async function clientCancelAppointmentAction(slug: string, appointmentId:
   if (hoursUntil < noticeHours) return { error: `Cancellations need ${noticeHours} hours notice. Please call the clinic.` };
 
   await db.appointment.updateMany({
-    where: { id: appointmentId },
+    where: { id: appt.id, customerProfileId: user.customerProfileId! },
     data: { status: "CANCELLED", cancelledAt: new Date(), cancelledBy: "CUSTOMER" },
   });
 
@@ -394,8 +394,10 @@ export async function clientSetCartQtyAction(
   });
   // The cart may have been checked out in another tab since this sheet rendered.
   if (!line) return { error: "That item is no longer in your cart." };
-  if (qty === 0) await db.basketItem.deleteMany({ where: { id: itemId } });
-  else await db.basketItem.updateMany({ where: { id: itemId }, data: { quantity: qty } });
+  // Scoped by the line found and the client's own open basket, never by the id sent.
+  const mine = { id: line.id, basket: { customerProfileId: user.customerProfileId!, status: "OPEN" as const } };
+  if (qty === 0) await db.basketItem.deleteMany({ where: mine });
+  else await db.basketItem.updateMany({ where: mine, data: { quantity: qty } });
   revalidateClient(slug);
   return { ok: true };
 }

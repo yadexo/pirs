@@ -26,7 +26,7 @@ export async function updateAppointmentStatusAction(
   const { db, user } = await requireStaffContext();
 
   await db.appointment.updateMany({
-    where: { id: appointmentId },
+    where: { id: appointmentId, tenantId: user.tenantId! },
     data: {
       status,
       cancelledAt: status === "CANCELLED" ? new Date() : undefined,

@@ -471,7 +471,7 @@ export async function saveRoleAction(merchantId: string, roleId: string | null, 
       if (id) {
         const updated = await tx.role.updateMany({ where: { id, tenantId: merchantId }, data: { name: data.name } });
         if (updated.count === 0) throw new ActionError("That role no longer exists.");
-        await tx.rolePermission.deleteMany({ where: { roleId: id } });
+        await tx.rolePermission.deleteMany({ where: { roleId: id, role: { tenantId: merchantId } } });
       } else {
         id = (await tx.role.create({ data: { tenantId: merchantId, name: data.name } })).id;
       }
@@ -491,7 +491,7 @@ export async function deleteRoleAction(merchantId: string, roleId: string): Prom
     await limitTeamWrites(ctx.user.id);
     const inUse = await ctx.db.staffProfile.count({ where: { roleId } });
     if (inUse > 0) throw new ActionError(`${inUse} staff member${inUse === 1 ? " has" : "s have"} this role. Give them another role first.`);
-    const { count } = await ctx.db.role.deleteMany({ where: { id: roleId } });
+    const { count } = await ctx.db.role.deleteMany({ where: { id: roleId, tenantId: merchantId } });
     if (count === 0) throw new ActionError("That role no longer exists.");
     await ctx.audit("role.deleted", "Role", roleId);
     await revalidateMerchant(merchantId);
@@ -599,8 +599,8 @@ export async function archiveLocationAction(merchantId: string, id: string): Pro
     if (upcoming > 0) throw new ActionError(`${upcoming} upcoming appointment${upcoming === 1 ? " is" : "s are"} booked here. Move or cancel them first.`);
 
     await rawDb.$transaction([
-      rawDb.location.update({ where: { id }, data: { active: false, isPrimary: false } }),
-      ...(location.isPrimary ? [rawDb.location.update({ where: { id: others[0]!.id }, data: { isPrimary: true } })] : []),
+      rawDb.location.update({ where: { id: location.id, tenantId: merchantId }, data: { active: false, isPrimary: false } }),
+      ...(location.isPrimary ? [rawDb.location.update({ where: { id: others[0]!.id, tenantId: merchantId }, data: { isPrimary: true } })] : []),
     ]);
     await ctx.audit("location.archived", "Location", id);
     await revalidateMerchant(merchantId);

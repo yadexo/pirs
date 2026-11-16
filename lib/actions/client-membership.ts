@@ -192,7 +192,7 @@ export async function cancelClientMembershipAction(
 
     const status = when === "now" ? "CANCELLED" : membership.status;
     await ctx.db.customerMembership.updateMany({
-      where: { id: membershipId },
+      where: { id: membership.id, tenantId: merchantId },
       data:
         when === "now"
           ? { status: "CANCELLED", cancelledAt: new Date(), cancelAtPeriodEnd: false }
@@ -237,7 +237,7 @@ export async function pauseClientMembershipAction(
       }
     }
 
-    await ctx.db.customerMembership.updateMany({ where: { id: membershipId }, data: { status: "PAUSED", pausedAt: new Date() } });
+    await ctx.db.customerMembership.updateMany({ where: { id: membership.id, tenantId: merchantId }, data: { status: "PAUSED", pausedAt: new Date() } });
     await record(merchantId, membershipId, `Paused by ${staffName}: ${why}`);
     await ctx.audit("membership.paused", "CustomerMembership", membershipId, { reason: why });
     await notifyMembershipChanged(membershipId, "Your membership is paused — nothing will be charged while it is.", why).catch(() => undefined);
@@ -270,7 +270,7 @@ export async function resumeClientMembershipAction(
     }
 
     await ctx.db.customerMembership.updateMany({
-      where: { id: membershipId },
+      where: { id: membership.id, tenantId: merchantId },
       data: { status: "ACTIVE", pausedAt: null, resumesAt: null },
     });
     await record(merchantId, membershipId, `Resumed by ${staffName}: ${why}`);
@@ -324,7 +324,7 @@ export async function switchClientPlanAction(
 
     // The plan on our row changes now; the price only bites at the next
     // period, which is what Stripe was told and what the client is told.
-    await ctx.db.customerMembership.updateMany({ where: { id: membershipId }, data: { membershipPlanId: planId } });
+    await ctx.db.customerMembership.updateMany({ where: { id: membership.id, tenantId: merchantId }, data: { membershipPlanId: planId } });
 
     const from = membership.currentPeriodEnd.toLocaleDateString("en-GB", { day: "numeric", month: "long" });
     await record(merchantId, membershipId, `Moved from ${membership.membershipPlan?.name ?? "their plan"} to ${plan.name} by ${staffName}: ${why}`);
@@ -378,7 +378,7 @@ export async function giveFreePeriodsAction(
     }
 
     await ctx.db.customerMembership.updateMany({
-      where: { id: membershipId },
+      where: { id: membership.id, tenantId: merchantId },
       data: { currentPeriodEnd: until, nextBillingAt: until },
     });
 

@@ -438,7 +438,7 @@ export async function saveServiceAction(merchantId: string, id: string | null, f
     let savedId: string;
     if (id) {
       assertFound(await ctx.db.service.findFirst({ where: { id, archivedAt: null } }));
-      await ctx.db.service.updateMany({ where: { id }, data: values });
+      await ctx.db.service.updateMany({ where: { id, tenantId: merchantId }, data: values });
       savedId = id;
     } else {
       savedId = (await ctx.db.service.create({ data: values as never })).id;
@@ -514,7 +514,7 @@ export async function saveProductAction(merchantId: string, id: string | null, f
       if (id) {
         const existing = assertFound(await ctx.db.product.findFirst({ where: { id, archivedAt: null } }));
         await ctx.db.product.updateMany({
-          where: { id },
+          where: { id: existing.id, tenantId: merchantId },
           data: { ...fields, categoryId, description: fields.description ?? null, sku: sku ?? existing.sku },
         });
         // Keep the stock ledger honest: a manual stock change is a movement.
@@ -600,10 +600,10 @@ export async function savePackageAction(merchantId: string, id: string | null, f
     let savedId: string;
     if (id) {
       assertFound(await ctx.db.package.findFirst({ where: { id, archivedAt: null } }));
-      await ctx.db.package.updateMany({ where: { id }, data: values });
+      await ctx.db.package.updateMany({ where: { id, tenantId: merchantId }, data: values });
       savedId = id;
       // PackageItem has no tenant column; the package it hangs off was tenant-checked above.
-      await rawDb.packageItem.deleteMany({ where: { packageId: id } });
+      await rawDb.packageItem.deleteMany({ where: { packageId: id, package: { tenantId: merchantId } } });
     } else {
       savedId = (await ctx.db.package.create({ data: values as never })).id;
     }
@@ -828,13 +828,13 @@ export async function savePromotionAction(merchantId: string, id: string | null,
     try {
       if (id) {
         assertFound(await ctx.db.promotion.findFirst({ where: { id } }));
-        await ctx.db.promotion.updateMany({ where: { id }, data: values });
+        await ctx.db.promotion.updateMany({ where: { id, tenantId: merchantId }, data: values });
         savedId = id;
       } else {
         savedId = (await ctx.db.promotion.create({ data: values as never })).id;
       }
       // Replaced wholesale: the form is the whole truth about the scope.
-      await rawDb.promotionEligibility.deleteMany({ where: { promotionId: savedId } });
+      await rawDb.promotionEligibility.deleteMany({ where: { promotionId: savedId, promotion: { tenantId: merchantId } } });
       if (eligibilityRows.length > 0) {
         await rawDb.promotionEligibility.createMany({ data: eligibilityRows.map((row) => ({ ...row, promotionId: savedId })) });
       }
@@ -1028,9 +1028,9 @@ export async function saveMembershipPlanAction(
       moveExisting = members > 0 && priceChanged && formBool(fd, "applyToExistingMembers");
 
       oldPriceCents = existing.priceCents;
-      await ctx.db.membershipPlan.updateMany({ where: { id }, data: values });
+      await ctx.db.membershipPlan.updateMany({ where: { id, tenantId: merchantId }, data: values });
       savedId = id;
-      await rawDb.membershipBenefit.deleteMany({ where: { membershipPlanId: id } });
+      await rawDb.membershipBenefit.deleteMany({ where: { membershipPlanId: id, membershipPlan: { tenantId: merchantId } } });
     } else {
       savedId = (await ctx.db.membershipPlan.create({ data: values as never })).id;
     }
@@ -1135,7 +1135,7 @@ export async function saveRewardAction(merchantId: string, id: string | null, fd
     let savedId: string;
     if (id) {
       assertFound(await ctx.db.loyaltyReward.findFirst({ where: { id } }));
-      await ctx.db.loyaltyReward.updateMany({ where: { id }, data: values });
+      await ctx.db.loyaltyReward.updateMany({ where: { id, tenantId: merchantId }, data: values });
       savedId = id;
     } else {
       // A clinic that never configured loyalty still gets a programme to hang rewards on.
@@ -1158,7 +1158,7 @@ export async function setItemActiveAction(merchantId: string, kind: ItemKind, id
   if (!validArgs(args([arg.id, itemKind, arg.id, arg.bool]), [merchantId, kind, id, active])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, NEEDS[kind]);
-    const where = { id };
+    const where = { id, tenantId: merchantId };
     const data = { active };
     let count: number;
     switch (kind) {
@@ -1222,7 +1222,7 @@ export async function archiveItemAction(
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, NEEDS[kind]);
     const archived = { active: false, archivedAt: new Date() };
-    const where = { id };
+    const where = { id, tenantId: merchantId };
     let count = 0;
     // Only an offer can come back as "hidden instead"; everything else is
     // either deleted or archived by its own fixed rule.
