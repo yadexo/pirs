@@ -505,6 +505,30 @@ export type CheckoutResult =
  * bill can take is read from their balance on the server. A browser that
  * asks for "€500 of credit" gets whatever they actually have, up to the bill.
  */
+/**
+ * Takes one use of a limited promotion for this order, if any are left.
+ *
+ * Under a lock on the promotion's row, so simultaneous checkouts count each
+ * other's uses: the per-client and overall limits are checked against every
+ * use already taken, paid or still pending, and the use is recorded before
+ * the lock is released. Returns false when the limit is reached.
+ */
+async function reservePromotion(tenantId: string, promotionId: string, customerProfileId: string, orderId: string, discountCents: number): Promise<boolean> {
+  return rawDb.$transaction(async (tx) => {
+    if (!(await lockRow(tx, "Promotion", promotionId, tenantId))) return false;
+    const promotion = await tx.promotion.findFirst({ where: { id: promotionId, tenantId }, select: { perCustomerLimit: true, usageLimit: true } });
+    if (!promotion) return false;
+    const [mine, all] = await Promise.all([
+      promotion.perCustomerLimit != null ? tx.promotionRedemption.count({ where: { tenantId, promotionId, customerProfileId } }) : 0,
+      promotion.usageLimit != null ? tx.promotionRedemption.count({ where: { tenantId, promotionId } }) : 0,
+    ]);
+    if (promotion.perCustomerLimit != null && mine >= promotion.perCustomerLimit) return false;
+    if (promotion.usageLimit != null && all >= promotion.usageLimit) return false;
+    await tx.promotionRedemption.create({ data: { tenantId, promotionId, customerProfileId, orderId, discountAppliedCents: discountCents } });
+    return true;
+  }, LOCKED_CLAIM);
+}
+
 export async function clientCheckoutAction(
   slug: string,
   rewardId: string | null,
@@ -635,6 +659,7 @@ export async function clientCheckoutAction(
   // step fails, so a failed checkout leaves balances and stock unchanged.
   const reserved = { points: 0, credit: 0, stock: [] as { productId: string; quantity: number }[] };
   const release = async () => {
+    await rawDb.promotionRedemption.deleteMany({ where: { orderId: order.id, tenantId: user.tenantId! } });
     for (const r of reserved.stock) {
       await db.product.updateMany({ where: { id: r.productId }, data: { inventoryQuantity: { increment: r.quantity } } });
     }
@@ -662,6 +687,15 @@ export async function clientCheckoutAction(
     await db.order.updateMany({ where: { id: order.id }, data: { status: "FAILED" } });
     return { error: message };
   };
+
+  // A limited offer is taken when the order is made, not when it is paid:
+  // counted at payment, five simultaneous checkouts all used a once-only
+  // discount (docs/security/review-2026-11-pass2.md, P-6). A failed order
+  // gives the use back (release above, and releaseFailedOrder).
+  if (applied?.promotionId && discountCents > 0) {
+    const taken = await reservePromotion(user.tenantId!, applied.promotionId, user.customerProfileId!, order.id, discountCents);
+    if (!taken) return abandon("That offer has just been used. Please check your cart and try again.");
+  }
 
   if (pointsRedeemed > 0) {
     try {

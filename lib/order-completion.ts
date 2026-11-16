@@ -124,6 +124,8 @@ export async function releaseFailedOrder(db: TenantDb, orderId: string, reason: 
       relatedOrderId: order.id,
     });
   }
+  // A limited offer's use, taken when the order was made, is given back.
+  await db.promotionRedemption.deleteMany({ where: { orderId: order.id } });
   if (order.creditAppliedCents > 0) {
     await adjustAccountCredit(db, {
       customerProfileId: order.customerProfileId,

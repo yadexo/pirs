@@ -98,4 +98,51 @@ describe("once-only claims under simultaneous requests", () => {
       expect((await rawDb.customerProfile.findUniqueOrThrow({ where: { id: client.profileId } })).accountCreditBalanceCents).toBe(2_000);
     });
   });
+  describe("a one-time personal discount (P-6)", () => {
+    it("5 simultaneous checkouts use it once", async () => {
+      const category = await rawDb.serviceCategory.create({ data: { tenantId, name: `Race ${stamp}` } });
+      const service = await rawDb.service.create({ data: { tenantId, categoryId: category.id, name: "Race Facial", durationMinutes: 30, priceCents: 15_000 } });
+      const client = await makeClient("discounted");
+      const promotion = await rawDb.promotion.create({
+        data: {
+          tenantId,
+          title: "Half off, once",
+          discountType: "PERCENT",
+          discountValue: 50,
+          perCustomerLimit: 1,
+          customerProfileId: client.profileId,
+          autoApply: true,
+          active: true,
+          startAt: new Date(Date.now() - 86_400_000),
+          endAt: new Date(Date.now() + 86_400_000),
+        },
+      });
+      expect(await as(client, () => clientApp.clientAddToCartAction(slug, "service", service.id, 1))).toMatchObject({ ok: true });
+
+      const results = await together(client, 5, () => clientApp.clientCheckoutAction(slug, null));
+
+      const discounted = await rawDb.order.findMany({ where: { customerProfileId: client.profileId, promotionId: promotion.id, status: { not: "FAILED" } } });
+      expect(discounted).toHaveLength(1);
+      expect(discounted[0]!.discountCents).toBe(7_500);
+      expect(await rawDb.promotionRedemption.count({ where: { promotionId: promotion.id } })).toBe(1);
+      // The others are told plainly, and hold nothing.
+      const refused = results.filter((r) => "error" in r);
+      expect(refused.length).toBeGreaterThanOrEqual(1);
+      expect(refused.every((r) => "error" in r && /offer has just been used|cart/i.test(r.error))).toBe(true);
+    });
+
+    it("a failed order gives its reserved use back", async () => {
+      const client = await makeClient("released");
+      const promotion = await rawDb.promotion.create({
+        data: { tenantId, title: "Once", discountType: "PERCENT", discountValue: 10, perCustomerLimit: 1, customerProfileId: client.profileId, autoApply: true, active: true, startAt: new Date(Date.now() - 86_400_000), endAt: new Date(Date.now() + 86_400_000) },
+      });
+      const order = await rawDb.order.create({
+        data: { tenantId, customerProfileId: client.profileId, orderNumber: `RACE-${stamp}`, status: "PENDING", subtotalCents: 10_000, discountCents: 1_000, totalCents: 9_000, promotionId: promotion.id, currency: "EUR" },
+      });
+      await rawDb.promotionRedemption.create({ data: { tenantId, promotionId: promotion.id, customerProfileId: client.profileId, orderId: order.id, discountAppliedCents: 1_000 } });
+      const { releaseFailedOrder } = await import("@/lib/order-completion");
+      expect(await releaseFailedOrder(db, order.id, "test")).toBe(true);
+      expect(await rawDb.promotionRedemption.count({ where: { promotionId: promotion.id } })).toBe(0);
+    });
+  });
 });
