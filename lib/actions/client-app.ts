@@ -1007,6 +1007,11 @@ export async function clientGiveSessionsAction(
 
   // Found by email or phone, and only inside this clinic — a client of
   // another clinic is not a client of this one.
+  //
+  // The answer says whether the contact is a client here. That is accepted,
+  // not overlooked (docs/security/review-2026-11-pass2.md, A-12): the giver
+  // has to know whether the gift went through, only a client holding a
+  // transferable package can ask, and only about this clinic.
   const needle = contact.trim();
   if (!needle) return { error: "Enter their email or phone number." };
   const receiver = await db.customerProfile.findFirst({

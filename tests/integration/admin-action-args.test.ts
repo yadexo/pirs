@@ -51,9 +51,9 @@ describe("admin and sign-in actions refuse objects and wrong types", () => {
 
   it("clinic management refuses an object id and keeps every clinic", async () => {
     const clinics = await rawDb.tenant.count();
-    await expect(call(merchants.deleteMerchantAction, anything)).rejects.toBeInstanceOf(InvalidActionArgsError);
-    await expect(call(merchants.setMerchantActiveAction, anything, false)).rejects.toBeInstanceOf(InvalidActionArgsError);
-    await expect(call(merchants.setMerchantActiveAction, clinic, "false")).rejects.toBeInstanceOf(InvalidActionArgsError);
+    expect(await call(merchants.deleteMerchantAction, anything)).toEqual({ error: INVALID_REQUEST });
+    expect(await call(merchants.setMerchantActiveAction, anything, false)).toEqual({ error: INVALID_REQUEST });
+    expect(await call(merchants.setMerchantActiveAction, clinic, "false")).toEqual({ error: INVALID_REQUEST });
     expect(await call(merchants.setMembershipFeeAction, clinic, "5")).toEqual({ error: INVALID_REQUEST });
     expect(await rawDb.tenant.count()).toBe(clinics);
     expect((await rawDb.tenant.findUniqueOrThrow({ where: { id: clinic } })).status).toBe("ACTIVE");

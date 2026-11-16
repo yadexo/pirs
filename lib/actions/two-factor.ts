@@ -1,7 +1,7 @@
 "use server";
 
 import { getTranslations } from "next-intl/server";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireSession } from "@/lib/rbac";
 import { rawDb } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
 import { generateTotpSecret, totpUri, verifyTotp } from "@/lib/totp";
@@ -9,6 +9,7 @@ import { getTwoFactorStatus, issueBackupCodes, disableTwoFactor, twoFactorRequir
 import { qrSvg } from "@/lib/qr";
 import { writeAuditLog } from "@/lib/audit";
 import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
+import { platformAdminOrRefusal } from "@/lib/platform-admin-action";
 
 /**
  * The name an authenticator app files the account under. Not exported: this
@@ -102,7 +103,8 @@ export async function regenerateBackupCodesAction(): Promise<{ backupCodes: stri
 /** Same as resetTwoFactorForUserAction, looked up by email — what the agency settings tool actually has to work with. */
 export async function resetTwoFactorByEmailAction(email: string): Promise<{ ok: true; email: string } | { error: string }> {
   if (!validArgs(args([arg.text(320)]), [email])) return { error: INVALID_REQUEST };
-  await requireRole("PLATFORM_ADMIN");
+  const guard = await platformAdminOrRefusal();
+  if ("error" in guard) return { error: guard.error };
   const t = await getTranslations("twoFactor.errors");
   const normalized = email.trim().toLowerCase();
   const matches = await rawDb.user.findMany({ where: { email: normalized, role: { in: ["PLATFORM_ADMIN", "TENANT_ADMIN", "STAFF"] } }, select: { id: true } });
@@ -120,7 +122,9 @@ export async function resetTwoFactorByEmailAction(email: string): Promise<{ ok: 
  */
 export async function resetTwoFactorForUserAction(userId: string): Promise<{ ok: true; email: string } | { error: string }> {
   if (!validArgs(args([arg.id]), [userId])) return { error: INVALID_REQUEST };
-  const admin = await requireRole("PLATFORM_ADMIN");
+  const guard = await platformAdminOrRefusal();
+  if ("error" in guard) return { error: guard.error };
+  const admin = guard.user;
   const target = await rawDb.user.findUnique({ where: { id: userId }, select: { id: true, email: true, tenantId: true } });
   if (!target) return { error: (await getTranslations("twoFactor.errors"))("noSuchAccount") };
 

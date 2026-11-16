@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withAuthErrors } from "@/lib/route-auth";
 import { requireCustomerContext } from "@/lib/rbac";
 import { rawDb } from "@/lib/db";
 
@@ -10,7 +11,7 @@ import { rawDb } from "@/lib/db";
  * a code that no longer works. It answers with a status and nothing else —
  * never the token, so this cannot be used to fetch a code.
  */
-export async function GET(_req: Request, { params }: { params: Promise<{ itemId: string }> }) {
+export const GET = withAuthErrors(async (_req: Request, { params }: { params: Promise<{ itemId: string }> }) => {
   const { user } = await requireCustomerContext();
   const { itemId } = await params;
 
@@ -26,4 +27,4 @@ export async function GET(_req: Request, { params }: { params: Promise<{ itemId:
     { status: item.status, redeemedAt: item.redeemedAt },
     { headers: { "Cache-Control": "no-store" } },
   );
-}
+});

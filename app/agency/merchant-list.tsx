@@ -142,7 +142,11 @@ function useMerchantActions(merchant: MerchantRow) {
   const [active, setActive] = React.useState(merchant.isActive);
 
   function impersonate() {
-    startTransition(() => startImpersonationAction(merchant.id));
+    startTransition(async () => {
+      // On success the action redirects into the clinic; a refusal comes back.
+      const res = await startImpersonationAction(merchant.id);
+      if (res && "error" in res) toast.error(res.error);
+    });
   }
 
   function toggleActive(next: boolean) {
@@ -150,7 +154,12 @@ function useMerchantActions(merchant: MerchantRow) {
     if (!window.confirm(`Are you sure you want to ${verb} ${merchant.name}?`)) return;
     setActive(next);
     startTransition(async () => {
-      await setMerchantActiveAction(merchant.id, next);
+      const res = await setMerchantActiveAction(merchant.id, next);
+      if ("error" in res) {
+        setActive(!next);
+        toast.error(res.error);
+        return;
+      }
       toast.success(next ? "Merchant reactivated" : "Merchant suspended");
     });
   }
@@ -159,7 +168,11 @@ function useMerchantActions(merchant: MerchantRow) {
     const typed = window.prompt(`Type "${merchant.name}" to permanently delete this merchant and all of its data.`);
     if (typed !== merchant.name) return;
     startTransition(async () => {
-      await deleteMerchantAction(merchant.id);
+      const res = await deleteMerchantAction(merchant.id);
+      if ("error" in res) {
+        toast.error(res.error);
+        return;
+      }
       toast.success("Merchant deleted");
     });
   }

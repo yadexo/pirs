@@ -39,3 +39,18 @@ export async function requirePlatformAdminAction() {
   if (!user.twoFactorConfirmed) throw new ActionError(TWO_FACTOR_FIRST);
   return user;
 }
+
+/**
+ * The same guard for actions not wrapped in runAction: the refusal comes back
+ * as `{ error }` for the caller to return, instead of escaping as an
+ * unhandled server error the admin only sees as "something went wrong"
+ * (docs/security/review-2026-11-pass2.md, A-13 and the note under A-1).
+ */
+export async function platformAdminOrRefusal(): Promise<{ user: Awaited<ReturnType<typeof requirePlatformAdminAction>> } | { error: string }> {
+  try {
+    return { user: await requirePlatformAdminAction() };
+  } catch (err) {
+    if (err instanceof ActionError) return { error: err.message };
+    throw err;
+  }
+}

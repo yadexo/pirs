@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { SUPPORTED_LOCALES, setLocaleCookie, type AppLocale } from "@/lib/locale-cookie";
-import { arg, args, INVALID_REQUEST, InvalidActionArgsError, validArgs } from "@/lib/action-args";
+import { arg, args, InvalidActionArgsError, validArgs } from "@/lib/action-args";
 
 /**
  * The pre-auth language toggle on /login, /forgot-password and

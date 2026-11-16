@@ -3,9 +3,9 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { rawDb } from "@/lib/db";
-import { requireRole } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
+import { platformAdminOrRefusal } from "@/lib/platform-admin-action";
 
 const schema = z.object({
   name: z.string().min(1, "Brand name is required").max(120),
@@ -24,7 +24,9 @@ const blankToUndefined = (v: FormDataEntryValue | null) => (v && String(v).trim(
 
 export async function saveWhiteLabelAction(_prevState: unknown, formData: FormData) {
   if (!validArgs(args([arg.prevState, arg.formData]), [_prevState, formData])) return { error: INVALID_REQUEST };
-  const admin = await requireRole("PLATFORM_ADMIN");
+  const guard = await platformAdminOrRefusal();
+  if ("error" in guard) return { error: guard.error };
+  const admin = guard.user;
 
   const parsed = schema.safeParse({
     name: formData.get("name"),

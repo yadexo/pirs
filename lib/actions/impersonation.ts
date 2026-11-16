@@ -6,7 +6,8 @@ import { redirect } from "next/navigation";
 import { rawDb } from "@/lib/db";
 import { requireRole } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
-import { arg, args, INVALID_REQUEST, InvalidActionArgsError, validArgs } from "@/lib/action-args";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
+import { platformAdminOrRefusal } from "@/lib/platform-admin-action";
 
 
 /**
@@ -14,9 +15,11 @@ import { arg, args, INVALID_REQUEST, InvalidActionArgsError, validArgs } from "@
  * the underlying session stays `agency_admin`, so exiting is always possible
  * and a merchant user can never forge their way into one.
  */
-export async function startImpersonationAction(merchantId: string) {
-  if (!validArgs(args([arg.id]), [merchantId])) throw new InvalidActionArgsError();
-  const user = await requireRole("PLATFORM_ADMIN");
+export async function startImpersonationAction(merchantId: string): Promise<{ error: string } | undefined> {
+  if (!validArgs(args([arg.id]), [merchantId])) return { error: INVALID_REQUEST };
+  const guard = await platformAdminOrRefusal();
+  if ("error" in guard) return { error: guard.error };
+  const user = guard.user;
 
   const merchant = await rawDb.tenant.findUnique({ where: { id: merchantId } });
   if (!merchant) redirect("/agency");

@@ -3,13 +3,13 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { rawDb } from "@/lib/db";
-import { requireRole } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { deleteTenantCompletely } from "@/lib/tenant-deletion";
 import { createClinicWithOwner } from "@/lib/clinic-create";
 import { SUPPORTED_LOCALES } from "@/lib/locale-cookie";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
-import { arg, args, INVALID_REQUEST, InvalidActionArgsError, validArgs } from "@/lib/action-args";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
+import { platformAdminOrRefusal } from "@/lib/platform-admin-action";
 
 const createSchema = z.object({
   name: z.string().min(2, "Business name is required").max(120),
@@ -25,7 +25,9 @@ const createSchema = z.object({
 
 export async function createMerchantAction(_prevState: unknown, formData: FormData) {
   if (!validArgs(args([arg.prevState, arg.formData]), [_prevState, formData])) return { error: INVALID_REQUEST };
-  const user = await requireRole("PLATFORM_ADMIN");
+  const guard = await platformAdminOrRefusal();
+  if ("error" in guard) return { error: guard.error };
+  const user = guard.user;
 
   const parsed = createSchema.safeParse({
     name: formData.get("name"),
@@ -74,9 +76,11 @@ export async function createMerchantAction(_prevState: unknown, formData: FormDa
   };
 }
 
-export async function setMerchantActiveAction(merchantId: string, active: boolean) {
-  if (!validArgs(args([arg.id, arg.bool]), [merchantId, active])) throw new InvalidActionArgsError();
-  const user = await requireRole("PLATFORM_ADMIN");
+export async function setMerchantActiveAction(merchantId: string, active: boolean): Promise<{ ok: true } | { error: string }> {
+  if (!validArgs(args([arg.id, arg.bool]), [merchantId, active])) return { error: INVALID_REQUEST };
+  const guard = await platformAdminOrRefusal();
+  if ("error" in guard) return { error: guard.error };
+  const user = guard.user;
 
   await rawDb.tenant.update({
     where: { id: merchantId },
@@ -97,6 +101,7 @@ export async function setMerchantActiveAction(merchantId: string, active: boolea
   });
 
   revalidatePath("/agency");
+  return { ok: true };
 }
 
 /**
@@ -112,7 +117,9 @@ export async function setMembershipFeeAction(
   percent: number | null,
 ): Promise<{ error: string } | { ok: true; percent: number | null }> {
   if (!validArgs(args([arg.id, arg.formNumber.nullable()]), [merchantId, percent])) return { error: INVALID_REQUEST };
-  const user = await requireRole("PLATFORM_ADMIN");
+  const guard = await platformAdminOrRefusal();
+  if ("error" in guard) return { error: guard.error };
+  const user = guard.user;
 
   if (percent !== null) {
     if (!Number.isFinite(percent) || percent < 0) return { error: "Enter a percentage of 0 or more, or leave it blank." };
@@ -137,12 +144,14 @@ export async function setMembershipFeeAction(
   return { ok: true, percent: value };
 }
 
-export async function deleteMerchantAction(merchantId: string) {
-  if (!validArgs(args([arg.id]), [merchantId])) throw new InvalidActionArgsError();
-  const user = await requireRole("PLATFORM_ADMIN");
+export async function deleteMerchantAction(merchantId: string): Promise<{ ok: true } | { error: string }> {
+  if (!validArgs(args([arg.id]), [merchantId])) return { error: INVALID_REQUEST };
+  const guard = await platformAdminOrRefusal();
+  if ("error" in guard) return { error: guard.error };
+  const user = guard.user;
 
   const merchant = await rawDb.tenant.findUnique({ where: { id: merchantId }, select: { name: true } });
-  if (!merchant) return;
+  if (!merchant) return { ok: true };
 
   // Audit first — the cascade removes the tenant-scoped rows, so a log
   // written afterwards would have nothing to attach to.
@@ -158,4 +167,5 @@ export async function deleteMerchantAction(merchantId: string) {
 
   await deleteTenantCompletely(merchantId);
   revalidatePath("/agency");
+  return { ok: true };
 }

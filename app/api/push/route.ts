@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withAuthErrors } from "@/lib/route-auth";
 import { z } from "zod";
 import { requireCustomerContext } from "@/lib/rbac";
 import { rawDb } from "@/lib/db";
@@ -38,11 +39,11 @@ const test = z.object({ action: z.literal("test") });
 const body = z.discriminatedUnion("action", [subscribe, unsubscribe, test]);
 
 /** Tells the browser which key to subscribe with, and whether it is worth asking. */
-export async function GET() {
+export const GET = withAuthErrors(async () => {
   const { user } = await requireCustomerContext();
   const devices = await rawDb.pushSubscription.count({ where: { userId: user.id } });
   return NextResponse.json({ configured: vapidConfigured(), publicKey: vapidPublicKey(), devices });
-}
+});
 
 /** The origin this request arrived on, behind a proxy or not. */
 function requestOrigin(req: Request): string {
@@ -51,7 +52,7 @@ function requestOrigin(req: Request): string {
   return host ? `${proto}://${host}` : "";
 }
 
-export async function POST(req: Request) {
+export const POST = withAuthErrors(async (req: Request) => {
   const { db, user } = await requireCustomerContext();
   if (!vapidConfigured()) {
     return NextResponse.json({ error: "Push notifications aren't set up on this platform yet." }, { status: 501 });
@@ -183,4 +184,4 @@ export async function POST(req: Request) {
     tag: "welcome",
   });
   return NextResponse.json({ ok: true });
-}
+});

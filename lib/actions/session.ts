@@ -7,7 +7,7 @@ import { isClinicSlug } from "@/lib/clinic-link";
 import { currentClientBasePath } from "@/lib/public-clinic";
 import { isClientHost } from "@/lib/portal-hosts";
 import { headers } from "next/headers";
-import { arg, args, INVALID_REQUEST, InvalidActionArgsError, validArgs } from "@/lib/action-args";
+import { arg, args, InvalidActionArgsError, validArgs } from "@/lib/action-args";
 
 export async function signOutAction() {
   await signOut({ redirectTo: "/" });
