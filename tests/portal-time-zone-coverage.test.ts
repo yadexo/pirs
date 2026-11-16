@@ -16,7 +16,8 @@ import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
-const ROOTS = ["app/m", "components/merchant"];
+/** The clinic portal, and the server code behind it and behind the client app's messages. */
+const ROOTS = ["app/m", "components/merchant", "lib"];
 const LOCAL_CLOCK = /\.(getHours|getMinutes|getDay|getDate|getMonth|getFullYear|setHours|setMinutes|setDate|setMonth|setFullYear)\(/;
 
 function files(dir: string): string[] {
@@ -34,7 +35,7 @@ const sources = ROOTS.flatMap((root) => files(join(process.cwd(), root))).map((p
   text: readFileSync(path, "utf8").replace(/\r/g, ""),
 }));
 
-describe("the clinic portal shows dates in the clinic's time zone", () => {
+describe("the portal and the server show dates in the clinic's time zone", () => {
   it("reads the portal's files", () => {
     expect(sources.length).toBeGreaterThan(40);
   });
@@ -64,5 +65,13 @@ describe("the clinic portal shows dates in the clinic's time zone", () => {
         .filter((x): x is string => x !== null),
     );
     expect(local).toEqual([]);
+  });
+
+  it("no client-facing date is formatted without the clinic's zone", () => {
+    // formatDay(x, null) falls back to Amsterdam, which is not every clinic's zone.
+    const unzoned = sources.flatMap(({ file, text }) =>
+      [...text.matchAll(/\bformat(?:Day|ShortDay|Time|Weekday)\([^;]*?,\s*null\)/g)].map((m) => `${file}:${text.slice(0, m.index).split("\n").length}`),
+    );
+    expect(unzoned).toEqual([]);
   });
 });

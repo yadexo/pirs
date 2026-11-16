@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { rawDb } from "@/lib/db";
 import { stripe } from "@/lib/stripe-payments";
 import { platformFeePercent } from "@/lib/platform-fee";
+import { addCalendarMonths } from "@/lib/clinic-time";
 
 /**
  * Memberships billed as Stripe subscriptions on the clinic's own connected
@@ -290,9 +291,8 @@ export function currentPeriodEndOf(subscription: Stripe.Subscription): Date {
  * The date that is `periods` whole billing periods after `from`, which is what
  * "skip the next two months" means on a monthly plan.
  */
-export function addBillingPeriods(from: Date, periods: number, frequency: string): Date {
-  const out = new Date(from);
-  if (frequency === "MONTHLY") out.setMonth(out.getMonth() + periods);
-  else out.setFullYear(out.getFullYear() + periods);
-  return out;
+export function addBillingPeriods(from: Date, periods: number, frequency: string, timeZone: string): Date {
+  // Calendar months in the clinic's zone: the same local date and time, even
+  // across a clock change (lib/clinic-time.ts).
+  return addCalendarMonths(timeZone, from, frequency === "MONTHLY" ? periods : periods * 12);
 }

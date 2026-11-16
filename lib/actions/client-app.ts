@@ -7,7 +7,7 @@ import { rawDb } from "@/lib/db";
 import { getAvailableSlots } from "@/lib/availability";
 import { bookingProblem, holdSlot, SLOT_TAKEN } from "@/lib/booking-rules";
 import { clinicZone } from "@/lib/clinic-zone";
-import { addDays, todayIn } from "@/lib/clinic-time";
+import { addCalendarMonths, addDays, todayIn } from "@/lib/clinic-time";
 import { lockRow, LOCKED_CLAIM } from "@/lib/row-lock";
 import type { TenantDb } from "@/lib/tenant-db";
 import { adjustLoyaltyPoints, InsufficientPointsError, rewardDiscountCents } from "@/lib/loyalty";
@@ -1297,9 +1297,7 @@ export async function clientJoinPlanAction(slug: string, planId: string): Promis
   if (payment.mode === "blocked") return { error: payment.reason };
 
   const now = new Date();
-  const end = new Date(now);
-  if (plan.billingFrequency === "MONTHLY") end.setMonth(end.getMonth() + 1);
-  else end.setFullYear(end.getFullYear() + 1);
+  const end = addCalendarMonths(await clinicZone(db), now, plan.billingFrequency === "MONTHLY" ? 1 : 12);
 
   if (payment.mode === "stripe") {
     const clinic = await rawDb.tenant.findUniqueOrThrow({
@@ -1500,7 +1498,7 @@ const profileSchema = z
     // asking someone's age to do it is a different thing entirely.
     birthdayDay: z.coerce.number().int().min(1).max(31).optional(),
     birthdayMonth: z.coerce.number().int().min(1).max(12).optional(),
-    birthdayYear: z.coerce.number().int().min(1900).max(new Date().getFullYear()).optional(),
+    birthdayYear: z.coerce.number().int().min(1900).max(new Date().getUTCFullYear()).optional(),
   })
   .strict()
   .superRefine((p, ctx) => {

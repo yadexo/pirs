@@ -1,3 +1,5 @@
+import { addCalendarMonths } from "@/lib/clinic-time";
+import { DEFAULT_TIME_ZONE } from "@/lib/time-zone";
 /**
  * When a price rise is allowed to reach a member.
  *
@@ -30,11 +32,9 @@ export interface PriceChangeTiming {
   periodsDeferred: number;
 }
 
-function addPeriod(from: Date, frequency: string): Date {
-  const out = new Date(from);
-  if (frequency === "MONTHLY") out.setMonth(out.getMonth() + 1);
-  else out.setFullYear(out.getFullYear() + 1);
-  return out;
+/** One billing period on, in calendar months of the clinic's zone. */
+function addPeriod(from: Date, frequency: string, timeZone: string): Date {
+  return addCalendarMonths(timeZone, from, frequency === "MONTHLY" ? 1 : 12);
 }
 
 /**
@@ -50,11 +50,14 @@ export function planPriceChange({
   frequency,
   now = new Date(),
   noticeDays = PRICE_NOTICE_DAYS,
+  timeZone = DEFAULT_TIME_ZONE,
 }: {
   nextBillingAt: Date;
   frequency: string;
   now?: Date;
   noticeDays?: number;
+  /** The clinic's zone: periods are its calendar months. */
+  timeZone?: string;
 }): PriceChangeTiming {
   const earliest = new Date(now.getTime() + noticeDays * DAY);
 
@@ -64,12 +67,12 @@ export function planPriceChange({
 
   // Their next payment is too soon to be warned about, so it goes out at the
   // price they already know, and the new one starts the period after.
-  let effectiveAt = addPeriod(nextBillingAt, frequency);
+  let effectiveAt = addPeriod(nextBillingAt, frequency, timeZone);
   let periodsDeferred = 1;
   // A plan billed so often that even the period after is too soon keeps
   // moving out — a weekly plan would, if one ever existed.
   while (effectiveAt.getTime() < earliest.getTime() && periodsDeferred < 24) {
-    effectiveAt = addPeriod(effectiveAt, frequency);
+    effectiveAt = addPeriod(effectiveAt, frequency, timeZone);
     periodsDeferred += 1;
   }
 

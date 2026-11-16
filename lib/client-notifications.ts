@@ -7,6 +7,7 @@ import type { EmailTemplate } from "@/lib/emails/templates";
 import { senderFor } from "@/lib/emails/sender";
 import { formatDay } from "@/lib/client-format";
 import type { AppLocale } from "@/lib/locale-cookie";
+import { DEFAULT_TIME_ZONE } from "@/lib/time-zone";
 
 function localeOf(value: string | null | undefined): AppLocale {
   return value === "en" ? "en" : "nl";
@@ -248,7 +249,7 @@ async function recipientForClient(customerProfileId: string) {
       firstName: true,
       user: { select: { email: true, locale: true } },
       tenant: {
-        select: { name: true, slug: true, branding: { select: { businessName: true, currency: true, logoUrl: true, primaryColor: true } } },
+        select: { name: true, slug: true, branding: { select: { businessName: true, currency: true, logoUrl: true, primaryColor: true, timeZone: true } } },
       },
     },
   });
@@ -261,6 +262,8 @@ async function recipientForClient(customerProfileId: string) {
     clinicName,
     branding: { name: clinicName, logoUrl: profile.tenant.branding?.logoUrl ?? null, color: profile.tenant.branding?.primaryColor ?? null } as EmailBranding,
     slug: profile.tenant.slug,
+    /** Dates in messages are the clinic's days. */
+    timeZone: profile.tenant.branding?.timeZone ?? DEFAULT_TIME_ZONE,
     currency: profile.tenant.branding?.currency ?? "EUR",
     locale: localeOf(profile.user?.locale),
   };
@@ -356,7 +359,7 @@ export async function notifyPriceChange(
   const to = await recipientForClient(customerProfileId);
   if (!to) return;
 
-  const when = formatDay(change.effectiveAt, null);
+  const when = formatDay(change.effectiveAt, to.timeZone);
   const price = amount(change.newPriceCents, change.currency);
   const manage = "/profile?tab=membership";
   const line = PUSH_COPY.priceChange[to.locale](change.planName, price, when);
@@ -394,7 +397,7 @@ async function recipientForMembership(membershipId: string) {
       customerProfile: { select: { userId: true, firstName: true, user: { select: { email: true, locale: true } } } },
       membershipPlan: { select: { name: true } },
       tenant: {
-        select: { name: true, slug: true, branding: { select: { businessName: true, logoUrl: true, primaryColor: true } } },
+        select: { name: true, slug: true, branding: { select: { businessName: true, logoUrl: true, primaryColor: true, timeZone: true } } },
       },
     },
   });
@@ -407,6 +410,7 @@ async function recipientForMembership(membershipId: string) {
     clinicName,
     branding: { name: clinicName, logoUrl: membership.tenant.branding?.logoUrl ?? null, color: membership.tenant.branding?.primaryColor ?? null } as EmailBranding,
     slug: membership.tenant.slug,
+    timeZone: membership.tenant.branding?.timeZone ?? DEFAULT_TIME_ZONE,
     planName: membership.membershipPlan?.name ?? "Membership",
     locale: localeOf(membership.customerProfile.user?.locale),
   };
@@ -420,7 +424,7 @@ async function recipientForMembership(membershipId: string) {
 export async function notifyMembershipPaymentFailed(membershipId: string, benefitsEndAt?: Date | null): Promise<void> {
   const to = await recipientForMembership(membershipId);
   if (!to) return;
-  const endDay = benefitsEndAt ? formatDay(benefitsEndAt, null) : null;
+  const endDay = benefitsEndAt ? formatDay(benefitsEndAt, to.timeZone) : null;
   const deadline = endDay ? PUSH_COPY.membershipPaymentFailedDeadline[to.locale](endDay) : "";
   const updateUrl = "/profile?tab=membership";
   await notifyClientQuietly(to.userId, {

@@ -862,7 +862,7 @@ export async function savePromotionAction(merchantId: string, id: string | null,
         });
         if (already && !notifyAgain) {
           throw new ActionError(
-            `Clients already got a notification for this offer on ${already.sentAt?.toLocaleDateString("en-US", { dateStyle: "medium" })}. Tick "send it again" to send another.`,
+            `Clients already got a notification for this offer on ${already.sentAt?.toLocaleDateString("en-US", { dateStyle: "medium", timeZone: zone })}. Tick "send it again" to send another.`,
           );
         }
 

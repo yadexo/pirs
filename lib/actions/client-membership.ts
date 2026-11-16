@@ -20,6 +20,7 @@ import {
 import { notifyMembershipChanged } from "@/lib/client-notifications";
 import { tenantCurrency } from "@/lib/currency";
 import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
+import { clinicZone } from "@/lib/clinic-zone";
 
 /**
  * A clinic managing one client's membership.
@@ -216,7 +217,7 @@ export async function cancelClientMembershipAction(
     }
 
     const status = when === "now" ? "CANCELLED" : membership.status;
-    const ends = membership.currentPeriodEnd.toLocaleDateString("en-GB", { day: "numeric", month: "long" });
+    const ends = membership.currentPeriodEnd.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: await clinicZone(ctx.db) });
     await commitChange(ctx, membership, Boolean(onStripe), {
       data: when === "now" ? { status: "CANCELLED", cancelledAt: new Date(), cancelAtPeriodEnd: false } : { cancelAtPeriodEnd: true },
       history: when === "now" ? `Cancelled by ${staffName}: ${why}` : `Set to end on ${ends} by ${staffName}: ${why}`,
@@ -357,7 +358,7 @@ export async function switchClientPlanAction(
       metadata: { from: membership.membershipPlanId, to: plan.id, reason: why },
     });
 
-    const from = membership.currentPeriodEnd.toLocaleDateString("en-GB", { day: "numeric", month: "long" });
+    const from = membership.currentPeriodEnd.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: await clinicZone(ctx.db) });
     await notifyMembershipChanged(membership.id, `You're moving to ${plan.name} from ${from}. Nothing changes before then.`, why).catch(() => undefined);
 
     revalidatePath(`/m/${merchantId}/clients`);
@@ -392,14 +393,14 @@ export async function giveFreePeriodsAction(
     if (membership.status === "CANCELLED") throw new ActionError("That membership has ended.");
 
     const frequency = membership.membershipPlan?.billingFrequency ?? "MONTHLY";
-    let until = addBillingPeriods(membership.currentPeriodEnd, periods, frequency);
+    let until = addBillingPeriods(membership.currentPeriodEnd, periods, frequency, await clinicZone(ctx.db));
 
     const onStripe = Boolean(clinic?.stripeAccountId && membership.stripeSubscriptionId?.startsWith("sub_"));
     if (clinic?.stripeAccountId && membership.stripeSubscriptionId?.startsWith("sub_")) {
       try {
         // From what Stripe thinks the period is, not from our copy of it.
         const subscription = await readSubscription(clinic.stripeAccountId, membership.stripeSubscriptionId);
-        if (subscription) until = addBillingPeriods(currentPeriodEndOf(subscription), periods, frequency);
+        if (subscription) until = addBillingPeriods(currentPeriodEndOf(subscription), periods, frequency, await clinicZone(ctx.db));
         await skipBillingUntil(clinic.stripeAccountId, membership.stripeSubscriptionId, until);
       } catch (err) {
         console.error("[membership] Stripe refused the free periods:", err instanceof Error ? err.message : err);
@@ -407,7 +408,7 @@ export async function giveFreePeriodsAction(
       }
     }
 
-    const when = until.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+    const when = until.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: await clinicZone(ctx.db) });
     const label = `${periods} ${frequency === "MONTHLY" ? "month" : "year"}${periods === 1 ? "" : "s"}`;
     await commitChange(ctx, membership, onStripe, {
       data: { currentPeriodEnd: until, nextBillingAt: until },

@@ -32,6 +32,7 @@ export const TIME_SENSITIVE_TESTS = [
   "tests/integration/check-in.test.ts",
   "tests/portal-datetime-input.test.ts",
   "tests/portal-time-zone-coverage.test.ts",
+  "tests/billing-dates.test.ts",
 ];
 
 const files = [...TIME_SENSITIVE_TESTS, ...process.argv.slice(2)];

@@ -8,6 +8,7 @@ import { notifyItemRedeemed, notifySessionUsed } from "@/lib/client-notification
 import { spendPackageSession } from "@/lib/package-redemption";
 import { findItem, isBackupCode, normaliseCode, redeemItem, tokenFromScan, toView, type ItemView } from "@/lib/redeemable";
 import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
+import { clinicZone } from "@/lib/clinic-zone";
 
 /**
  * Redeeming a client's paid-for item at the clinic — by scanning their code,
@@ -73,7 +74,7 @@ export async function redeemItemAction(merchantId: string, input: z.input<typeof
       if (outcome.reason === "not-found") throw new ActionError(NOT_VALID_HERE);
       if (outcome.reason === "voided") throw new ActionError("This item was refunded, so it can't be redeemed.");
       if (outcome.reason === "expired") throw new ActionError("This item has expired.");
-      const when = outcome.item?.redeemedAt ? new Date(outcome.item.redeemedAt).toLocaleString() : "earlier";
+      const when = outcome.item?.redeemedAt ? new Date(outcome.item.redeemedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: await clinicZone(ctx.db) }) : "earlier";
       const who = outcome.item?.redeemedByName ? ` by ${outcome.item.redeemedByName}` : "";
       throw new ActionError(`Already redeemed ${when}${who}.`);
     }

@@ -6,6 +6,7 @@ import { planPriceChange } from "@/lib/membership-price-change";
 import { MEMBERSHIP_HOLDS_SLOT } from "@/lib/membership-status";
 import { ensureStripePrice, switchSubscriptionPrice } from "@/lib/memberships-billing";
 import { notifyPriceChange } from "@/lib/client-notifications";
+import { clinicZone } from "@/lib/clinic-zone";
 
 /**
  * Moving a clinic's existing members onto a new price.
@@ -58,6 +59,7 @@ export async function rolloutPlanPrice(params: {
   if (!plan) return { members: 0, appliedNow: 0, deferred: 0, notified: 0, failed: 0 };
 
   const currency = await tenantCurrency(db);
+  const timeZone = await clinicZone(db);
   const result: RolloutResult = { members: members.length, appliedNow: 0, deferred: 0, notified: 0, failed: 0 };
 
   // One price object for the whole rollout rather than one per member.
@@ -79,6 +81,7 @@ export async function rolloutPlanPrice(params: {
         nextBillingAt: member.nextBillingAt ?? member.currentPeriodEnd,
         frequency: plan.billingFrequency,
         now,
+        timeZone,
       });
 
       const onStripe = Boolean(clinic?.stripeAccountId && priceId && member.stripeSubscriptionId?.startsWith("sub_"));

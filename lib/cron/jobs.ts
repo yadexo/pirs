@@ -16,6 +16,7 @@ import { describeError, vercelConfig, vercelDomainsApi } from "@/lib/vercel-doma
 import { forgetClinicHosts } from "@/lib/clinic-hosts";
 import { writeAuditLog } from "@/lib/audit";
 import { logDomain } from "@/lib/signin-log";
+import { DEFAULT_TIME_ZONE } from "@/lib/time-zone";
 
 /** How long an unpaid order may hold stock and redeemed points. */
 const ABANDONED_ORDER_MS = 60 * 60 * 1000;
@@ -35,6 +36,11 @@ export type CronResult = Record<string, number | string>;
  * must be safe to run twice in a row and safe to skip a run.
  *
  * Later phases register appointment reminders and membership dunning here.
+ * Appointment reminders, when they come, must word their times in the
+ * clinic's zone (formatDay/formatTime with TenantBranding.timeZone) and count
+ * "N hours before" from the stored instant, never from a local clock: see
+ * lib/clinic-time.ts. There is a setting for them already
+ * (TenantSettings.appointmentReminderHours) but nothing sends them yet.
  */
 export const CRON_JOBS: Record<string, () => Promise<CronResult>> = {
   /** Hourly: delete expired state that would otherwise accumulate forever. */
@@ -196,6 +202,7 @@ export const CRON_JOBS: Record<string, () => Promise<CronResult>> = {
         remainingUses: true,
         expiresAt: true,
         package: { select: { name: true } },
+        tenant: { select: { branding: { select: { timeZone: true } } } },
       },
       take: 500,
     });
@@ -213,7 +220,7 @@ export const CRON_JOBS: Record<string, () => Promise<CronResult>> = {
         row.customerProfileId,
         row.package.name,
         row.remainingUses,
-        formatDay(row.expiresAt!, null),
+        formatDay(row.expiresAt!, row.tenant.branding?.timeZone ?? DEFAULT_TIME_ZONE),
       ).catch(() => undefined);
     }
 
