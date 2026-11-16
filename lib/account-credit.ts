@@ -1,4 +1,5 @@
 import "server-only";
+import type { Prisma } from "@prisma/client";
 import { rawDb } from "@/lib/db";
 import type { TenantDb } from "@/lib/tenant-db";
 
@@ -42,38 +43,49 @@ export async function adjustAccountCredit(
     relatedOrderId?: string;
     performedByStaffProfileId?: string | null;
   },
+  /**
+   * Run inside the caller's transaction instead of a new one (lib/row-lock.ts).
+   * Everything, the profile lookup included, then uses that transaction's own
+   * connection: asking the pool for a second one while holding a lock
+   * starves it under a burst of claims.
+   */
+  within?: { tx: Prisma.TransactionClient; tenantId: string },
 ): Promise<number> {
   if (!Number.isInteger(params.amountCents)) throw new Error("Credit must be a whole number of cents.");
-  // Resolved through the tenant-scoped client, so a profile from another clinic is "not found".
-  const profile = await db.customerProfile.findFirst({ where: { id: params.customerProfileId }, select: { id: true, tenantId: true } });
+  // Resolved within the clinic, so a profile from another clinic is "not found".
+  const profile = within
+    ? await within.tx.customerProfile.findFirst({ where: { id: params.customerProfileId, tenantId: within.tenantId }, select: { id: true, tenantId: true } })
+    : await db.customerProfile.findFirst({ where: { id: params.customerProfileId }, select: { id: true, tenantId: true } });
   if (!profile) throw new Error("Customer not found.");
 
-  return rawDb.$transaction(
-    async (tx) => {
-      const rows = await tx.$queryRaw<{ balance: number }[]>`
-        UPDATE "CustomerProfile"
-        SET "accountCreditBalanceCents" = "accountCreditBalanceCents" + ${params.amountCents}, "updatedAt" = NOW()
-        WHERE "id" = ${profile.id} AND "tenantId" = ${profile.tenantId}
-          AND "accountCreditBalanceCents" + ${params.amountCents} >= 0
-        RETURNING "accountCreditBalanceCents" AS balance
-      `;
-      if (rows.length === 0) throw new InsufficientCreditError();
-      const balanceAfterCents = Number(rows[0]!.balance);
+  const apply = async (tx: Prisma.TransactionClient) => {
+    const rows = await tx.$queryRaw<{ balance: number }[]>`
+      UPDATE "CustomerProfile"
+      SET "accountCreditBalanceCents" = "accountCreditBalanceCents" + ${params.amountCents}, "updatedAt" = NOW()
+      WHERE "id" = ${profile.id} AND "tenantId" = ${profile.tenantId}
+        AND "accountCreditBalanceCents" + ${params.amountCents} >= 0
+      RETURNING "accountCreditBalanceCents" AS balance
+    `;
+    if (rows.length === 0) throw new InsufficientCreditError();
+    const balanceAfterCents = Number(rows[0]!.balance);
 
-      await tx.accountCreditTransaction.create({
-        data: {
-          tenantId: profile.tenantId,
-          customerProfileId: profile.id,
-          type: params.type,
-          amountCents: params.amountCents,
-          balanceAfterCents,
-          reason: params.reason,
-          relatedOrderId: params.relatedOrderId,
-          performedByStaffProfileId: params.performedByStaffProfileId ?? undefined,
-        },
-      });
-      return balanceAfterCents;
-    },
+    await tx.accountCreditTransaction.create({
+      data: {
+        tenantId: profile.tenantId,
+        customerProfileId: profile.id,
+        type: params.type,
+        amountCents: params.amountCents,
+        balanceAfterCents,
+        reason: params.reason,
+        relatedOrderId: params.relatedOrderId,
+        performedByStaffProfileId: params.performedByStaffProfileId ?? undefined,
+      },
+    });
+    return balanceAfterCents;
+  };
+  if (within) return apply(within.tx);
+  return rawDb.$transaction(
+    apply,
     // Same reasoning as the loyalty ledger: these two statements serialise on
     // one row, and the default five seconds is the whole queue's budget.
     { timeout: 20_000 },

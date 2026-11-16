@@ -1,4 +1,5 @@
 import "server-only";
+import type { Prisma } from "@prisma/client";
 import type { TenantDb } from "@/lib/tenant-db";
 import { rawDb } from "@/lib/db";
 
@@ -69,40 +70,51 @@ export async function adjustLoyaltyPoints(
     performedByStaffProfileId?: string;
     expiresAt?: Date | null;
   },
+  /**
+   * Run inside the caller's transaction instead of a new one (lib/row-lock.ts).
+   * Everything, the profile lookup included, then uses that transaction's own
+   * connection: asking the pool for a second one while holding a lock
+   * starves it under a burst of claims.
+   */
+  within?: { tx: Prisma.TransactionClient; tenantId: string },
 ): Promise<number> {
   if (!Number.isInteger(params.points)) throw new Error("Points must be a whole number.");
-  // Resolved through the tenant-scoped client, so a profile from another clinic is "not found".
-  const profile = await db.customerProfile.findFirst({ where: { id: params.customerProfileId }, select: { id: true, tenantId: true } });
+  // Resolved within the clinic, so a profile from another clinic is "not found".
+  const profile = within
+    ? await within.tx.customerProfile.findFirst({ where: { id: params.customerProfileId, tenantId: within.tenantId }, select: { id: true, tenantId: true } })
+    : await db.customerProfile.findFirst({ where: { id: params.customerProfileId }, select: { id: true, tenantId: true } });
   if (!profile) throw new Error("Customer not found.");
 
-  return rawDb.$transaction(
-    async (tx) => {
-      const rows = await tx.$queryRaw<{ balance: number }[]>`
-        UPDATE "CustomerProfile"
-        SET "loyaltyPointsBalance" = "loyaltyPointsBalance" + ${params.points}, "updatedAt" = NOW()
-        WHERE "id" = ${profile.id} AND "tenantId" = ${profile.tenantId}
-          AND "loyaltyPointsBalance" + ${params.points} >= 0
-        RETURNING "loyaltyPointsBalance" AS balance
-      `;
-      if (rows.length === 0) throw new InsufficientPointsError();
-      const balanceAfter = Number(rows[0]!.balance);
+  const apply = async (tx: Prisma.TransactionClient) => {
+    const rows = await tx.$queryRaw<{ balance: number }[]>`
+      UPDATE "CustomerProfile"
+      SET "loyaltyPointsBalance" = "loyaltyPointsBalance" + ${params.points}, "updatedAt" = NOW()
+      WHERE "id" = ${profile.id} AND "tenantId" = ${profile.tenantId}
+        AND "loyaltyPointsBalance" + ${params.points} >= 0
+      RETURNING "loyaltyPointsBalance" AS balance
+    `;
+    if (rows.length === 0) throw new InsufficientPointsError();
+    const balanceAfter = Number(rows[0]!.balance);
 
-      await tx.loyaltyTransaction.create({
-        data: {
-          tenantId: profile.tenantId,
-          customerProfileId: profile.id,
-          type: params.type,
-          points: params.points,
-          balanceAfter,
-          reason: params.reason,
-          relatedOrderId: params.relatedOrderId,
-          relatedRewardId: params.relatedRewardId,
-          performedByStaffProfileId: params.performedByStaffProfileId,
-          expiresAt: params.expiresAt ?? undefined,
-        },
-      });
-      return balanceAfter;
-    },
+    await tx.loyaltyTransaction.create({
+      data: {
+        tenantId: profile.tenantId,
+        customerProfileId: profile.id,
+        type: params.type,
+        points: params.points,
+        balanceAfter,
+        reason: params.reason,
+        relatedOrderId: params.relatedOrderId,
+        relatedRewardId: params.relatedRewardId,
+        performedByStaffProfileId: params.performedByStaffProfileId,
+        expiresAt: params.expiresAt ?? undefined,
+      },
+    });
+    return balanceAfter;
+  };
+  if (within) return apply(within.tx);
+  return rawDb.$transaction(
+    apply,
     /**
      * Two short statements, but they serialise on one row: a client whose
      * points move several times at once (a checkout redeeming and earning

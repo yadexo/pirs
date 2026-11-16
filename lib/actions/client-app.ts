@@ -6,6 +6,8 @@ import { requireCustomerContext } from "@/lib/rbac";
 import { rawDb } from "@/lib/db";
 import { getAvailableSlots } from "@/lib/availability";
 import { bookingProblem } from "@/lib/booking-rules";
+import { lockRow, LOCKED_CLAIM } from "@/lib/row-lock";
+import type { TenantDb } from "@/lib/tenant-db";
 import { adjustLoyaltyPoints, InsufficientPointsError, rewardDiscountCents } from "@/lib/loyalty";
 import { getPaymentProvider } from "@/lib/providers/payments";
 import { mockDeclineRequested } from "@/lib/providers/payments/mock";
@@ -1100,6 +1102,27 @@ export async function clientRedeemRewardAction(
  * page from the app. A review can't be verified from here, so this rewards
  * the visit, once, like the referral bonus below.
  */
+/**
+ * Awards a bonus a client can have once, and says whether this call did.
+ *
+ * The check and the award happen under a lock on the client's own row, so
+ * simultaneous claims queue and only the first finds nothing there yet.
+ * Without it, 20 requests at once gave 18 referral bonuses
+ * (docs/security/review-2026-11-pass2.md, P-4).
+ */
+async function claimOnceOnlyBonus(db: TenantDb, tenantId: string, customerProfileId: string, points: number, reason: string): Promise<boolean> {
+  return rawDb.$transaction(
+    async (tx) => {
+      if (!(await lockRow(tx, "CustomerProfile", customerProfileId, tenantId))) return false;
+      const already = await tx.loyaltyTransaction.findFirst({ where: { tenantId, customerProfileId, reason }, select: { id: true } });
+      if (already) return false;
+      await adjustLoyaltyPoints(db, { customerProfileId, points, type: "EARNED", reason }, { tx, tenantId });
+      return true;
+    },
+    LOCKED_CLAIM,
+  );
+}
+
 export async function clientReviewAction(slug: string): Promise<{ error: string } | { ok: true; points: number }> {
   if (!validArgs(args([arg.slug]), [slug])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
@@ -1111,12 +1134,9 @@ export async function clientReviewAction(slug: string): Promise<{ error: string 
   const award = programme?.active && settings?.googleReviewUrl ? programme.reviewPoints : 0;
   if (award <= 0) return { error: "Reviews aren't rewarded at this clinic." };
 
-  const already = await db.loyaltyTransaction.findFirst({
-    where: { customerProfileId: user.customerProfileId!, reason: "Google review" },
-  });
-  if (already) return { error: "You've already claimed your review bonus. Thank you!" };
-
-  await adjustLoyaltyPoints(db, { customerProfileId: user.customerProfileId!, points: award, type: "EARNED", reason: "Google review" });
+  if (!(await claimOnceOnlyBonus(db, user.tenantId!, user.customerProfileId!, award, "Google review"))) {
+    return { error: "You've already claimed your review bonus. Thank you!" };
+  }
 
   await recordActivity(db, { type: "REVIEW", customerProfileId: user.customerProfileId, summary: "Opened the Google review page", points: award });
   revalidateClient(slug);
@@ -1132,17 +1152,9 @@ export async function clientReferralAction(slug: string): Promise<{ error: strin
   const award = programme?.referralPoints ?? 0;
   if (award <= 0) return { error: "Referrals aren't set up at this clinic yet." };
 
-  const already = await db.loyaltyTransaction.findFirst({
-    where: { customerProfileId: user.customerProfileId!, reason: "Referral shared" },
-  });
-  if (already) return { error: "You've already claimed your referral bonus." };
-
-  await adjustLoyaltyPoints(db, {
-    customerProfileId: user.customerProfileId!,
-    points: award,
-    type: "EARNED",
-    reason: "Referral shared",
-  });
+  if (!(await claimOnceOnlyBonus(db, user.tenantId!, user.customerProfileId!, award, "Referral shared"))) {
+    return { error: "You've already claimed your referral bonus." };
+  }
 
   await recordActivity(db, { type: "REFERRAL", customerProfileId: user.customerProfileId, summary: "Shared a referral link", points: award });
   revalidateClient(slug);
