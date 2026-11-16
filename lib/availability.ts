@@ -35,7 +35,14 @@ const SLOT_INCREMENT_MINUTES = 15;
 
 export async function getAvailableSlots(
   db: TenantDb,
-  params: { staffProfileId: string; locationId: string; serviceDurationMinutes: number; date: Date },
+  params: {
+    staffProfileId: string;
+    locationId: string;
+    serviceDurationMinutes: number;
+    date: Date;
+    /** The appointment being moved: it does not stand in its own way. */
+    excludeAppointmentId?: string;
+  },
 ): Promise<Date[]> {
   const dayStart = startOfDay(params.date);
   const dayEnd = minutesToDate(params.date, 24 * 60);
@@ -49,6 +56,7 @@ export async function getAvailableSlots(
       where: {
         staffProfileId: params.staffProfileId,
         status: { in: ["REQUESTED", "CONFIRMED"] },
+        ...(params.excludeAppointmentId ? { id: { not: params.excludeAppointmentId } } : {}),
         startAt: { lt: dayEnd },
         endAt: { gt: dayStart },
       },

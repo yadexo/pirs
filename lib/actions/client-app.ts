@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireCustomerContext } from "@/lib/rbac";
 import { rawDb } from "@/lib/db";
 import { getAvailableSlots } from "@/lib/availability";
+import { bookingProblem } from "@/lib/booking-rules";
 import { adjustLoyaltyPoints, InsufficientPointsError, rewardDiscountCents } from "@/lib/loyalty";
 import { getPaymentProvider } from "@/lib/providers/payments";
 import { mockDeclineRequested } from "@/lib/providers/payments/mock";
@@ -87,12 +88,20 @@ export async function getClientSlotsAction(staffProfileId: string, locationId: s
   return slots.map((s) => s.toISOString());
 }
 
-const bookSchema = z.object({
-  serviceId: z.string().min(1),
-  staffProfileId: z.string().min(1),
-  locationId: z.string().min(1),
-  startAtIso: z.string().min(1),
-});
+/**
+ * Strict: every field is a plain id or a date, and nothing else is accepted.
+ * An object where an id belongs once rewrote every appointment of a clinic
+ * (docs/security/review-2026-11-pass2.md, I-3).
+ */
+const bookSchema = z
+  .object({
+    serviceId: arg.id,
+    staffProfileId: arg.id,
+    locationId: arg.id,
+    startAtIso: arg.isoDate,
+    appointmentId: arg.id.optional(),
+  })
+  .strict();
 
 export type BookResult =
   | { error: string }
@@ -108,11 +117,9 @@ export async function clientBookAction(
   slug: string,
   input: { serviceId: string; staffProfileId: string; locationId: string; startAtIso: string; appointmentId?: string },
 ): Promise<BookResult> {
-  if (!validArgs(args([arg.slug, z.record(z.unknown())]), [slug, input])) return { error: INVALID_REQUEST };
+  if (!validArgs(args([arg.slug, bookSchema]), [slug, input])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
-
-  const parsed = bookSchema.safeParse(input);
-  if (!parsed.success) return { error: "Please choose a service, staff member and time." };
+  const customerProfileId = user.customerProfileId!;
 
   const service = await db.service.findFirst({ where: { id: input.serviceId, active: true } });
   if (!service) return { error: "That treatment is no longer available." };
@@ -120,24 +127,36 @@ export async function clientBookAction(
   const startAt = new Date(input.startAtIso);
   const endAt = new Date(startAt.getTime() + service.durationMinutes * 60000);
 
-  // Re-check availability at commit time so two clients can't take one slot.
-  const slots = await getAvailableSlots(db, {
+  // A reschedule moves one of the client's own upcoming appointments, for the
+  // treatment it was booked for: changing the time is not a way to swap a
+  // paid-for treatment for a dearer one.
+  const existing = input.appointmentId
+    ? await db.appointment.findFirst({
+        where: { id: input.appointmentId, customerProfileId, status: { in: ["REQUESTED", "CONFIRMED"] } },
+        select: { id: true, serviceId: true },
+      })
+    : null;
+  if (input.appointmentId && !existing) return { error: "Appointment not found." };
+  if (existing && existing.serviceId !== service.id) return { error: "Appointment not found." };
+
+  // The same rules for a new booking and a moved one, checked at commit time.
+  const problem = await bookingProblem(db, {
+    serviceId: service.id,
+    durationMinutes: service.durationMinutes,
     staffProfileId: input.staffProfileId,
     locationId: input.locationId,
-    serviceDurationMinutes: service.durationMinutes,
-    date: startAt,
+    startAt,
+    excludeAppointmentId: existing?.id,
   });
-  const free = slots.some((s) => s.getTime() === startAt.getTime());
-  if (!free && !input.appointmentId) return { error: "That time was just taken. Please pick another." };
+  if (problem) return { error: problem };
 
-  if (input.appointmentId) {
-    const existing = await db.appointment.findFirst({
-      where: { id: input.appointmentId, customerProfileId: user.customerProfileId! },
-    });
-    if (!existing) return { error: "Appointment not found." };
+  if (existing) {
+    // Scoped by the row found and its owner, never by what was sent. The
+    // status is left as it was: moving a requested appointment does not
+    // confirm it, and a deposit that was never paid stays unpaid.
     await db.appointment.updateMany({
-      where: { id: input.appointmentId },
-      data: { startAt, endAt, staffProfileId: input.staffProfileId, locationId: input.locationId, status: "CONFIRMED" },
+      where: { id: existing.id, customerProfileId },
+      data: { startAt, endAt, staffProfileId: input.staffProfileId, locationId: input.locationId },
     });
   } else {
     const settings = await db.tenantSettings.findFirst({ where: {} });
