@@ -82,4 +82,20 @@ describe("once-only claims under simultaneous requests", () => {
       expect([ra, rb].every((r) => "ok" in r)).toBe(true);
     });
   });
+  describe("joining a plan (P-5)", () => {
+    it("10 simultaneous joins make one membership", async () => {
+      const plan = await rawDb.membershipPlan.create({
+        data: { tenantId, name: `Race Plan ${stamp}`, billingFrequency: "MONTHLY", priceCents: 4_900, includedCreditCents: 2_000, active: true },
+      });
+      const client = await makeClient("joiner");
+      const results = await together(client, 10, () => clientApp.clientJoinPlanAction(slug, plan.id));
+      expect(results.filter((r) => "ok" in r)).toHaveLength(1);
+      expect(results.filter((r) => "error" in r).every((r) => "error" in r && /already have/.test(r.error))).toBe(true);
+      const memberships = await rawDb.customerMembership.findMany({ where: { customerProfileId: client.profileId } });
+      expect(memberships).toHaveLength(1);
+      // The plan's included credit is granted once, with the one membership.
+      expect(memberships.reduce((sum, m) => sum + m.creditBalanceCents, 0)).toBe(2_000);
+      expect((await rawDb.customerProfile.findUniqueOrThrow({ where: { id: client.profileId } })).accountCreditBalanceCents).toBe(2_000);
+    });
+  });
 });

@@ -1188,6 +1188,33 @@ export type JoinPlanResult =
  * clinic bills its own members and sees them in its own dashboard, and the
  * platform's cut rides on each invoice as an application fee.
  */
+function alreadyAMember(status: string): string {
+  return status === "PENDING" ? "You already have a membership waiting for its first payment." : "You already have an active membership.";
+}
+
+/**
+ * Creates the client's membership unless one already holds their slot.
+ *
+ * Checked and created under a lock on the client's row: ten simultaneous
+ * "join" requests used to make ten memberships, and on Stripe ten
+ * subscriptions (docs/security/review-2026-11-pass2.md, P-5).
+ */
+async function createMembershipOnce(
+  tenantId: string,
+  customerProfileId: string,
+  data: Record<string, unknown>,
+): Promise<{ id: string } | { held: string }> {
+  return rawDb.$transaction(async (tx) => {
+    if (!(await lockRow(tx, "CustomerProfile", customerProfileId, tenantId))) throw new Error("Customer not found.");
+    const existing = await tx.customerMembership.findFirst({
+      where: { tenantId, customerProfileId, status: { in: [...MEMBERSHIP_HOLDS_SLOT] } },
+      select: { status: true },
+    });
+    if (existing) return { held: existing.status };
+    return tx.customerMembership.create({ data: { ...data, tenantId, customerProfileId } as never, select: { id: true } });
+  }, LOCKED_CLAIM);
+}
+
 export async function clientJoinPlanAction(slug: string, planId: string): Promise<JoinPlanResult> {
   if (!validArgs(args([arg.slug, arg.id]), [slug, planId])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
@@ -1199,14 +1226,7 @@ export async function clientJoinPlanAction(slug: string, planId: string): Promis
     where: { customerProfileId: user.customerProfileId!, status: { in: [...MEMBERSHIP_HOLDS_SLOT] } },
     select: { id: true, status: true },
   });
-  if (existing) {
-    return {
-      error:
-        existing.status === "PENDING"
-          ? "You already have a membership waiting for its first payment."
-          : "You already have an active membership.",
-    };
-  }
+  if (existing) return { error: alreadyAMember(existing.status) };
 
   const currency = await tenantCurrency(db);
   const payment = await clinicPaymentMode(user.tenantId!);
@@ -1229,21 +1249,19 @@ export async function clientJoinPlanAction(slug: string, planId: string): Promis
       select: { id: true, stripeCustomerId: true, firstName: true, lastName: true, user: { select: { email: true } } },
     });
 
-    // Created first, so its id can key the subscription: a double-submitted
-    // join then reuses one subscription instead of making two.
-    const membership = await db.customerMembership.create({
-      data: {
-        customerProfileId: user.customerProfileId!,
-        membershipPlanId: plan.id,
-        status: "PENDING",
-        startedAt: now,
-        currentPeriodStart: now,
-        currentPeriodEnd: end,
-        nextBillingAt: end,
-        creditBalanceCents: 0,
-      } as never,
-      select: { id: true },
+    // Created first, so its id can key the subscription, and under the lock,
+    // so simultaneous joins make one membership and one subscription.
+    const claim = await createMembershipOnce(user.tenantId!, user.customerProfileId!, {
+      membershipPlanId: plan.id,
+      status: "PENDING",
+      startedAt: now,
+      currentPeriodStart: now,
+      currentPeriodEnd: end,
+      nextBillingAt: end,
+      creditBalanceCents: 0,
     });
+    if ("held" in claim) return { error: alreadyAMember(claim.held) };
+    const membership = claim;
 
     try {
       const account = { id: clinic.id, stripeAccountId: payment.stripeAccountId, membershipFeePercent: clinic.membershipFeePercent };
@@ -1313,19 +1331,18 @@ export async function clientJoinPlanAction(slug: string, planId: string): Promis
     intervalMonths: plan.billingFrequency === "MONTHLY" ? 1 : 12,
   });
 
-  const membership = await db.customerMembership.create({
-    data: {
-      customerProfileId: user.customerProfileId!,
-      membershipPlanId: plan.id,
-      status: "ACTIVE",
-      startedAt: now,
-      currentPeriodStart: now,
-      currentPeriodEnd: end,
-      nextBillingAt: end,
-      creditBalanceCents: plan.includedCreditCents,
-      stripeSubscriptionId: sub.providerSubscriptionId,
-    } as never,
+  const claim = await createMembershipOnce(user.tenantId!, user.customerProfileId!, {
+    membershipPlanId: plan.id,
+    status: "ACTIVE",
+    startedAt: now,
+    currentPeriodStart: now,
+    currentPeriodEnd: end,
+    nextBillingAt: end,
+    creditBalanceCents: plan.includedCreditCents,
+    stripeSubscriptionId: sub.providerSubscriptionId,
   });
+  if ("held" in claim) return { error: alreadyAMember(claim.held) };
+  const membership = claim;
 
   await db.membershipBillingEvent.create({
     data: {
