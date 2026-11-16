@@ -1,14 +1,15 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { PERMISSIONS } from "../lib/permissions";
+import { hashPassword } from "../lib/password";
 
 const db = new PrismaClient();
 
 const DEMO_PASSWORD = "Password123!";
 
-async function hash(pw: string) {
-  return bcrypt.hash(pw, 10);
+/** The production hasher, so demo accounts answer sign-in exactly as real ones do. */
+function hash(pw: string) {
+  return hashPassword(pw);
 }
 
 function daysFromNow(days: number) {
