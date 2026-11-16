@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireCustomerContext } from "@/lib/rbac";
 import { rawDb } from "@/lib/db";
 import { getAvailableSlots } from "@/lib/availability";
-import { bookingProblem } from "@/lib/booking-rules";
+import { bookingProblem, holdSlot, SLOT_TAKEN } from "@/lib/booking-rules";
 import { lockRow, LOCKED_CLAIM } from "@/lib/row-lock";
 import type { TenantDb } from "@/lib/tenant-db";
 import { adjustLoyaltyPoints, InsufficientPointsError, rewardDiscountCents } from "@/lib/loyalty";
@@ -156,10 +156,13 @@ export async function clientBookAction(
     // Scoped by the row found and its owner, never by what was sent. The
     // status is left as it was: moving a requested appointment does not
     // confirm it, and a deposit that was never paid stays unpaid.
-    await db.appointment.updateMany({
-      where: { id: existing.id, customerProfileId },
-      data: { startAt, endAt, staffProfileId: input.staffProfileId, locationId: input.locationId },
-    });
+    const moved = await holdSlot({ tenantId: user.tenantId!, staffProfileId: input.staffProfileId, startAt, endAt, excludeAppointmentId: existing.id }, (tx) =>
+      tx.appointment.updateMany({
+        where: { id: existing.id, customerProfileId, tenantId: user.tenantId! },
+        data: { startAt, endAt, staffProfileId: input.staffProfileId, locationId: input.locationId },
+      }),
+    );
+    if (!moved) return { error: SLOT_TAKEN };
   } else {
     const settings = await db.tenantSettings.findFirst({ where: {} });
     const depositCents = bookingDepositCents(settings, service.priceCents);
@@ -170,41 +173,49 @@ export async function clientBookAction(
     if (depositCents > 0 && payment && payment.mode === "stripe") {
       const currency = await tenantCurrency(db);
       const orderNumber = `BKG-${Date.now().toString(36).toUpperCase()}-${nanoid(4).toUpperCase()}`;
-      const order = await db.order.create({
-        data: {
-          customerProfileId: user.customerProfileId!,
-          orderNumber,
-          currency,
-          status: "PENDING",
-          subtotalCents: depositCents,
-          totalCents: depositCents,
-          items: {
-            create: [
-              {
-                itemType: "SERVICE",
-                serviceId: service.id,
-                name: `Deposit — ${service.name}`,
-                quantity: 1,
-                unitPriceCents: depositCents,
-                totalCents: depositCents,
-                taxCents: 0,
-              },
-            ],
-          },
-        } as never,
+      // The order and the appointment are made together, only if the slot is still free.
+      const held = await holdSlot({ tenantId: user.tenantId!, staffProfileId: input.staffProfileId, startAt, endAt }, async (tx) => {
+        const order = await tx.order.create({
+          data: {
+            tenantId: user.tenantId!,
+            customerProfileId: user.customerProfileId!,
+            orderNumber,
+            currency,
+            status: "PENDING",
+            subtotalCents: depositCents,
+            totalCents: depositCents,
+            items: {
+              create: [
+                {
+                  itemType: "SERVICE",
+                  serviceId: service.id,
+                  name: `Deposit — ${service.name}`,
+                  quantity: 1,
+                  unitPriceCents: depositCents,
+                  totalCents: depositCents,
+                  taxCents: 0,
+                },
+              ],
+            },
+          } as never,
+        });
+        const appointment = await tx.appointment.create({
+          data: {
+            tenantId: user.tenantId!,
+            customerProfileId: user.customerProfileId!,
+            serviceId: input.serviceId,
+            staffProfileId: input.staffProfileId,
+            locationId: input.locationId,
+            orderId: order.id,
+            startAt,
+            endAt,
+            status: "REQUESTED",
+          } as never,
+        });
+        return { order, appointment };
       });
-      const appointment = await db.appointment.create({
-        data: {
-          customerProfileId: user.customerProfileId!,
-          serviceId: input.serviceId,
-          staffProfileId: input.staffProfileId,
-          locationId: input.locationId,
-          orderId: order.id,
-          startAt,
-          endAt,
-          status: "REQUESTED",
-        } as never,
-      });
+      if (!held) return { error: SLOT_TAKEN };
+      const { order, appointment } = held;
       try {
         const charge = await createDirectCharge({
           stripeAccountId: payment.stripeAccountId,
@@ -244,17 +255,21 @@ export async function clientBookAction(
       }
     }
 
-    await db.appointment.create({
-      data: {
-        customerProfileId: user.customerProfileId!,
-        serviceId: input.serviceId,
-        staffProfileId: input.staffProfileId,
-        locationId: input.locationId,
-        startAt,
-        endAt,
-        status: "REQUESTED",
-      } as never,
-    });
+    const booked = await holdSlot({ tenantId: user.tenantId!, staffProfileId: input.staffProfileId, startAt, endAt }, (tx) =>
+      tx.appointment.create({
+        data: {
+          tenantId: user.tenantId!,
+          customerProfileId: user.customerProfileId!,
+          serviceId: input.serviceId,
+          staffProfileId: input.staffProfileId,
+          locationId: input.locationId,
+          startAt,
+          endAt,
+          status: "REQUESTED",
+        } as never,
+      }),
+    );
+    if (!booked) return { error: SLOT_TAKEN };
   }
 
   await recordActivity(db, {

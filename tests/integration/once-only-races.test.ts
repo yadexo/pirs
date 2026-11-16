@@ -145,4 +145,48 @@ describe("once-only claims under simultaneous requests", () => {
       expect(await rawDb.promotionRedemption.count({ where: { promotionId: promotion.id } })).toBe(0);
     });
   });
+  describe("booking a slot (B-2)", () => {
+    async function practitionerWithSlot() {
+      const location = await rawDb.location.create({ data: { tenantId, name: `Room ${Math.random()}`, isPrimary: false } });
+      const category = await rawDb.serviceCategory.create({ data: { tenantId, name: `Slots ${Math.random()}` } });
+      const service = await rawDb.service.create({ data: { tenantId, categoryId: category.id, name: "Slot Consult", durationMinutes: 60, priceCents: 5_000 } });
+      const u = await rawDb.user.create({ data: { tenantId, email: `pr-${Math.random()}@x.com`, passwordHash: "x", role: "STAFF" } });
+      const staff = await rawDb.staffProfile.create({ data: { tenantId, userId: u.id, firstName: "Pat", lastName: "Slot", active: true } });
+      await rawDb.staffService.create({ data: { staffProfileId: staff.id, serviceId: service.id } });
+      for (let dayOfWeek = 0; dayOfWeek <= 6; dayOfWeek++) {
+        await rawDb.staffAvailability.create({ data: { tenantId, staffProfileId: staff.id, dayOfWeek, startMinute: 9 * 60, endMinute: 17 * 60 } });
+      }
+      const day = new Date();
+      day.setDate(day.getDate() + 5);
+      day.setHours(10, 0, 0, 0);
+      return { locationId: location.id, serviceId: service.id, staffProfileId: staff.id, startAtIso: day.toISOString() };
+    }
+
+    it("8 simultaneous bookings of one slot give one appointment", async () => {
+      const slot = await practitionerWithSlot();
+      const clients = await Promise.all(Array.from({ length: 8 }, (_, n) => makeClient(`booker${n}`)));
+      const results = await Promise.all(clients.map((c) => as(c, () => clientApp.clientBookAction(slug, slot))));
+      expect(results.filter((r) => "ok" in r)).toHaveLength(1);
+      expect(results.filter((r) => "error" in r).every((r) => "error" in r && /just taken/.test(r.error))).toBe(true);
+      const held = await rawDb.appointment.count({ where: { staffProfileId: slot.staffProfileId, startAt: new Date(slot.startAtIso), status: { in: ["REQUESTED", "CONFIRMED"] } } });
+      expect(held).toBe(1);
+    });
+
+    it("8 simultaneous reschedules onto one slot move one appointment there", async () => {
+      const slot = await practitionerWithSlot();
+      const target = new Date(slot.startAtIso);
+      const clients = await Promise.all(Array.from({ length: 8 }, (_, n) => makeClient(`mover${n}`)));
+      const own = await Promise.all(
+        clients.map((c, n) => {
+          const start = new Date(target.getTime() + (n - 8) * 24 * 3_600_000); // eight earlier days, same hour
+          return rawDb.appointment.create({
+            data: { tenantId, customerProfileId: c.profileId, serviceId: slot.serviceId, staffProfileId: slot.staffProfileId, locationId: slot.locationId, startAt: new Date(start.getTime() + 15 * 86_400_000), endAt: new Date(start.getTime() + 15 * 86_400_000 + 3_600_000), status: "CONFIRMED" },
+          });
+        }),
+      );
+      const results = await Promise.all(clients.map((c, n) => as(c, () => clientApp.clientBookAction(slug, { ...slot, appointmentId: own[n]!.id }))));
+      expect(results.filter((r) => "ok" in r)).toHaveLength(1);
+      expect(await rawDb.appointment.count({ where: { staffProfileId: slot.staffProfileId, startAt: target } })).toBe(1);
+    });
+  });
 });
