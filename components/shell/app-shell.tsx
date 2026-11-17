@@ -1,6 +1,6 @@
 import * as React from "react";
 import { getTranslations } from "next-intl/server";
-import { AGENCY_NAV, MERCHANT_NAV, isAgencyNavActive, isMerchantNavActive, merchantHref } from "@/lib/nav";
+import { AGENCY_NAV, isAgencyNavActive, isMerchantNavActive, merchantHref, merchantNav } from "@/lib/nav";
 import { Sidebar, type SidebarEntry, type SupportLink } from "./sidebar";
 import { ImpersonationBanner } from "./impersonation-banner";
 import { MerchantSwitcher, type SwitchableMerchant } from "./merchant-switcher";
@@ -69,6 +69,7 @@ export async function MerchantShell({
   switchableMerchants,
   viewerName,
   viewerRole,
+  inAppBookings,
   children,
 }: {
   merchantId: string;
@@ -84,11 +85,13 @@ export async function MerchantShell({
   /** Populated for agency admins so they can jump between merchants. */
   switchableMerchants: SwitchableMerchant[] | null;
   viewerName: string;
+  /** The app's own booking (Tenant.inAppBookings): without it, no Appointments item. */
+  inAppBookings: boolean;
   viewerRole: string;
   children: React.ReactNode;
 }) {
   const t = await getTranslations("portal.nav");
-  const entries: SidebarEntry[] = MERCHANT_NAV.map((item) => {
+  const entries: SidebarEntry[] = merchantNav(inAppBookings).map((item) => {
     const Icon = item.icon;
     return {
       href: merchantHref(merchantId, item.segment),

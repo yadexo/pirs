@@ -27,6 +27,8 @@ import { describeActionFailure } from "@/lib/action-failure";
 import { NO_USAGE, warnBeforeDelete, whyHidden, type PromotionUsage } from "@/lib/promotion-usage";
 import { defaultFilterFor } from "@/lib/app-builder-filters";
 import { FORMS, type FormOptions } from "./item-forms";
+import { useInAppBookings } from "@/components/in-app-bookings";
+import { bookingKey } from "@/lib/booking-copy";
 
 export interface CatalogItem {
   kind: ItemKind;
@@ -118,6 +120,7 @@ export function CatalogTab({
   items: CatalogItem[];
 }) {
   const t = useTranslations("portal.appBuilder.catalogTab");
+  const inAppBookings = useInAppBookings();
   const tc = useTranslations("common");
   const router = useRouter();
   const TAB_CONFIG = tabConfig(t);
@@ -406,7 +409,7 @@ export function CatalogTab({
                 className="rounded-card border border-border p-4 text-left hover:border-primary hover:bg-primary-soft"
               >
                 <span className="block text-[14px] font-semibold">{capitalise(KIND_LABEL[k])}</span>
-                <span className="mt-1 block text-[12px] text-ink-muted">{k === "service" ? t("serviceExplanation") : t("productLikeExplanation")}</span>
+                <span className="mt-1 block text-[12px] text-ink-muted">{k === "service" ? t(bookingKey("portal.appBuilder.catalogTab.serviceExplanation", inAppBookings)) : t("productLikeExplanation")}</span>
               </button>
             ))}
           </div>

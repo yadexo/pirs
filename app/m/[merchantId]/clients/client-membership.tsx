@@ -58,7 +58,7 @@ export function ClientMembershipPanel({
   const locale = useLocale();
   const WHEN = React.useCallback(
     (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(locale === "nl" ? "nl-NL" : "en-GB", { day: "numeric", month: "long", year: "numeric", timeZone }) : "—"),
-    [locale],
+    [locale, timeZone],
   );
   const TITLE: Record<Action, string> = {
     cancel: t("titleCancel"),

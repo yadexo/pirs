@@ -143,8 +143,8 @@ describe("App Builder → Settings sections", () => {
   });
 
   it("validates section keys from the query string", () => {
-    expect(isSettingsSection("team")).toBe(true);
-    expect(isSettingsSection("nope")).toBe(false);
-    expect(isSettingsSection(undefined)).toBe(false);
+    expect(isSettingsSection("team", true)).toBe(true);
+    expect(isSettingsSection("nope", true)).toBe(false);
+    expect(isSettingsSection(undefined, true)).toBe(false);
   });
 });

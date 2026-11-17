@@ -764,7 +764,8 @@
       "installShareOfClients": "{installed} van {clients} klanten heeft de app ({percent}%)"
     },
     "activityFeed": {
-      "empty": "Nog geen klantactiviteit. Boekingen, aankopen en check-ins verschijnen hier."
+      "empty": "Nog geen klantactiviteit. Boekingen, aankopen en check-ins verschijnen hier.",
+      "emptyNoBookings": "Nog geen klantactiviteit. Aankopen en check-ins verschijnen hier."
     },
     "appointments": {
       "title": "Afspraken",
@@ -1088,6 +1089,7 @@
         "removeThisKind": "Dit {kind} verwijderen?",
         "keep": "Behouden",
         "serviceExplanation": "Iets waar klanten een afspraak voor maken.",
+        "serviceExplanationNoBookings": "Een behandeling die klanten kopen.",
         "productLikeExplanation": "Iets wat klanten kopen en meenemen."
       },
       "title": "App Builder",

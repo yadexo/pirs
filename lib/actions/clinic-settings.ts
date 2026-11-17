@@ -14,6 +14,7 @@ import { appUrl } from "@/lib/app-url";
 import { checkWindow, DEFAULT_WINDOW_END, DEFAULT_WINDOW_START } from "@/lib/marketing-window";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
 import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
+import { BOOKINGS_OFF, inAppBookingsOn } from "@/lib/in-app-bookings";
 
 /**
  * App Builder → Settings. Each section saves through one action here, named
@@ -683,6 +684,8 @@ export async function saveBookingSettingsAction(merchantId: string, fd: FormData
   if (!validArgs(args([arg.id, arg.formData]), [merchantId, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "appointments.manage");
+    // The Booking section is hidden while the clinic does not book in the app.
+    if (!(await inAppBookingsOn(merchantId))) throw new ActionError(BOOKINGS_OFF);
     const data = bookingSchema.parse({
       bookingMode: formText(fd, "bookingMode") ?? "IN_APP",
       externalBookingUrl: formText(fd, "externalBookingUrl"),
@@ -733,9 +736,14 @@ export async function saveNotificationSettingsAction(merchantId: string, fd: For
   if (!validArgs(args([arg.id, arg.formData]), [merchantId, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
+    // The appointment toggles are only on the form for a clinic that books in
+    // the app; otherwise they keep their stored values rather than being
+    // cleared by a form that does not show them.
+    const bookings = await inAppBookingsOn(merchantId);
     const data = {
-      notifyBookingConfirmations: formBool(fd, "notifyBookingConfirmations"),
-      notifyAppointmentReminders: formBool(fd, "notifyAppointmentReminders"),
+      ...(bookings
+        ? { notifyBookingConfirmations: formBool(fd, "notifyBookingConfirmations"), notifyAppointmentReminders: formBool(fd, "notifyAppointmentReminders") }
+        : {}),
       notifyPointsEarned: formBool(fd, "notifyPointsEarned"),
       ...marketingWindow(fd),
       birthdayMessageEnabled: formBool(fd, "birthdayMessageEnabled"),

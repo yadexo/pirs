@@ -3,6 +3,7 @@ import { requireMerchantContext } from "@/lib/merchant-context";
 import { MerchantShell } from "@/components/shell/app-shell";
 import { ClinicTimeZoneProvider } from "@/components/clinic-time-zone";
 import { clinicZone } from "@/lib/clinic-zone";
+import { InAppBookingsProvider } from "@/components/in-app-bookings";
 
 export default async function MerchantLayout({
   children,
@@ -29,8 +30,11 @@ export default async function MerchantLayout({
       switchableMerchants={ctx.switchableMerchants}
       viewerName={ctx.viewer.name}
       viewerRole={ctx.viewer.role}
+      inAppBookings={ctx.inAppBookings}
     >
-      <ClinicTimeZoneProvider timeZone={timeZone}>{children}</ClinicTimeZoneProvider>
+      <ClinicTimeZoneProvider timeZone={timeZone}>
+        <InAppBookingsProvider on={ctx.inAppBookings}>{children}</InAppBookingsProvider>
+      </ClinicTimeZoneProvider>
     </MerchantShell>
   );
 }

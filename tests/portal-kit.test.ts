@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { MERCHANT_NAV, SETTINGS_SECTIONS } from "@/lib/nav";
+import { MERCHANT_NAV, SETTINGS_SECTIONS, merchantNav } from "@/lib/nav";
 
 /**
  * The portal on the v2 system. Mostly about what the switch must not have
@@ -47,8 +47,12 @@ describe("the portal's shell", () => {
   it("still has exactly the six approved sections", () => {
     // tests/nav.test.ts owns the list; this only checks the restyle did not
     // quietly drop one on the way through.
-    expect(SHELL).toMatch(/MERCHANT_NAV\.map/);
+    // Through merchantNav: all six for a clinic that books in the app, and
+    // without Appointments for one that does not (Tenant.inAppBookings).
+    expect(SHELL).toMatch(/merchantNav\(inAppBookings\)\.map/);
     expect(MERCHANT_NAV).toHaveLength(6);
+    expect(merchantNav(true)).toHaveLength(6);
+    expect(merchantNav(false).map((i) => i.segment)).toEqual(MERCHANT_NAV.map((i) => i.segment).filter((s) => s !== "appointments"));
   });
 
   it("holds Redeem, Scan QR and View app, on every page", () => {

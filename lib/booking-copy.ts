@@ -18,11 +18,18 @@ export const BOOKING_COPY = {
   "clientApp.installNudge.why": "clientApp.installNudge.whyNoBookings",
 } as const;
 
-type FullKey = keyof typeof BOOKING_COPY;
+/** The same, for the clinic portal. */
+export const PORTAL_BOOKING_COPY = {
+  "portal.activityFeed.empty": "portal.activityFeed.emptyNoBookings",
+  "portal.appBuilder.catalogTab.serviceExplanation": "portal.appBuilder.catalogTab.serviceExplanationNoBookings",
+} as const;
+
+type FullKey = keyof typeof BOOKING_COPY | keyof typeof PORTAL_BOOKING_COPY;
+const ALL_COPY: Record<FullKey, string> = { ...BOOKING_COPY, ...PORTAL_BOOKING_COPY };
 
 /** The key inside its namespace to use, e.g. bookingKey("clientApp.installNudge.why", false) → "whyNoBookings". */
 export function bookingKey<K extends FullKey>(key: K, inAppBookings: boolean): string {
-  const full = inAppBookings ? key : BOOKING_COPY[key];
+  const full = inAppBookings ? key : ALL_COPY[key];
   return full.slice(full.lastIndexOf(".") + 1);
 }
 

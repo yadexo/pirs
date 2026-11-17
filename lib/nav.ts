@@ -51,6 +51,11 @@ export const MERCHANT_NAV: readonly MerchantNavItem[] = [
   { segment: "app-builder", label: "App Builder", icon: Wrench },
 ] as const;
 
+/** The portal's navigation; Appointments only for a clinic that books in the app (Tenant.inAppBookings). */
+export function merchantNav(inAppBookings: boolean): readonly MerchantNavItem[] {
+  return inAppBookings ? MERCHANT_NAV : MERCHANT_NAV.filter((item) => item.segment !== "appointments");
+}
+
 export function merchantHref(merchantId: string, segment: string): string {
   return segment ? `/m/${merchantId}/${segment}` : `/m/${merchantId}`;
 }
@@ -107,6 +112,11 @@ export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]["key"];
 
 export const DEFAULT_SETTINGS_SECTION: SettingsSection = "general";
 
-export function isSettingsSection(value: string | undefined): value is SettingsSection {
-  return SETTINGS_SECTIONS.some((s) => s.key === value);
+/** The settings sections; Booking only for a clinic that books in the app (Tenant.inAppBookings). */
+export function settingsSections(inAppBookings: boolean) {
+  return inAppBookings ? SETTINGS_SECTIONS : SETTINGS_SECTIONS.filter((s) => s.key !== "booking");
+}
+
+export function isSettingsSection(value: string | undefined, inAppBookings: boolean): value is SettingsSection {
+  return settingsSections(inAppBookings).some((s) => s.key === value);
 }

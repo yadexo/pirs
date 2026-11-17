@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { Panel } from "@/components/ui/primitives";
-import { SETTINGS_SECTIONS, type SettingsSection } from "@/lib/nav";
+import { settingsSections, type SettingsSection } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import type { SettingsData } from "./settings/load";
 import {
@@ -42,9 +42,12 @@ export async function SettingsTab({
   currency,
   isOwner,
   stripeNotice,
+  inAppBookings,
 }: {
   merchantId: string;
   section: SettingsSection;
+  /** The app's own booking (Tenant.inAppBookings): without it, no Booking section. */
+  inAppBookings: boolean;
   data: SettingsData;
   /** Whether the viewer may save this section; the server checks again on save. */
   canEdit: boolean;
@@ -60,7 +63,7 @@ export async function SettingsTab({
     // section's own header and its one Primary live inside the card.
     <div className="grid grid-cols-1 gap-4 md:grid-cols-[220px_1fr]">
       <nav className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible" aria-label={t("settingsSections")}>
-        {SETTINGS_SECTIONS.map((s) => (
+        {settingsSections(inAppBookings).map((s) => (
           <Link
             key={s.key}
             href={`/m/${merchantId}/app-builder?tab=settings&section=${s.key}`}

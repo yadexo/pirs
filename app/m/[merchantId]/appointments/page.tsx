@@ -3,6 +3,7 @@ import { requireMerchantContext } from "@/lib/merchant-context";
 import { MerchantPageHeader } from "@/components/merchant/page-header";
 import { AppointmentsView } from "./appointments-view";
 import type { AppointmentStatus } from "@prisma/client";
+import { redirect } from "next/navigation";
 
 const STATUS_FILTERS: Record<string, AppointmentStatus[] | undefined> = {
   upcoming: ["REQUESTED", "CONFIRMED"],
@@ -23,6 +24,8 @@ export default async function AppointmentsPage({
   const { merchantId } = await params;
   const { status = "upcoming", view = "list", q = "" } = await searchParams;
   const ctx = await requireMerchantContext(merchantId);
+  // The app's own booking is off for this clinic: an old link lands on Home.
+  if (!ctx.inAppBookings) redirect(`/m/${merchantId}`);
   const t = await getTranslations("portal.appointments");
 
   const statuses = STATUS_FILTERS[status] ?? STATUS_FILTERS.upcoming!;

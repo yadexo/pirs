@@ -5,6 +5,8 @@ import { useLocale, useTranslations } from "next-intl";
 import type { ActivityItem } from "@/lib/home-metrics";
 import { getActivityFeedAction } from "@/lib/actions/activity";
 import { useClinicTimeZone } from "@/components/clinic-time-zone";
+import { useInAppBookings } from "@/components/in-app-bookings";
+import { bookingKey } from "@/lib/booking-copy";
 
 const POLL_MS = 20_000;
 
@@ -20,6 +22,7 @@ function formatWhen(iso: string, locale: string, timeZone: string) {
 export function ActivityFeed({ merchantId, initial }: { merchantId: string; initial: ActivityItem[] }) {
   const timeZone = useClinicTimeZone();
   const t = useTranslations("portal.activityFeed");
+  const inAppBookings = useInAppBookings();
   const locale = useLocale();
   const [items, setItems] = React.useState(initial);
   const [fresh, setFresh] = React.useState<Set<string>>(new Set());
@@ -57,7 +60,7 @@ export function ActivityFeed({ merchantId, initial }: { merchantId: string; init
   }, [merchantId]);
 
   if (items.length === 0) {
-    return <p className="px-5 py-8 text-center text-[12px] text-ink-muted">{t("empty")}</p>;
+    return <p className="px-5 py-8 text-center text-[12px] text-ink-muted">{t(bookingKey("portal.activityFeed.empty", inAppBookings))}</p>;
   }
 
   return (

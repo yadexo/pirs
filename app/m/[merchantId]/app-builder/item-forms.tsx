@@ -22,6 +22,7 @@ import { Info } from "lucide-react";
 import { packageSaving } from "@/lib/package-pricing";
 import { formatMoney } from "@/lib/utils";
 import { useClinicTimeZone } from "@/components/clinic-time-zone";
+import { useInAppBookings } from "@/components/in-app-bookings";
 
 export interface FormOptions {
   serviceCategories: string[];
@@ -377,6 +378,7 @@ export function PromotionForm({ merchantId, currency, item, options, errors }: I
 
 export function MembershipPlanForm({ currency, item, errors }: ItemFormProps) {
   const t = useTranslations("portal.appBuilder.itemForms.membershipPlanForm");
+  const inAppBookings = useInAppBookings();
   const [pauseAllowed, setPauseAllowed] = React.useState(isNew(item) ? true : Boolean(item.pauseAllowed));
   const members = Number(item.activeMembers ?? 0);
   const benefits = ((item.benefits as { description: string }[]) ?? []).map((b) => b.description).join("\n");
@@ -445,7 +447,12 @@ export function MembershipPlanForm({ currency, item, errors }: ItemFormProps) {
             />
           </div>
         )}
-        <CheckboxField name="priorityAccess" label={t("priorityBookingLabel")} defaultChecked={Boolean(item.priorityAccess)} />
+        {/* A booking perk, shown only to a clinic that books in the app; kept as it is otherwise. */}
+        {inAppBookings ? (
+          <CheckboxField name="priorityAccess" label={t("priorityBookingLabel")} defaultChecked={Boolean(item.priorityAccess)} />
+        ) : (
+          item.priorityAccess ? <input type="hidden" name="priorityAccess" value="on" /> : null
+        )}
       </FormSection>
       <FormSection title={t("termsTitle")}>
         <TextField label={t("minimumTermLabel")} name="minimumCommitmentMonths" type="number" min={1} defaultValue={str(item.minimumCommitmentMonths)} errors={errors} />

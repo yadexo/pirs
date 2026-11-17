@@ -764,7 +764,8 @@
       "installShareOfClients": "{installed} of {clients} clients have the app ({percent}%)"
     },
     "activityFeed": {
-      "empty": "No client activity yet. Bookings, purchases and check-ins appear here."
+      "empty": "No client activity yet. Bookings, purchases and check-ins appear here.",
+      "emptyNoBookings": "No client activity yet. Purchases and check-ins appear here."
     },
     "appointments": {
       "title": "Appointments",
@@ -1088,6 +1089,7 @@
         "removeThisKind": "Remove this {kind}?",
         "keep": "Keep",
         "serviceExplanation": "Something clients book an appointment for.",
+        "serviceExplanationNoBookings": "A treatment clients buy.",
         "productLikeExplanation": "Something clients buy and take home."
       },
       "title": "App Builder",

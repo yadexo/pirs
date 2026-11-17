@@ -57,7 +57,7 @@ export default async function AppBuilderPage({
   const tTabs = await getTranslations("portal.appBuilder.tabs");
 
   const tab = isAppBuilderTab(sp.tab) ? sp.tab : DEFAULT_APP_BUILDER_TAB;
-  const section = isSettingsSection(sp.section) ? sp.section : DEFAULT_SETTINGS_SECTION;
+  const section = isSettingsSection(sp.section, ctx.inAppBookings) ? sp.section : DEFAULT_SETTINGS_SECTION;
   const q = sp.q ?? "";
   const typeFilter = sp.type ?? defaultFilterFor(tab);
 
@@ -106,6 +106,7 @@ export default async function AppBuilderPage({
             canEdit={viewerCan(ctx.viewer, SECTION_NEEDS[section])}
             isOwner={ctx.viewer.role === "TENANT_ADMIN"}
             stripeNotice={sp.stripe ?? null}
+            inAppBookings={ctx.inAppBookings}
           />
         ) : (
           <CatalogTab

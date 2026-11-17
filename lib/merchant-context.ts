@@ -24,6 +24,8 @@ export interface MerchantContext {
   accentColor: string | null;
   /** The clinic's slug, for the top bar's "View app". */
   merchantSlug: string;
+  /** The app's own booking, switched on per clinic by the platform (Tenant.inAppBookings). */
+  inAppBookings: boolean;
   /** Who is looking, from the live account — for showing or hiding edit controls. */
   viewer: { name: string; role: LiveAccount["role"]; permissions: LiveAccount["permissions"] };
 }
@@ -89,6 +91,7 @@ export async function requireMerchantContext(merchantId: string): Promise<Mercha
     merchantName: merchant.branding?.businessName ?? merchant.name,
     accentColor: merchant.branding?.primaryColor ?? null,
     merchantSlug: merchant.slug,
+    inAppBookings: merchant.inAppBookings,
     db: getTenantDb(merchantId),
     impersonating,
     switchableMerchants,

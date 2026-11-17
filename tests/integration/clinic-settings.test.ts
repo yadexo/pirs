@@ -53,7 +53,7 @@ describe("clinic settings", () => {
     authMock.auth.mockResolvedValue({ user: { id: staffId, email: "s@x.com", name: "s", role: "STAFF", tenantId: clinic, tenantSlug: null, staffProfileId: null, customerProfileId: null, permissions: "ALL", authTime: Date.now() } });
 
   beforeAll(async () => {
-    clinic = (await rawDb.tenant.create({ data: { slug: `set-${stamp}`, name: "Settings Clinic" } })).id;
+    clinic = (await rawDb.tenant.create({ data: { inAppBookings: true, slug: `set-${stamp}`, name: "Settings Clinic" } })).id;
     ownerId = (await rawDb.user.create({ data: { tenantId: clinic, email: `owner-${stamp}@x.com`, passwordHash: "x", role: "TENANT_ADMIN", twoFactor: ENROLLED } })).id;
     const role = await rawDb.role.create({ data: { tenantId: clinic, name: "Front desk" } });
     for (const key of ["loyalty.adjust", "appointments.manage"]) {
