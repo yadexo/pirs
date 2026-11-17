@@ -20,7 +20,7 @@ export default async function ClientHomePage({ params }: { params: Promise<{ mer
   const origin = await requestOrigin();
   const [summary, sections, promptHistory, settings, nudgeHistory, openedBefore] = await Promise.all([
     getClientSummary(ctx.db, ctx.customerProfileId),
-    getHomeSections(ctx.db, { tenantId: ctx.merchant.id, customerProfileId: ctx.customerProfileId }),
+    getHomeSections(ctx.db, { tenantId: ctx.merchant.id, customerProfileId: ctx.customerProfileId, inAppBookings: ctx.merchant.inAppBookings }),
     getPromptHistory(ctx.db, ctx.customerProfileId),
     ctx.db.tenantSettings.findFirst({
       where: {},

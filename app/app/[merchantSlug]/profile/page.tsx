@@ -1,7 +1,7 @@
 import { getClientAppContext } from "@/lib/client-app-context";
 import { rawDb } from "@/lib/db";
 import { getOwnedPackages } from "@/lib/client-app-packages";
-import { getBalanceHistory, getClientSummary, getRedeemableItems } from "@/lib/client-app-data";
+import { getBalanceHistory, getClientAppointments, getClientSummary, getRedeemableItems } from "@/lib/client-app-data";
 import { resolveLocale } from "@/lib/locale";
 import { ProfileView } from "./profile-view";
 
@@ -34,12 +34,7 @@ export default async function ProfilePage({
         payments: { select: { refunds: { where: { status: "SUCCEEDED" }, select: { amountCents: true, createdAt: true } } } },
       },
     }),
-    ctx.db.appointment.findMany({
-      where: { customerProfileId: ctx.customerProfileId },
-      orderBy: { startAt: "desc" },
-      take: 20,
-      include: { service: { select: { id: true, name: true, durationMinutes: true } }, location: { select: { name: true } } },
-    }),
+    getClientAppointments(ctx.db, ctx.customerProfileId, ctx.merchant.inAppBookings),
     getRedeemableItems(ctx.db, ctx.customerProfileId),
     ctx.db.membershipBillingEvent.findMany({
       where: { customerMembership: { customerProfileId: ctx.customerProfileId } },

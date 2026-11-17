@@ -11,6 +11,7 @@ import { PaymentResult } from "./payment-result";
 import { CartProvider, useCart } from "./cart-context";
 import { SearchSheet } from "./search-sheet";
 import { CartSheet } from "./cart-sheet";
+import { InAppBookingsProvider } from "@/components/in-app-bookings";
 
 const TABS = [
   { key: "home", icon: "home" },
@@ -35,6 +36,7 @@ export function ClientAppShell({
   logoUrl,
   currency,
   timeZone,
+  inAppBookings,
   pointsPerCents,
   vatRateBasisPoints,
   clientName,
@@ -51,6 +53,8 @@ export function ClientAppShell({
   currency: string;
   /** The clinic's time zone, for every date and time the app prints. */
   timeZone: string;
+  /** The app's own booking (Tenant.inAppBookings). */
+  inAppBookings: boolean;
   /** Same rate checkout uses: points = floor(amount in cents × rate). */
   pointsPerCents: number;
   /** The VAT already inside the prices, for the "of which VAT" line. */
@@ -67,6 +71,7 @@ export function ClientAppShell({
     <ToastProvider>
       <BasePathProvider base={base}>
         <ClinicTimeZoneProvider timeZone={timeZone}>
+        <InAppBookingsProvider on={inAppBookings}>
         <CartProvider merchantSlug={merchantSlug}>
           <Frame
             merchantSlug={merchantSlug}
@@ -83,6 +88,7 @@ export function ClientAppShell({
             {children}
           </Frame>
         </CartProvider>
+        </InAppBookingsProvider>
         </ClinicTimeZoneProvider>
       </BasePathProvider>
     </ToastProvider>

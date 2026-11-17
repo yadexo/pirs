@@ -299,6 +299,7 @@ export async function customerRegisterAction(tenantSlug: string, _prevState: unk
     firstName,
     openAppUrl: await clinicAppUrl(tenantSlug),
     locale,
+    inAppBookings: tenant.inAppBookings,
   });
   await getEmailProvider()
     .send({ to: email, subject: template.subject, body: template.text, html: template.html, from: senderFor(clinicName) })

@@ -229,3 +229,18 @@ export async function getBalanceHistory(db: TenantDb, customerProfileId: string)
 
   return rows.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 30);
 }
+
+/**
+ * The client's appointments for their profile — none when the clinic does not
+ * use the app's own booking. They are kept, not deleted: switching booking
+ * back on shows them again.
+ */
+export async function getClientAppointments(db: TenantDb, customerProfileId: string, inAppBookings: boolean) {
+  if (!inAppBookings) return [];
+  return db.appointment.findMany({
+    where: { customerProfileId },
+    orderBy: { startAt: "desc" },
+    take: 20,
+    include: { service: { select: { id: true, name: true, durationMinutes: true } }, location: { select: { name: true } } },
+  });
+}

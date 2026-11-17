@@ -156,13 +156,24 @@ export function accountExistsEmail(params: { branding: EmailBranding; firstName:
   return { subject, html: emailLayout({ branding, preheader: subject, bodyHtml: html, locale }), text };
 }
 
-export function welcomeClientEmail(params: { branding: EmailBranding; firstName: string; openAppUrl: string; locale: AppLocale }): EmailTemplate {
-  const { branding, firstName, openAppUrl, locale } = params;
+export function welcomeClientEmail(params: {
+  branding: EmailBranding;
+  firstName: string;
+  openAppUrl: string;
+  locale: AppLocale;
+  /** The app's own booking (Tenant.inAppBookings): without it, the email does not promise booking. */
+  inAppBookings: boolean;
+}): EmailTemplate {
+  const { branding, firstName, openAppUrl, locale, inAppBookings } = params;
   const nl = locale === "nl";
   const intro = nl ? `${greeting(locale, firstName)} je account bij ${branding.name} staat klaar.` : `${greeting(locale, firstName)} your account at ${branding.name} is ready.`;
-  const body = nl
-    ? "Boek behandelingen, spaar en besteed punten, en bewaar je bonnen — allemaal vanuit de app."
-    : "Book treatments, earn and spend points, and keep your receipts — all from the app.";
+  const body = inAppBookings
+    ? nl
+      ? "Boek behandelingen, spaar en besteed punten, en bewaar je bonnen — allemaal vanuit de app."
+      : "Book treatments, earn and spend points, and keep your receipts — all from the app."
+    : nl
+      ? "Koop behandelingen, spaar en besteed punten, en bewaar je bonnen — allemaal vanuit de app."
+      : "Buy treatments, earn and spend points, and keep your receipts — all from the app.";
   const buttonLabel = nl ? "Open de app" : "Open the app";
   const html = emailParagraph(intro) + emailParagraph(body) + emailButton(buttonLabel, openAppUrl, branding.color);
   const text = [intro, "", `${buttonLabel}: ${openAppUrl}`].join("\n");

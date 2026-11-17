@@ -15,6 +15,8 @@ export interface PublicClinic {
   launchBackground: string;
   /** Changes whenever branding changes — used to bust cached icons. */
   version: string;
+  /** The app's own booking (Tenant.inAppBookings). */
+  inAppBookings: boolean;
 }
 
 /**
@@ -29,6 +31,7 @@ export const getPublicClinic = cache(async (slug: string): Promise<PublicClinic 
       slug: true,
       name: true,
       status: true,
+      inAppBookings: true,
       branding: { select: { businessName: true, appIconUrl: true, logoUrl: true, primaryColor: true, launchBackground: true, updatedAt: true } },
     },
   });
@@ -43,6 +46,7 @@ export const getPublicClinic = cache(async (slug: string): Promise<PublicClinic 
     color: b?.primaryColor ?? null,
     launchBackground: b?.launchBackground ?? "brand",
     version: String(b?.updatedAt.getTime() ?? 0),
+    inAppBookings: tenant.inAppBookings,
   };
 });
 

@@ -55,7 +55,7 @@ export function buildPreviewTemplates(branding: EmailBranding, slug: string): Re
     },
     "welcome-client": {
       label: "Welcome — new client",
-      template: welcomeClientEmail({ branding, firstName, openAppUrl: base, locale: "en" }),
+      template: welcomeClientEmail({ branding, firstName, openAppUrl: base, locale: "en", inAppBookings: true }),
     },
     "welcome-owner": {
       label: "Welcome — new clinic owner",

@@ -6,6 +6,8 @@ import { Icon, QrCode } from "@/components/client-app/ui";
 import { chooseNudge, type NudgeHistory, type NudgeSurface } from "@/lib/install-nudge";
 import { detectPlatform, installFlowFor, type DetectedPlatform, type InstallFlow } from "@/lib/install-platform";
 import { clientRecordInstallEventAction } from "@/lib/actions/client-app";
+import { useInAppBookings } from "@/components/in-app-bookings";
+import { bookingKey } from "@/lib/booking-copy";
 
 /**
  * "Add this clinic's app to your Home Screen", asked the way the client's own
@@ -57,6 +59,7 @@ export function InstallNudge({
   history: NudgeHistory;
 }) {
   const t = useTranslations("clientApp.installNudge");
+  const inAppBookings = useInAppBookings();
   const [facts, setFacts] = React.useState<{ platform: DetectedPlatform; standalone: boolean; shownThisSession: boolean } | null>(null);
   const [flow, setFlow] = React.useState<InstallFlow | null>(null);
   const [closed, setClosed] = React.useState(false);
@@ -217,7 +220,7 @@ export function InstallNudge({
         )}
 
         <h2 className="ca-nudge-title">{flow === "desktop-qr" ? t("qrTitle") : t("addTo", { name: merchantName })}</h2>
-        <p className="ca-nudge-why">{flow === "desktop-qr" ? t("qrBody", { name: merchantName }) : t("why")}</p>
+        <p className="ca-nudge-why">{flow === "desktop-qr" ? t("qrBody", { name: merchantName }) : t(bookingKey("clientApp.installNudge.why", inAppBookings))}</p>
 
         {flow === "desktop-qr" ? (
           <div className="ca-nudge-qr">

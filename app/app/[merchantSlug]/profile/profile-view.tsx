@@ -25,6 +25,8 @@ import { BookingSheet } from "../shop/booking-sheet";
 import type { BookableService } from "../shop/booking-sheet";
 import { formatDay, formatTime } from "@/lib/client-format";
 import { useClinicTimeZone } from "../base-path";
+import { useInAppBookings } from "@/components/in-app-bookings";
+import { bookingKey } from "@/lib/booking-copy";
 
 export interface ApptRow {
   id: string;
@@ -125,6 +127,7 @@ export function ProfileView({
   const router = useRouter();
   const t = useTranslations("clientApp");
   const tp = useTranslations("clientApp.profile");
+  const inAppBookings = useInAppBookings();
   const fmtMoney = React.useCallback((cents: number) => money(cents, currency, locale === "nl" ? "nl" : "en"), [currency, locale]);
   const timeZone = useClinicTimeZone();
   const { toast } = useToast();
@@ -208,7 +211,7 @@ export function ProfileView({
             <div className="ca-card">
               <EmptyState
                 text={tp("noTreatmentPurchased")}
-                sub={tp("noTreatmentPurchasedSub")}
+                sub={tp(bookingKey("clientApp.profile.noTreatmentPurchasedSub", inAppBookings))}
                 cta={
                   <button className="btn-black" onClick={() => router.push(`${base}/shop`)}>
                     {tp("browseShop")}
@@ -345,13 +348,16 @@ export function ProfileView({
         <>
           <MyItems items={items} packages={packages} merchantSlug={merchantSlug} />
           <div className="v2-profilelinks">
-            <button type="button" className="row" onClick={() => setSheet("appointments")}>
-              <span className="ic" aria-hidden="true">
-                <Icon name="calendar" size={20} />
-              </span>
-              <span className="txt">{tp("appointments")}</span>
-              <Icon name="chevR" size={20} />
-            </button>
+            {/* The app's own appointments: only for a clinic that books in the app. */}
+            {inAppBookings && (
+              <button type="button" className="row" onClick={() => setSheet("appointments")}>
+                <span className="ic" aria-hidden="true">
+                  <Icon name="calendar" size={20} />
+                </span>
+                <span className="txt">{tp("appointments")}</span>
+                <Icon name="chevR" size={20} />
+              </button>
+            )}
             <button type="button" className="row" onClick={() => setSheet("orders")}>
               <span className="ic" aria-hidden="true">
                 <Icon name="bag" size={20} />
@@ -658,7 +664,7 @@ export function ProfileView({
         )}
       </Sheet>
 
-      <BookingSheet
+      {inAppBookings && <BookingSheet
         merchantSlug={merchantSlug}
         currency={currency}
         appointmentId={reschedule?.appt.id}
@@ -677,7 +683,7 @@ export function ProfileView({
           setReschedule(null);
           router.refresh();
         }}
-      />
+      />}
     </div>
   );
 }
@@ -809,6 +815,7 @@ function NotificationsSheet({
   onSaved: () => void;
 }) {
   const t = useTranslations("clientApp.profile");
+  const inAppBookings = useInAppBookings();
   const [state, setState] = React.useState({
     emailConsent: summary.emailConsent,
     smsConsent: summary.smsConsent,
@@ -861,7 +868,7 @@ function NotificationsSheet({
           {label}
         </button>
       ))}
-      <p style={{ color: "var(--muted)", fontSize: 14, paddingTop: 12 }}>{t("appointmentRemindersNote")}</p>
+      {inAppBookings && <p style={{ color: "var(--muted)", fontSize: 14, paddingTop: 12 }}>{t("appointmentRemindersNote")}</p>}
     </Sheet>
   );
 }

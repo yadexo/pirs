@@ -12,6 +12,7 @@ import { brandCssVars, brandTokens } from "@/lib/brand-tokens";
 import { Onboarding } from "./onboarding";
 import { ClientAppShell } from "./shell";
 import "./client-app.css";
+import { clientAppDescription } from "@/lib/booking-copy";
 
 type Params = { params: Promise<{ merchantSlug: string }> };
 
@@ -27,7 +28,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const v = `?v=${clinic.version}`;
   return {
     title: clinic.name,
-    description: `${clinic.name} — bookings, rewards and membership.`,
+    description: clientAppDescription(clinic.name, clinic.inAppBookings),
     manifest: `${base}/manifest.webmanifest`,
     icons: {
       icon: [{ url: `${base}/app-icon/192.png${v}`, sizes: "192x192", type: "image/png" }],
@@ -112,6 +113,7 @@ export default async function ClientAppLayout({
         logoUrl={ctx.merchant.logoUrl}
         currency={ctx.merchant.currency}
         timeZone={ctx.merchant.timeZone}
+        inAppBookings={ctx.merchant.inAppBookings}
         pointsPerCents={programme?.active ? programme.pointsPerCents : 0}
         vatRateBasisPoints={settings?.vatRateBasisPoints ?? 0}
         clientName={[summary?.firstName, summary?.lastName].filter(Boolean).join(" ")}
@@ -122,7 +124,7 @@ export default async function ClientAppLayout({
         {children}
       </ClientAppShell>
       <ServiceWorker scope={scope} />
-      <ZoomLock />
+      <ZoomLock />
     </div>
   );
 }

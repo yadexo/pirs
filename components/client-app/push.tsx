@@ -7,6 +7,8 @@ import { Button } from "@/components/client-app/v2";
 import { isIos, isStandalone } from "@/components/client-app/pwa";
 import { clientRecordNotificationPromptAction } from "@/lib/actions/client-app";
 import { choosePrompt, type PromptHistory, type PromptSurface, type PushState } from "@/lib/notification-prompt";
+import { useInAppBookings } from "@/components/in-app-bookings";
+import { bookingKey } from "@/lib/booking-copy";
 
 /**
  * Turning notifications on, and the places a client can do it: a bottom sheet
@@ -181,6 +183,7 @@ const SURFACE: Record<PromptSurface, "SHEET" | "CARD" | "SETTINGS_HELP"> = {
  */
 export function NotificationPrompt({ merchantSlug, clinicName, history }: { merchantSlug: string; clinicName: string; history: PromptHistory }) {
   const t = useTranslations("clientApp.notifications");
+  const inAppBookings = useInAppBookings();
   const { state, permission, busy, message, enable } = usePush();
   const [standalone, setStandalone] = React.useState(false);
   // Closed by the client just now. The server catches up on the next render.
@@ -285,7 +288,7 @@ export function NotificationPrompt({ merchantSlug, clinicName, history }: { merc
           <span className="ca-pushsheet-icon" aria-hidden="true">
             <Icon name="bell" size={28} />
           </span>
-          <p className="ca-pushsheet-body">{blocked ? t("deniedSteps") : t("sheetBody", { name: clinicName })}</p>
+          <p className="ca-pushsheet-body">{blocked ? t("deniedSteps") : t(bookingKey("clientApp.notifications.sheetBody", inAppBookings), { name: clinicName })}</p>
           {!blocked && <div className="ca-pushsheet-note">{offers}</div>}
           {message && (
             <p className="ca-pushsheet-note" role="alert">
@@ -308,7 +311,7 @@ export function NotificationPrompt({ merchantSlug, clinicName, history }: { merc
       <div className="ca-pushcard" role="region" aria-label={title}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p className="ca-pushcard-title">{title}</p>
-          <p className="ca-pushcard-body">{help ? t("deniedSteps") : t("sheetBody", { name: clinicName })}</p>
+          <p className="ca-pushcard-body">{help ? t("deniedSteps") : t(bookingKey("clientApp.notifications.sheetBody", inAppBookings), { name: clinicName })}</p>
           {!help && <div className="ca-pushcard-body">{offers}</div>}
           {message && (
             <p className="ca-pushcard-body" role="alert">
@@ -334,11 +337,12 @@ export function NotificationPrompt({ merchantSlug, clinicName, history }: { merc
 /** Profile → Settings: the switch, and a way to prove it works. */
 export function NotificationSettings() {
   const t = useTranslations("clientApp.notifications");
+  const inAppBookings = useInAppBookings();
   const { state, busy, message, enable, disable, sendTest } = usePush();
 
   const explanation =
     state === "on"
-      ? t("settingsOn")
+      ? t(bookingKey("clientApp.notifications.settingsOn", inAppBookings))
       : state === "install-first"
         ? t("settingsInstallFirst")
         : state === "denied"

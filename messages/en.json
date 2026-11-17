@@ -363,6 +363,7 @@
       "appointments": "Appointments",
       "noTreatmentPurchased": "No treatment purchased",
       "noTreatmentPurchasedSub": "Browse the shop to book your first visit.",
+      "noTreatmentPurchasedSubNoBookings": "Browse the shop to buy your first treatment.",
       "browseShop": "Browse the shop",
       "reschedule": "Reschedule",
       "cancel": "Cancel",
@@ -629,6 +630,7 @@
     "installNudge": {
       "addTo": "Add {name} to your Home Screen",
       "why": "Your appointments, rewards and offers one tap away, in their own window.",
+      "whyNoBookings": "Your rewards and offers one tap away, in their own window.",
       "signInAgain": "The app opens in its own window, so you sign in there once.",
       "install": "Install",
       "working": "One moment…",
@@ -662,6 +664,7 @@
     "notifications": {
       "sheetTitle": "Stay in the loop",
       "sheetBody": "Order and appointment updates from {name}.",
+      "sheetBodyNoBookings": "Order updates and news from {name}.",
       "offersAsk": "Also send me offers and news from {name}",
       "offersDecided": "Offers and news follow the choice you made in Settings.",
       "turnOn": "Turn on",
@@ -679,6 +682,7 @@
       "testFailed": "That didn't send.",
       "settingsTitle": "Notification preferences",
       "settingsOn": "On for this device: order and appointment updates, plus offers and news. Turning offers off below keeps the rest.",
+      "settingsOnNoBookings": "On for this device: order updates, plus offers and news. Turning offers off below keeps the rest.",
       "settingsInstallFirst": "Add this app to your Home Screen to get notifications on iPhone.",
       "settingsUnsupported": "This browser can't show notifications.",
       "settingsUnconfigured": "Notifications aren't available yet.",

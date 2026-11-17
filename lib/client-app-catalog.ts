@@ -84,7 +84,10 @@ const allImages = (images: unknown): string[] => (Array.isArray(images) ? images
 const metaLine = (durationMinutes: number | null, unitLabel: string | null): string | null =>
   durationMinutes ? `${durationMinutes} min` : (unitLabel ?? null);
 
-export async function getCatalog(db: TenantDb, params: { tenantId: string; customerProfileId: string; now?: Date }): Promise<Catalog> {
+export async function getCatalog(
+  db: TenantDb,
+  params: { tenantId: string; customerProfileId: string; now?: Date; /** The app's own booking; off unless the platform switched it on. */ inAppBookings: boolean },
+): Promise<Catalog> {
   const now = params.now ?? new Date();
   const popularSince = new Date(now.getTime() - POPULAR_WINDOW_DAYS * DAY);
 
@@ -203,8 +206,9 @@ export async function getCatalog(db: TenantDb, params: { tenantId: string; custo
       durationMinutes: s.durationMinutes,
       tag: cardTag({ offerLabel: priced.offerLabel, popular: isPopular, isNew: isNew(s.createdAt, now) }),
       soldOut: false,
-      // Only bookable when the clinic has assigned a practitioner to it.
-      bookable: s.staff.length > 0,
+      // Only bookable in the app when the clinic uses the app's own booking
+      // and has assigned a practitioner to it.
+      bookable: params.inAppBookings && s.staff.length > 0,
       bookingUrl: s.schedulingUrl,
       popular: isPopular,
     };

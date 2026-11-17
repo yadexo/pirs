@@ -363,6 +363,7 @@
       "appointments": "Afspraken",
       "noTreatmentPurchased": "Nog geen behandeling gekocht",
       "noTreatmentPurchasedSub": "Bekijk de shop om je eerste bezoek te boeken.",
+      "noTreatmentPurchasedSubNoBookings": "Bekijk de shop om je eerste behandeling te kopen.",
       "browseShop": "Bekijk de shop",
       "reschedule": "Verzetten",
       "cancel": "Annuleren",
@@ -629,6 +630,7 @@
     "installNudge": {
       "addTo": "Zet {name} op je beginscherm",
       "why": "Je afspraken, beloningen en aanbiedingen op één tik, in een eigen venster.",
+      "whyNoBookings": "Je beloningen en aanbiedingen op één tik, in een eigen venster.",
       "signInAgain": "De app opent in een eigen venster, dus daar meld je je één keer aan.",
       "install": "Installeren",
       "working": "Even geduld…",
@@ -662,6 +664,7 @@
     "notifications": {
       "sheetTitle": "Blijf op de hoogte",
       "sheetBody": "Updates over je bestellingen en afspraken van {name}.",
+      "sheetBodyNoBookings": "Updates over je bestellingen en nieuws van {name}.",
       "offersAsk": "Stuur me ook aanbiedingen en nieuws van {name}",
       "offersDecided": "Aanbiedingen en nieuws volgen de keuze die je in Instellingen hebt gemaakt.",
       "turnOn": "Zet aan",
@@ -679,6 +682,7 @@
       "testFailed": "Dat is niet verstuurd.",
       "settingsTitle": "Meldingsvoorkeuren",
       "settingsOn": "Aan voor dit apparaat: updates over bestellingen en afspraken, plus aanbiedingen en nieuws. Zet je aanbiedingen hieronder uit, dan blijft de rest.",
+      "settingsOnNoBookings": "Aan voor dit apparaat: updates over bestellingen, plus aanbiedingen en nieuws. Zet je aanbiedingen hieronder uit, dan blijft de rest.",
       "settingsInstallFirst": "Zet deze app op je beginscherm om meldingen op iPhone te krijgen.",
       "settingsUnsupported": "Deze browser kan geen meldingen tonen.",
       "settingsUnconfigured": "Meldingen zijn nog niet beschikbaar.",

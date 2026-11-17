@@ -25,6 +25,8 @@ export interface ClientAppMerchant {
   supportUrl: string | null;
   /** The clinic's own time zone: an appointment's time is its time, not the phone's. */
   timeZone: string;
+  /** The app's own booking, switched on per clinic by the platform (Tenant.inAppBookings). */
+  inAppBookings: boolean;
 }
 
 export interface ClientAppContext {
@@ -69,6 +71,7 @@ export async function getClientAppContext(merchantSlug: string): Promise<ClientA
     longitude: null,
     supportUrl: null,
     timeZone: branding?.timeZone || FALLBACK_TIME_ZONE,
+    inAppBookings: tenant.inAppBookings,
   };
 
   // Support link falls back to the agency's white-label setting, so a merchant

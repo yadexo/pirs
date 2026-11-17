@@ -23,7 +23,7 @@ export default async function ShopPage({
 
   // One read for both prices on every card: what this client pays, and what
   // they would pay as a member. Same resolver the till uses.
-  const catalog = await getCatalog(ctx.db, { tenantId: ctx.merchant.id, customerProfileId: ctx.customerProfileId });
+  const catalog = await getCatalog(ctx.db, { tenantId: ctx.merchant.id, inAppBookings: ctx.merchant.inAppBookings, customerProfileId: ctx.customerProfileId });
 
   const [categories, plans, membership, programme, settings] = await Promise.all([
     ctx.db.productCategory.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),

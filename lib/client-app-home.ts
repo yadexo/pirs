@@ -44,7 +44,7 @@ const SHELF = 10;
 
 export async function getHomeSections(
   db: TenantDb,
-  params: { tenantId: string; customerProfileId: string; now?: Date },
+  params: { tenantId: string; customerProfileId: string; now?: Date; inAppBookings: boolean },
 ): Promise<HomeSections> {
   const now = params.now ?? new Date();
 
