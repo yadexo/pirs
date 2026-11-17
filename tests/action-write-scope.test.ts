@@ -25,6 +25,7 @@ const ACTIONS_DIR = join(process.cwd(), "lib", "actions");
 /** "file:model.op:where" → why it is safe. Short, and every entry is a decision. */
 const EXEMPT: Record<string, string> = {
   "merchants.ts:tenant.update:{ id: merchantId }": "Platform admin only; a clinic is the platform's own row.",
+  "merchants.ts:tenant.updateMany:{ id: merchantId }": "Platform admin only (the in-app bookings switch); same reason.",
   "platform-admins.ts:user.update:{ id: userId }": "Platform admin only; platform admins are global rows with no clinic.",
   "app-builder.ts:catalogItemTag.deleteMany:link": "`link` is { serviceId } or { productId } of an item just loaded through the clinic's scoped client.",
   "app-builder.ts:clientResult.deleteMany:link": "Same `link` as above.",

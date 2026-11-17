@@ -144,6 +144,37 @@ export async function setMembershipFeeAction(
   return { ok: true, percent: value };
 }
 
+/**
+ * Switches the app's own booking on or off for a clinic.
+ *
+ * The platform's decision, not the clinic's: clinics book through their own
+ * software, so in-app booking is off until we turn it on for one. Switching
+ * it off hides and refuses booking; it deletes nothing, and switching it back
+ * on shows existing appointments again.
+ */
+export async function setInAppBookingsAction(merchantId: string, on: boolean): Promise<{ error: string } | { ok: true; inAppBookings: boolean }> {
+  if (!validArgs(args([arg.id, arg.bool]), [merchantId, on])) return { error: INVALID_REQUEST };
+  const guard = await platformAdminOrRefusal();
+  if ("error" in guard) return { error: guard.error };
+  const user = guard.user;
+
+  const { count } = await rawDb.tenant.updateMany({ where: { id: merchantId }, data: { inAppBookings: on } });
+  if (count === 0) return { error: "That clinic no longer exists." };
+
+  await writeAuditLog({
+    tenantId: merchantId,
+    actorUserId: user.id,
+    actorType: "PLATFORM_ADMIN",
+    action: on ? "merchant.in_app_bookings_on" : "merchant.in_app_bookings_off",
+    entityType: "Tenant",
+    entityId: merchantId,
+  });
+
+  revalidatePath(`/agency/clinics/${merchantId}`);
+  revalidatePath(`/m/${merchantId}`, "layout");
+  return { ok: true, inAppBookings: on };
+}
+
 export async function deleteMerchantAction(merchantId: string): Promise<{ ok: true } | { error: string }> {
   if (!validArgs(args([arg.id]), [merchantId])) return { error: INVALID_REQUEST };
   const guard = await platformAdminOrRefusal();

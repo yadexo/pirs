@@ -56,6 +56,9 @@ async function main() {
       slug,
       name: "Riverside Wellness Clinic",
       status: "ACTIVE",
+      // The demo shows every feature, the app's own booking included; real
+      // clinics start with it off (Tenant.inAppBookings).
+      inAppBookings: true,
       subscriptionStatus: "ACTIVE",
       branding: {
         create: {

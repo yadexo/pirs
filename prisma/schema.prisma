@@ -72,6 +72,12 @@ model Tenant {
   /// different deal from a one-off purchase.
   membershipFeePercent Float?
 
+  /// The app's own booking (slots, booking, rescheduling, appointments). Off
+  /// until a platform admin turns it on: clinics book through their own
+  /// software, and the app links to it per treatment instead. Set by the
+  /// platform, never by the clinic.
+  inAppBookings Boolean @default(false)
+
   /// The platform admin who created this clinic, when one did. Null when the
   /// clinic registered itself — which is most of them once the register page
   /// is in use, so this answers "did we set this up, or did they?".

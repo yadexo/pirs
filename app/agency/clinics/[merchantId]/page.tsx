@@ -6,6 +6,7 @@ import { rawDb } from "@/lib/db";
 import { dnsRecordsFor, type VercelVerificationChallenge } from "@/lib/clinic-domain";
 import { vercelConfig } from "@/lib/vercel-domains";
 import { DomainPanel } from "./domain-panel";
+import { BookingsPanel } from "./bookings-panel";
 import type { DomainView } from "@/lib/actions/clinic-domains";
 
 /**
@@ -27,6 +28,7 @@ export default async function AgencyClinicPage({ params }: { params: Promise<{ m
       name: true,
       slug: true,
       status: true,
+      inAppBookings: true,
       branding: { select: { businessName: true } },
       domains: { where: { type: "CLIENT" } },
     },
@@ -61,6 +63,7 @@ export default async function AgencyClinicPage({ params }: { params: Promise<{ m
       </header>
 
       <DomainPanel merchantId={clinic.id} slug={clinic.slug} domain={domain} configured={vercelConfig() !== null} />
+      <BookingsPanel merchantId={clinic.id} on={clinic.inAppBookings} />
     </main>
   );
 }
