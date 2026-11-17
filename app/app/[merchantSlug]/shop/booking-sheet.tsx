@@ -68,6 +68,10 @@ export function BookingSheet({
     setSlot(null);
     getBookingOptionsForServiceAction(service.id).then((o) => {
       if (!o) return;
+      if ("error" in o) {
+        setError(o.error ?? null);
+        return;
+      }
       setOptions(o);
       setDate((current) => (o.days.includes(current) ? current : (o.days[0] ?? "")));
       setStaffId(o.staff[0]?.id ?? "");
@@ -80,7 +84,13 @@ export function BookingSheet({
     setLoading(true);
     setSlot(null);
     getClientSlotsAction(staffId, locationId, options.durationMinutes, date)
-      .then(setSlots)
+      .then((r) => {
+        if (Array.isArray(r)) setSlots(r);
+        else {
+          setSlots([]);
+          setError(r.error);
+        }
+      })
       .catch(() => setSlots([]))
       .finally(() => setLoading(false));
   }, [service, options, staffId, locationId, date]);

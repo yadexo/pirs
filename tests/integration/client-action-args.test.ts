@@ -58,7 +58,7 @@ describe("client actions refuse what the app would never send", () => {
 
   beforeAll(async () => {
     process.env.AUTH_SECRET ??= "test-secret";
-    clinic = (await rawDb.tenant.create({ data: { slug, name: "Args Clinic" } })).id;
+    clinic = (await rawDb.tenant.create({ data: { inAppBookings: true, slug, name: "Args Clinic" } })).id;
     await rawDb.tenantBranding.create({ data: { tenantId: clinic, businessName: "Args Clinic", currency: "EUR" } });
     await rawDb.tenantSettings.create({ data: { tenantId: clinic } });
     const user = await rawDb.user.create({ data: { tenantId: clinic, email: `args-${stamp}@example.com`, passwordHash: "x", role: "CUSTOMER" } });

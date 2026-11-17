@@ -67,7 +67,7 @@ describe("client payments on the clinic's Stripe account", () => {
     process.env.STRIPE_SECRET_KEY = "sk_test_payments";
     process.env.PLATFORM_FEE_PERCENT = "10";
 
-    clinic = (await rawDb.tenant.create({ data: { slug: `pay-${stamp}`, name: "Pay Clinic" } })).id;
+    clinic = (await rawDb.tenant.create({ data: { inAppBookings: true, slug: `pay-${stamp}`, name: "Pay Clinic" } })).id;
     await rawDb.tenantBranding.create({ data: { tenantId: clinic, businessName: "Pay Clinic", currency: "EUR" } });
     await rawDb.tenantSettings.create({ data: { tenantId: clinic, vatRateBasisPoints: 2100 } });
     await rawDb.loyaltyProgramme.create({ data: { tenantId: clinic, pointsPerCents: 0.01, active: true } });
@@ -217,6 +217,7 @@ describe("client payments on the clinic's Stripe account", () => {
     });
 
     const slots = await clientApp.getClientSlotsAction(staffProfileId, location.id, 30, addDays(todayIn("Europe/Amsterdam"), 3));
+    if (!Array.isArray(slots)) throw new Error(slots.error);
     expect(slots.length).toBeGreaterThan(0);
 
     const res = await clientApp.clientBookAction(`pay-${stamp}`, {

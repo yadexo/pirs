@@ -29,7 +29,7 @@ const SLUG = "reschedule-safety";
 const ZONE = "Europe/Amsterdam";
 
 async function makeClinic(label: string) {
-  const tenant = await rawDb.tenant.create({ data: { slug: `${SLUG}-${label}-${Date.now()}`, name: `Clinic ${label}` } });
+  const tenant = await rawDb.tenant.create({ data: { inAppBookings: true, slug: `${SLUG}-${label}-${Date.now()}`, name: `Clinic ${label}` } });
   const tenantId = tenant.id;
   await rawDb.tenantSettings.create({ data: { tenantId, vatRateBasisPoints: 0 } });
   const location = await rawDb.location.create({ data: { tenantId, name: "Main", isPrimary: true } });

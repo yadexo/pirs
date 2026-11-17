@@ -44,7 +44,7 @@ describe("once-only claims under simultaneous requests", () => {
   const together = <T,>(client: Client, n: number, fn: () => Promise<T>) => Promise.all(Array.from({ length: n }, () => as(client, fn)));
 
   beforeAll(async () => {
-    tenantId = (await rawDb.tenant.create({ data: { slug, name: "Race Clinic" } })).id;
+    tenantId = (await rawDb.tenant.create({ data: { inAppBookings: true, slug, name: "Race Clinic" } })).id;
     db = getTenantDb(tenantId);
     await rawDb.tenantBranding.create({ data: { tenantId, businessName: "Race Clinic", currency: "EUR" } });
     await rawDb.tenantSettings.create({ data: { tenantId, vatRateBasisPoints: 0, googleReviewUrl: "https://g.page/r/race/review" } });

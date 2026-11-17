@@ -49,7 +49,7 @@ describe("client app -> clinic portal round trip", () => {
   const SLUG = "roundtrip-clinic";
 
   beforeAll(async () => {
-    const tenant = await rawDb.tenant.create({ data: { slug: `${SLUG}-${Date.now()}`, name: "Round Trip Clinic" } });
+    const tenant = await rawDb.tenant.create({ data: { inAppBookings: true, slug: `${SLUG}-${Date.now()}`, name: "Round Trip Clinic" } });
     tenantId = tenant.id;
     db = getTenantDb(tenantId);
 
@@ -157,6 +157,7 @@ describe("client app -> clinic portal round trip", () => {
   async function nextSlot(): Promise<string> {
     for (let dayOffset = 3; dayOffset <= 12; dayOffset++) {
       const slots = await getClientSlotsAction(staffProfileId, locationId, 60, addDays(todayIn("Europe/Amsterdam"), dayOffset));
+      if (!Array.isArray(slots)) throw new Error(slots.error);
       if (slots.length > 0) return slots[0]!;
     }
     throw new Error("Availability engine offered no slots in the next 12 days");
@@ -164,9 +165,9 @@ describe("client app -> clinic portal round trip", () => {
 
   it("offers booking options drawn from the merchant's own catalogue", async () => {
     const options = await getBookingOptionsForServiceAction(serviceId);
-    expect(options).not.toBeNull();
-    expect(options!.staff.map((s) => s.id)).toContain(staffProfileId);
-    expect(options!.locations.map((l) => l.id)).toContain(locationId);
+    if (!options || "error" in options) throw new Error("expected booking options");
+    expect(options.staff.map((s) => s.id)).toContain(staffProfileId);
+    expect(options.locations.map((l) => l.id)).toContain(locationId);
   });
 
   it("a booking made in the client app appears on the clinic's Appointments page", async () => {

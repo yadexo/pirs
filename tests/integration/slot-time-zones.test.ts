@@ -54,7 +54,7 @@ describe("slots in the clinic's time zone", () => {
     (await getAvailableSlots(db, { staffProfileId, locationId, serviceDurationMinutes: duration, day, timeZone: AMS, now: NOW })).map((s) => s.toISOString());
 
   beforeAll(async () => {
-    tenantId = (await rawDb.tenant.create({ data: { slug, name: "Zone Clinic" } })).id;
+    tenantId = (await rawDb.tenant.create({ data: { inAppBookings: true, slug, name: "Zone Clinic" } })).id;
     db = getTenantDb(tenantId);
     await rawDb.tenantBranding.create({ data: { tenantId, businessName: "Zone Clinic", currency: "EUR", timeZone: AMS } });
     await rawDb.tenantSettings.create({ data: { tenantId, vatRateBasisPoints: 0 } });
@@ -135,6 +135,7 @@ describe("slots in the clinic's time zone", () => {
   it("the client app asks by calendar day, and books the day it was shown", async () => {
     const pat = await practitioner([4], 9 * 60, 11 * 60);
     const offered = await getClientSlotsAction(pat, locationId, 60, THU);
+    if (!Array.isArray(offered)) throw new Error(offered.error);
     expect(offered[0]).toBe("2026-11-26T08:00:00.000Z");
     const res = await clientBookAction(slug, { serviceId, staffProfileId: pat, locationId, startAtIso: offered[0]! });
     expect(res).toEqual({ ok: true, when: "2026-11-26T08:00:00.000Z" });
@@ -144,7 +145,8 @@ describe("slots in the clinic's time zone", () => {
 
   it("booking options list the clinic's next seven days", async () => {
     const options = await getBookingOptionsForServiceAction(serviceId);
-    expect(options?.days).toHaveLength(7);
-    for (const d of options!.days) expect(d).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    if (!options || "error" in options) throw new Error("expected booking options");
+    expect(options.days).toHaveLength(7);
+    for (const d of options.days) expect(d).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

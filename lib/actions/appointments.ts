@@ -4,7 +4,8 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireStaffContext, requirePermission } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
-import { arg, args, InvalidActionArgsError, validArgs } from "@/lib/action-args";
+import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
+import { BOOKINGS_OFF, inAppBookingsOn } from "@/lib/in-app-bookings";
 
 /**
  * The one appointment action the clinic portal still uses.
@@ -20,10 +21,11 @@ import { arg, args, InvalidActionArgsError, validArgs } from "@/lib/action-args"
 export async function updateAppointmentStatusAction(
   appointmentId: string,
   status: "CONFIRMED" | "COMPLETED" | "CANCELLED" | "NO_SHOW",
-) {
-  if (!validArgs(args([arg.id, z.enum(["CONFIRMED", "COMPLETED", "CANCELLED", "NO_SHOW"])]), [appointmentId, status])) throw new InvalidActionArgsError();
+): Promise<{ ok: true } | { error: string }> {
+  if (!validArgs(args([arg.id, z.enum(["CONFIRMED", "COMPLETED", "CANCELLED", "NO_SHOW"])]), [appointmentId, status])) return { error: INVALID_REQUEST };
   await requirePermission("appointments.manage");
   const { db, user } = await requireStaffContext();
+  if (!(await inAppBookingsOn(user.tenantId!))) return { error: BOOKINGS_OFF };
 
   await db.appointment.updateMany({
     where: { id: appointmentId, tenantId: user.tenantId! },
@@ -46,4 +48,5 @@ export async function updateAppointmentStatusAction(
   // The screen this is called from. It used to revalidate two /admin paths
   // that have not existed since the portal moved to /m/<clinic>.
   revalidatePath(`/m/${user.tenantId}/appointments`);
+  return { ok: true };
 }

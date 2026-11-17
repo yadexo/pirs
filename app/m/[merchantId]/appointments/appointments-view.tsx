@@ -64,7 +64,11 @@ export function AppointmentsView({
 
   function act(id: string, next: "CONFIRMED" | "COMPLETED" | "CANCELLED" | "NO_SHOW") {
     startTransition(async () => {
-      await updateAppointmentStatusAction(id, next);
+      const res = await updateAppointmentStatusAction(id, next);
+      if ("error" in res) {
+        toast.error(res.error);
+        return;
+      }
       toast.success(t("markedStatus", { status: t(`statusLabel.${next}`) }));
       setSelected(null);
     });

@@ -7,6 +7,7 @@ import { rawDb } from "@/lib/db";
 import { getAvailableSlots } from "@/lib/availability";
 import { bookingProblem, holdSlot, SLOT_TAKEN } from "@/lib/booking-rules";
 import { clinicZone } from "@/lib/clinic-zone";
+import { BOOKINGS_OFF, inAppBookingsOn } from "@/lib/in-app-bookings";
 import { addCalendarMonths, addDays, todayIn } from "@/lib/clinic-time";
 import { lockRow, LOCKED_CLAIM } from "@/lib/row-lock";
 import type { TenantDb } from "@/lib/tenant-db";
@@ -60,7 +61,8 @@ function revalidateClient(slug: string) {
 
 export async function getBookingOptionsForServiceAction(serviceId: string) {
   if (!validArgs(args([arg.id]), [serviceId])) throw new InvalidActionArgsError();
-  const { db } = await requireCustomerContext();
+  const { db, user } = await requireCustomerContext();
+  if (!(await inAppBookingsOn(user.tenantId!))) return { error: BOOKINGS_OFF };
 
   const [service, staff, locations] = await Promise.all([
     db.service.findFirst({ where: { id: serviceId, active: true } }),
@@ -85,9 +87,15 @@ export async function getBookingOptionsForServiceAction(serviceId: string) {
 }
 
 /** The free start times on one of the clinic's calendar days ("2026-11-19"). */
-export async function getClientSlotsAction(staffProfileId: string, locationId: string, durationMinutes: number, day: string) {
+export async function getClientSlotsAction(
+  staffProfileId: string,
+  locationId: string,
+  durationMinutes: number,
+  day: string,
+): Promise<string[] | { error: string }> {
   if (!validArgs(args([arg.id, arg.id, arg.int(5, 600), arg.day]), [staffProfileId, locationId, durationMinutes, day])) throw new InvalidActionArgsError();
-  const { db } = await requireCustomerContext();
+  const { db, user } = await requireCustomerContext();
+  if (!(await inAppBookingsOn(user.tenantId!))) return { error: BOOKINGS_OFF };
   const slots = await getAvailableSlots(db, {
     staffProfileId,
     locationId,
@@ -129,6 +137,7 @@ export async function clientBookAction(
 ): Promise<BookResult> {
   if (!validArgs(args([arg.slug, bookSchema]), [slug, input])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
+  if (!(await inAppBookingsOn(user.tenantId!))) return { error: BOOKINGS_OFF };
   const customerProfileId = user.customerProfileId!;
 
   const service = await db.service.findFirst({ where: { id: input.serviceId, active: true } });
@@ -292,6 +301,7 @@ export async function clientBookAction(
 export async function clientCancelAppointmentAction(slug: string, appointmentId: string): Promise<{ error: string } | { ok: true }> {
   if (!validArgs(args([arg.slug, arg.id]), [slug, appointmentId])) return { error: INVALID_REQUEST };
   const { db, user } = await requireCustomerContext();
+  if (!(await inAppBookingsOn(user.tenantId!))) return { error: BOOKINGS_OFF };
 
   const appt = await db.appointment.findFirst({
     where: { id: appointmentId, customerProfileId: user.customerProfileId! },
