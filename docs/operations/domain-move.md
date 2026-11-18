@@ -75,7 +75,8 @@ Wait for a certificate on all four before going further.
 | `AUTH_URL`, `NEXTAUTH_URL` | **unset** | **unset** |
 | `APP_URL` | `https://app.deza.ai` | `https://staging.deza.ai` |
 | `CLIENT_APP_URL` | `https://login.deza.ai` | **unset** — see below |
-| `EMAIL_FROM` | `no-reply@deza.ai` | `staging@deza.ai` |
+| `EMAIL_PROVIDER` | `resend` | `resend` |
+| `EMAIL_FROM` | `no-reply@mail.deza.ai` | `staging@mail.deza.ai` |
 | `APPLE_PAY_DOMAINS` | `pirs.io,clinic.pirs.io` — **overlap only**, cleared at retirement | unset |
 | `LEGACY_ROOT_DOMAIN` | `pirs.io` — **step 9, not now** | unset |
 | `S3_PUBLIC_URL` | the R2 custom domain, once step 8 is done | unchanged |
@@ -156,12 +157,12 @@ redirect, so the old URLs keep working until you change them.
 
 ## 7. Email (Resend)
 
-Add and verify `deza.ai` as a sending domain, with the SPF/DKIM/DMARC records
-from `docs/operations/email-setup.md`. The mail domain is the apex — that is
-the one record set this move shares with the marketing site, and it is
-deliberate: mail is sent *from* `deza.ai`, nothing is served on it.
-`EMAIL_FROM` is already set in step 3; redeploy and send one test from the
-clinic portal.
+Add and verify `mail.deza.ai` as the sending domain, with the SPF/DKIM/DMARC
+records from `docs/operations/email-setup.md`. A subdomain keeps mail's
+records apart from the apex, which belongs to the marketing site. Every
+`EMAIL_FROM` must be on `mail.deza.ai`. `EMAIL_PROVIDER` and `EMAIL_FROM` are
+already set in step 3; redeploy and request a password reset, then check the
+`[email]` log line (`email-setup.md` §6) and Resend's own logs.
 
 ## 8. Uploads (R2)
 

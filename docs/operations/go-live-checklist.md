@@ -101,7 +101,7 @@ boxes refer to them by id.
 - [ ] **T-6** `lib/notifications-service.ts:53` sends campaign email to the literal
       `customer@example.com`. Nothing calls this module; delete it.
 - [ ] **T-7** `.env.example:57,71`: replace `you@example.com` / `notifications@example.com`
-      with the real `VAPID_SUBJECT` and `EMAIL_FROM` shape (`mailto:ops@deza.ai`, `Deza <notifications@deza.ai>`).
+      with the real `VAPID_SUBJECT` and `EMAIL_FROM` shape (`mailto:ops@deza.ai`, `Deza <no-reply@mail.deza.ai>`).
 - [ ] **T-8** `README.md:152-168` documents `TWILIO_*` and `WEB_PUSH_*`; the code never
       reads them (`lib/providers/notifications/sms.ts`, `push.ts` are stubs). Say so or remove.
 - [ ] **T-9** `README.md:297` says rate limiting is in-memory. It is in Postgres
@@ -201,7 +201,7 @@ between Production and Preview. "Rotate" = change before go-live.
 | `APPLE_PAY_DOMAINS` | no | only the two hosts registered | no | no | ☐ |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | yes for push | push "not set up" (501); app still works | share with Preview is **wrong** — a Preview push would reach real devices with real keys; use separate keys | no | ☐ |
 | `PUSH_PROVIDER` | `webpush` | campaigns through the mock channel | no | no | ☐ |
-| `EMAIL_PROVIDER`, `RESEND_API_KEY`, `EMAIL_FROM` | yes, `resend` | emails logged, never sent (welcome, reset, invites) | key: yes (scoped keys); `EMAIL_FROM` differs (`staging@`) | no | ☐ |
+| `EMAIL_PROVIDER`, `RESEND_API_KEY`, `EMAIL_FROM` | yes: `EMAIL_PROVIDER=resend`, `EMAIL_FROM` on `mail.deza.ai` | no email sent (welcome, reset, invites); Production logs `[email] … NOT sent` | key: yes (scoped keys); `EMAIL_FROM` differs (`staging@mail.deza.ai`) | no | ☐ |
 | `SMS_PROVIDER`, `TWILIO_*` | no | SMS is a stub either way | — | — | ☐ leave unset |
 | `STORAGE_PROVIDER`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_URL`, `S3_ENDPOINT`, `S3_REGION` | yes, `s3` | uploads fail with "cannot write to disk" | bucket/prefix: recommended | key: yes if ever in a `.env` on a laptop | ☐ |
 | `CRON_SECRET` | yes | `/api/cron/*` returns 503; nothing runs | yes | **yes** (E-2) | ☐ |

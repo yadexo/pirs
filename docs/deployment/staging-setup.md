@@ -92,7 +92,8 @@ New**, paste the value, tick only **Preview**, save.
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | a fresh pair — run `node -e "console.log(require('web-push').generateVAPIDKeys())"` locally | keeps a staging push subscription from ever being deliverable with production's identity. `WEB_PUSH_PUBLIC_KEY`/`WEB_PUSH_PRIVATE_KEY` are a separate, unimplemented integration point (see `.env.example`) — don't confuse them with these |
 | `VAPID_SUBJECT` | `mailto:you@example.com` (anything reachable) | |
 | `RESEND_API_KEY` | reuse Production's | one Resend account is fine |
-| `EMAIL_FROM` | something that reads as staging, e.g. `staging@deza.ai` | so a test email is never mistaken for a real one |
+| `EMAIL_PROVIDER` | `resend` | required: without it nothing is sent (`docs/operations/email-setup.md`) |
+| `EMAIL_FROM` | something that reads as staging, on the verified domain: `staging@mail.deza.ai` | so a test email is never mistaken for a real one |
 | `STORAGE_PROVIDER` / `S3_*` | reuse Production's bucket and credentials | uploads from staging land in the same bucket; acceptable for test data, see note below if that bothers you |
 | `APP_URL` | `https://staging.deza.ai` | |
 | `CLIENT_APP_URL` | **leave unset** | setting it switches every generated link — QR codes, emails, push payloads — to the short `/<clinic>` form, which does not resolve on staging because staging is not a client host. Unset keeps staging on the long `/app/<clinic>` links, which do work |

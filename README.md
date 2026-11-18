@@ -161,7 +161,7 @@ All variables are documented in `.env.example`. Summary:
 | `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY` | Required only when `PAYMENT_PROVIDER=stripe` |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Signing secret of the webhook endpoint listening to **connected account** events (clients' payments). Needed to take money |
 | `STRIPE_WEBHOOK_SECRET` | Signing secret of the webhook endpoint listening to **platform account** events (billing the clinics) |
-| `EMAIL_PROVIDER`, `RESEND_API_KEY`, `EMAIL_FROM` | `mock` (default) or `resend` |
+| `EMAIL_PROVIDER`, `RESEND_API_KEY`, `EMAIL_FROM` | `mock` (default) or `resend`. Production needs `resend`, or no email is sent (the mock refuses there); `EMAIL_FROM` must be on the verified domain, `mail.deza.ai`. See `docs/operations/email-setup.md` |
 | `SMS_PROVIDER`, `TWILIO_*` | `mock` (default) or `twilio` |
 | `PUSH_PROVIDER`, `WEB_PUSH_*` | `mock` (default) or `webpush` |
 | `STORAGE_PROVIDER`, `S3_*` | `local` (default, writes to `/public/uploads`) or `s3` |
