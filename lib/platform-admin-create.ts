@@ -4,6 +4,7 @@ import { hashPassword } from "@/lib/password";
 import { issuePasswordToken, ADMIN_INVITE_TTL_MS } from "@/lib/password-tokens";
 import { appUrl } from "@/lib/app-url";
 import { getEmailProvider } from "@/lib/providers/notifications";
+import { logEmailSend } from "@/lib/emails/send-log";
 import { senderFor } from "@/lib/emails/sender";
 import { platformAdminInviteEmail } from "@/lib/emails/templates";
 import { DEFAULT_LOCALE, type AppLocale } from "@/lib/locale-cookie";
@@ -133,6 +134,7 @@ export async function createPlatformAdminInvite(input: NewPlatformAdmin): Promis
     html: template.html,
     from: senderFor(agencyName),
   });
+  logEmailSend("platform_admin_invite", result);
 
   return { id: admin.id, email: admin.email, loginUrl, emailed: result.status === "SENT", readyToSignIn: chosenHash !== null };
 }

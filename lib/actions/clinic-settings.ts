@@ -8,6 +8,7 @@ import { ActionError, formBool, formText, requireMerchantAction, runAction, type
 import { issuePasswordToken, INVITE_TTL_MS } from "@/lib/password-tokens";
 import { rateLimit } from "@/lib/rate-limit";
 import { getEmailProvider } from "@/lib/providers/notifications";
+import { logEmailSend } from "@/lib/emails/send-log";
 import { isPermissionKey } from "@/lib/permissions";
 import { WEEKDAYS, type OpeningHours } from "@/lib/opening-hours";
 import { appUrl } from "@/lib/app-url";
@@ -286,6 +287,7 @@ async function sendInvite(merchantId: string, userId: string, email: string, fir
     subject: `You're invited to ${clinic}`,
     body: [`Hi ${firstName},`, "", `You've been added to the team at ${clinic}.`, "Set your password to get started (the link works for 7 days):", link].join("\n"),
   });
+  logEmailSend("staff_invite", result);
   return { link, emailed: result.status === "SENT" };
 }
 

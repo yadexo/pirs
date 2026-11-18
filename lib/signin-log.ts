@@ -114,7 +114,9 @@ export type ResetOutcome =
   /** Several accounts of the same kind on one address: there is no single one to send to. */
   | "ambiguous_email"
   | "rate_limited"
-  | "clinic_not_active";
+  | "clinic_not_active"
+  /** An account was found and the email was handed to the provider, which did not send it. `reason` says why. */
+  | "send_failed";
 
 const RESET_INFO: ReadonlySet<ResetOutcome> = new Set<ResetOutcome>(["sent"]);
 

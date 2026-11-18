@@ -17,11 +17,14 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-forwarded-for": "203.0.113.200" }) }));
 vi.mock("next-intl/server", () => ({ getTranslations: async () => (key: string) => key, getLocale: async () => "en" }));
 const sent: { to: string }[] = [];
+type Answer = { providerMessageId: string; status: "SENT" | "FAILED"; code?: string; error?: string };
+/** What the provider answers; a case can make it refuse. */
+const provider = vi.hoisted(() => ({ answer: { providerMessageId: "re_1", status: "SENT" } as Answer }));
 vi.mock("@/lib/providers/notifications", () => ({
   getEmailProvider: () => ({
     send: async (message: { to: string }) => {
       sent.push(message);
-      return { status: "SENT" };
+      return provider.answer;
     },
   }),
 }));
@@ -93,6 +96,7 @@ describe("a password reset is scoped to its door", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     sent.length = 0;
+    provider.answer = { providerMessageId: "re_1", status: "SENT" };
     await clearTokens();
   });
 
@@ -101,6 +105,17 @@ describe("a password reset is scoped to its door", () => {
     expect(result).toEqual({ sent: true });
     expect(await tokenHolders()).toEqual(["admin"]);
     expect(lines).toEqual(["[reset] outcome=sent portal=admin role=PLATFORM_ADMIN"]);
+  });
+
+  it("says in the logs when the email itself did not go, and still answers sent", async () => {
+    provider.answer = { providerMessageId: "", status: "FAILED", code: "not_configured", error: "RESEND_API_KEY and EMAIL_FROM must both be set." };
+    const errors: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => void errors.push(String(args[0])));
+    const { result, lines } = await ask(shared, { portal: "admin" });
+    expect(result).toEqual({ sent: true });
+    expect(lines).toEqual(["[reset] outcome=send_failed portal=admin role=PLATFORM_ADMIN reason=not_configured"]);
+    expect(errors).toEqual(["[email] kind=password_reset outcome=failed reason=not_configured detail=RESEND_API_KEY and EMAIL_FROM must both be set."]);
+    expect(errors.join(" ")).not.toContain(shared);
   });
 
   it("the clinic door resets the clinic account and nothing else", async () => {

@@ -2,6 +2,11 @@ export type NotificationSendResult = {
   providerMessageId: string;
   status: "SENT" | "FAILED";
   error?: string;
+  /**
+   * Why it failed, as a plain code for logs: `not_configured`, `http_<status>`,
+   * `timeout` or `network`. `error` keeps the provider's own words.
+   */
+  code?: string;
 };
 
 export interface ChannelProvider {

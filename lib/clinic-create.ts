@@ -7,6 +7,7 @@ import { RESERVED_SLUGS } from "@/lib/portal-hosts";
 import { issuePasswordToken, INVITE_TTL_MS } from "@/lib/password-tokens";
 import { appUrl } from "@/lib/app-url";
 import { getEmailProvider } from "@/lib/providers/notifications";
+import { logEmailSend } from "@/lib/emails/send-log";
 import { senderFor } from "@/lib/emails/sender";
 import { welcomeClinicOwnerEmail } from "@/lib/emails/templates";
 import { DEFAULT_LOCALE, type AppLocale } from "@/lib/locale-cookie";
@@ -190,6 +191,7 @@ export async function createClinicWithOwner(input: NewClinic): Promise<CreatedCl
     html: template.html,
     from: senderFor(agencyName),
   });
+  logEmailSend("welcome_clinic_owner", result);
 
   return { tenantId: created.tenantId, slug, ownerId: created.ownerId, email, loginUrl, emailed: result.status === "SENT", readyToSignIn: chosenHash !== null };
 }

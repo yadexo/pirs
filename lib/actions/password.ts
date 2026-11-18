@@ -12,6 +12,7 @@ import { appUrl } from "@/lib/app-url";
 import { clinicAppOrigin } from "@/lib/clinic-app-link";
 import { chooseAccount, isPortal, portalRoles, type Portal } from "@/lib/portal-scope";
 import { logReset } from "@/lib/signin-log";
+import { logEmailSend } from "@/lib/emails/send-log";
 import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 type FormState = { error?: string; sent?: boolean } | undefined;
@@ -80,7 +81,6 @@ export async function requestPasswordResetAction(_prev: FormState, fd: FormData)
     else logReset((await rawDb.user.count({ where: { email } })) > 0 ? "no_account_of_type" : "no_such_user", { portal });
   } else {
     const account = found;
-    logReset("sent", { portal, role: account.role });
     const token = await issuePasswordToken(account.id, RESET_TTL_MS);
     // A client's link has to open on the origin they actually use: the
     // clinic's own domain when it has one, the shared client host otherwise.
@@ -105,7 +105,13 @@ export async function requestPasswordResetAction(_prev: FormState, fd: FormData)
     const { passwordResetEmail } = await import("@/lib/emails/templates");
     const { senderFor } = await import("@/lib/emails/sender");
     const template = passwordResetEmail({ branding, resetUrl, locale: account.locale === "en" ? "en" : "nl" });
-    await getEmailProvider().send({ to: email, subject: template.subject, body: template.text, html: template.html, from: senderFor(place) });
+    const result = await getEmailProvider().send({ to: email, subject: template.subject, body: template.text, html: template.html, from: senderFor(place) });
+    // "sent" only when the provider took it: a reset whose email never left
+    // used to be logged as sent all the same. The person is told "sent" in
+    // every case, so the form still says nothing about who has an account.
+    if (result.status === "SENT") logReset("sent", { portal, role: account.role });
+    else logReset("send_failed", { portal, role: account.role, reason: result.code ?? "unknown" });
+    logEmailSend("password_reset", result);
   }
   return { sent: true };
 }

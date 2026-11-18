@@ -27,11 +27,13 @@ vi.mock("next-intl/server", async () => {
   };
 });
 const sentEmails: { to: string; body?: string }[] = [];
+type Answer = { providerMessageId: string; status: "SENT" | "FAILED"; code?: string; error?: string };
+const provider = vi.hoisted(() => ({ answer: { providerMessageId: "re_1", status: "SENT" } as Answer }));
 vi.mock("@/lib/providers/notifications", () => ({
   getEmailProvider: () => ({
     send: async (message: { to: string; body?: string }) => {
       sentEmails.push(message);
-      return { status: "SENT" };
+      return provider.answer;
     },
   }),
 }));
@@ -65,6 +67,7 @@ describe("registerClinicAction", () => {
     process.env.REGISTRATION_CODE = CODE;
     authMock.auth.mockResolvedValue(null);
     sentEmails.length = 0;
+    provider.answer = { providerMessageId: "re_1", status: "SENT" };
     await clearLimits();
   });
 
@@ -128,6 +131,19 @@ describe("registerClinicAction", () => {
     expect(sentEmails[0]!.to).toBe(result.email);
     expect(sentEmails[0]!.body).toContain("/set-password?token=");
     expect(result.emailed).toBe(true);
+  });
+
+  it("says in the logs when the welcome email did not go, without the address", async () => {
+    provider.answer = { providerMessageId: "", status: "FAILED", code: "http_403", error: "The mail.example.com domain is not verified." };
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = ok(await register({ email: `rc-fail-${stamp}@example.com` }));
+    const owner = await rawDb.user.findFirstOrThrow({ where: { email: result.email } });
+    createdTenantIds.push(owner.tenantId!);
+
+    expect(result.emailed).toBe(false);
+    const lines = error.mock.calls.map((call) => String(call[0]));
+    expect(lines).toContain("[email] kind=welcome_clinic_owner outcome=failed reason=http_403 detail=The mail.example.com domain is not verified.");
+    expect(lines.join(" ")).not.toContain(result.email);
   });
 
   it("applies the language it was given to the owner, the clients' default and the email", async () => {

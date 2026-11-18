@@ -14,7 +14,7 @@ export class ResendEmailProvider implements ChannelProvider {
     const apiKey = process.env.RESEND_API_KEY;
     const from = params.from ?? process.env.EMAIL_FROM;
     if (!apiKey || !from) {
-      return { providerMessageId: "", status: "FAILED", error: "RESEND_API_KEY and EMAIL_FROM must both be set." };
+      return { providerMessageId: "", status: "FAILED", code: "not_configured", error: "RESEND_API_KEY and EMAIL_FROM must both be set." };
     }
 
     try {
@@ -26,11 +26,12 @@ export class ResendEmailProvider implements ChannelProvider {
       });
       const json = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
       if (!res.ok || !json.id) {
-        return { providerMessageId: "", status: "FAILED", error: json.message ?? `Resend responded ${res.status}` };
+        return { providerMessageId: "", status: "FAILED", code: `http_${res.status}`, error: json.message ?? `Resend responded ${res.status}` };
       }
       return { providerMessageId: json.id, status: "SENT" };
     } catch (err) {
-      return { providerMessageId: "", status: "FAILED", error: err instanceof Error ? err.message : "Network error" };
+      const timedOut = err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
+      return { providerMessageId: "", status: "FAILED", code: timedOut ? "timeout" : "network", error: err instanceof Error ? err.message : "Network error" };
     }
   }
 }

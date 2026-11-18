@@ -5,6 +5,7 @@ import { notifyClientQuietly } from "@/lib/web-push";
 import type { EmailBranding } from "@/lib/emails/layout";
 import type { EmailTemplate } from "@/lib/emails/templates";
 import { senderFor } from "@/lib/emails/sender";
+import { logEmailSend } from "@/lib/emails/send-log";
 import { formatDay } from "@/lib/client-format";
 import type { AppLocale } from "@/lib/locale-cookie";
 import { DEFAULT_TIME_ZONE } from "@/lib/time-zone";
@@ -150,7 +151,7 @@ async function sendBrandedEmail(to: string | null, clinicName: string, template:
     const result = await getEmailProvider().send({ to, subject: template.subject, body: template.text, html: template.html, from: senderFor(clinicName) });
     // No address in the log line: logs are kept, shipped and read far more
     // widely than the database is, and "who we emailed" is personal data.
-    if (result.status === "FAILED") console.error("[client-notifications] email failed:", result.error);
+    logEmailSend("client_notice", result);
   } catch (err) {
     console.error("[client-notifications] email not sent:", err instanceof Error ? err.message : err);
   }

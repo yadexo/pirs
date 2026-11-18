@@ -17,6 +17,7 @@ import { currentClientBasePath } from "@/lib/public-clinic";
 import { getTenantDb } from "@/lib/tenant-db";
 import { clinicAppOrigin, clinicAppUrl } from "@/lib/clinic-app-link";
 import { getEmailProvider } from "@/lib/providers/notifications";
+import { logEmailSend } from "@/lib/emails/send-log";
 import { senderFor } from "@/lib/emails/sender";
 import { accountExistsEmail, welcomeClientEmail } from "@/lib/emails/templates";
 import { resolveLocale } from "@/lib/locale";
@@ -203,7 +204,7 @@ async function tellExistingClient(params: {
       resetUrl: `${origin}/forgot-password?clinic=${encodeURIComponent(tenantSlug)}`,
       locale: account?.locale === "en" ? "en" : "nl",
     });
-    await getEmailProvider().send({ to: email, subject: template.subject, body: template.text, html: template.html, from: senderFor(clinicName) });
+    logEmailSend("account_exists", await getEmailProvider().send({ to: email, subject: template.subject, body: template.text, html: template.html, from: senderFor(clinicName) }));
   } catch (err) {
     console.error("[register] existing-account notice not sent:", err instanceof Error ? err.message : err);
   }
@@ -303,6 +304,7 @@ export async function customerRegisterAction(tenantSlug: string, _prevState: unk
   });
   await getEmailProvider()
     .send({ to: email, subject: template.subject, body: template.text, html: template.html, from: senderFor(clinicName) })
+    .then((result) => logEmailSend("welcome_client", result))
     .catch((err) => console.error("[register] welcome email not sent:", err instanceof Error ? err.message : err));
 
   const result = await signInOrError({ portal: "customer", tenantSlug, email, password }, await currentClientBasePath(tenantSlug), "client");
