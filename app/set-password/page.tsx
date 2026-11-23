@@ -4,6 +4,7 @@ import { inspectPasswordToken, MIN_PASSWORD_LENGTH } from "@/lib/password-tokens
 import { resolveLocale } from "@/lib/locale";
 import { GuestLocaleSwitcher } from "@/components/auth/guest-locale-switcher";
 import { currentClinicHostSlug } from "@/lib/public-clinic";
+import { ClinicMark } from "@/components/auth/clinic-mark";
 import { SetPasswordForm } from "./set-password-form";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ export default async function SetPasswordPage({ searchParams }: { searchParams: 
   return (
     <main className="flex min-h-screen items-center justify-center bg-app p-4">
       <div className="w-full max-w-sm">
+        <ClinicMark slug={hostClinic} />
         <div className="rounded-card border border-border bg-surface p-6 shadow-card">
           {info ? (
             <>

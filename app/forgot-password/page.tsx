@@ -4,6 +4,7 @@ import { currentClientBasePath, currentClinicHostSlug } from "@/lib/public-clini
 import { resolveLocale } from "@/lib/locale";
 import { GuestLocaleSwitcher } from "@/components/auth/guest-locale-switcher";
 import { isPortal } from "@/lib/portal-scope";
+import { ClinicMark } from "@/components/auth/clinic-mark";
 import { ForgotPasswordForm } from "./forgot-password-form";
 
 export default async function ForgotPasswordPage({ searchParams }: { searchParams: Promise<{ clinic?: string; portal?: string }> }) {
@@ -28,6 +29,7 @@ export default async function ForgotPasswordPage({ searchParams }: { searchParam
   return (
     <main className="flex min-h-screen items-center justify-center bg-app p-4">
       <div className="w-full max-w-sm">
+        <ClinicMark slug={slug} />
         <div className="rounded-card border border-border bg-surface p-6 shadow-card">
           <h1 className="text-[18px] font-semibold">{t("title")}</h1>
           <p className="mt-1 text-[13px] text-ink-muted">{t("description")}</p>
