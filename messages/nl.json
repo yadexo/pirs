@@ -90,7 +90,7 @@
     "setPassword": {
       "setupTitle": "Je account instellen",
       "resetTitle": "Kies een nieuw wachtwoord",
-      "description": "Voor {email}. Minstens {minLength} tekens.",
+      "description": "Voor <email>{address}</email>. Minstens {minLength} tekens.",
       "newPassword": "Nieuw wachtwoord",
       "repeatPassword": "Herhaal het",
       "savePassword": "Wachtwoord opslaan",

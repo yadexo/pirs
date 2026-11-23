@@ -23,7 +23,12 @@ export default async function SetPasswordPage({ searchParams }: { searchParams: 
             <>
               <h1 className="text-[18px] font-semibold">{info.isInvite ? t("setupTitle") : t("resetTitle")}</h1>
               <p className="mt-1 text-[13px] text-ink-muted">
-                {t.rich("description", { email: () => <span className="font-medium text-ink">{info.email}</span>, minLength: MIN_PASSWORD_LENGTH })}
+                {/* A tag, not a {placeholder}: next-intl only calls a function for a tag (tests/rich-text-messages.test.ts). */}
+                {t.rich("description", {
+                  address: info.email,
+                  email: (chunks) => <span className="font-medium text-ink">{chunks}</span>,
+                  minLength: MIN_PASSWORD_LENGTH,
+                })}
               </p>
               <div className="mt-5">
                 <SetPasswordForm token={token} minLength={MIN_PASSWORD_LENGTH} />

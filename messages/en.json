@@ -90,7 +90,7 @@
     "setPassword": {
       "setupTitle": "Set up your account",
       "resetTitle": "Choose a new password",
-      "description": "For {email}. At least {minLength} characters.",
+      "description": "For <email>{address}</email>. At least {minLength} characters.",
       "newPassword": "New password",
       "repeatPassword": "Repeat it",
       "savePassword": "Save password",
