@@ -27,11 +27,27 @@ export async function issuePasswordToken(userId: string, ttlMs: number): Promise
   return raw;
 }
 
+/**
+ * Where a token may be used. On a clinic's own domain (`clinicSlug`, from the
+ * middleware's x-clinic-host header — see currentClinicHostSlug) only that
+ * clinic's clients: the domain is its client app and nothing else, so a
+ * staff, platform-admin or other clinic's link must not work there.
+ * Elsewhere, any token.
+ */
+export interface TokenScope {
+  clinicSlug?: string | null;
+}
+
+/** The accounts a token may belong to, as a filter on its user. */
+function userScope(scope: TokenScope) {
+  return scope.clinicSlug ? { role: "CUSTOMER" as const, tenant: { is: { slug: scope.clinicSlug } } } : {};
+}
+
 /** Looks a token up without using it — for showing the form. */
-export async function inspectPasswordToken(raw: string) {
+export async function inspectPasswordToken(raw: string, scope: TokenScope = {}) {
   if (!raw) return null;
-  const token = await rawDb.passwordResetToken.findUnique({
-    where: { tokenHash: hashToken(raw) },
+  const token = await rawDb.passwordResetToken.findFirst({
+    where: { tokenHash: hashToken(raw), user: { is: userScope(scope) } },
     include: { user: { select: { email: true, status: true, role: true } } },
   });
   if (!token || token.usedAt || token.expiresAt < new Date()) return null;
@@ -47,14 +63,17 @@ export type ConsumeResult = { ok: true; email: string; role: string; tenantSlug:
  * Accepting an invitation activates the account; every session that existed
  * before is ended.
  */
-export async function consumePasswordToken(raw: string, newPassword: string): Promise<ConsumeResult> {
+export async function consumePasswordToken(raw: string, newPassword: string, scope: TokenScope = {}): Promise<ConsumeResult> {
   if (newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > 200) return { ok: false, reason: "weak" };
   const passwordHash = await hashPassword(newPassword);
   const now = new Date();
 
   return rawDb.$transaction(async (tx) => {
+    // The scope is part of the claim itself, so a token used on the wrong
+    // host is refused without being marked used: it still works where it
+    // belongs, and it is still good for exactly one use there.
     const claimed = await tx.passwordResetToken.updateMany({
-      where: { tokenHash: hashToken(raw), usedAt: null, expiresAt: { gt: now } },
+      where: { tokenHash: hashToken(raw), usedAt: null, expiresAt: { gt: now }, user: { is: userScope(scope) } },
       data: { usedAt: now },
     });
     if (claimed.count !== 1) return { ok: false, reason: "invalid" } as const;

@@ -13,6 +13,7 @@ import { clinicAppOrigin } from "@/lib/clinic-app-link";
 import { chooseAccount, isPortal, portalRoles, type Portal } from "@/lib/portal-scope";
 import { logReset } from "@/lib/signin-log";
 import { logEmailSend } from "@/lib/emails/send-log";
+import { currentClinicHostSlug } from "@/lib/public-clinic";
 import { arg, args, INVALID_REQUEST, validArgs } from "@/lib/action-args";
 
 type FormState = { error?: string; sent?: boolean } | undefined;
@@ -39,7 +40,11 @@ export async function requestPasswordResetAction(_prev: FormState, fd: FormData)
   if (!parsed.success) return { error: (await getTranslations("auth"))("enterValidEmail") };
   const email = parsed.data;
   const rawClinic = fd.get("clinic");
-  const clinicSlug = typeof rawClinic === "string" && /^[a-z0-9-]{1,80}$/.test(rawClinic) ? rawClinic : null;
+  // On a clinic's own domain the host decides, not the form: that domain is
+  // the clinic's client app, so only its client door exists there — never
+  // the staff or admin door, nor another clinic's.
+  const hostClinic = await currentClinicHostSlug();
+  const clinicSlug = hostClinic ?? (typeof rawClinic === "string" && /^[a-z0-9-]{1,80}$/.test(rawClinic) ? rawClinic : null);
   const rawPortal = fd.get("portal");
   // A clinic slug is what makes this a client reset; a "customer" door without
   // one is no door at all and falls back to staff, the same as sign-in does.
@@ -130,12 +135,18 @@ export async function setPasswordAction(_prev: FormState, fd: FormData): Promise
   const { ok } = await rateLimit(`set-password:${await clientIp()}`, 20, 15 * 60 * 1000);
   if (!ok) return { error: t("tooManyAttemptsWaitMinutes") };
 
-  const result = await consumePasswordToken(token, password);
+  // On a clinic's own domain only that clinic's client links work (see
+  // TokenScope); any other link gets the same "expired or used" answer and
+  // stays usable where it belongs.
+  const hostClinic = await currentClinicHostSlug();
+  const result = await consumePasswordToken(token, password, { clinicSlug: hostClinic });
   if (!result.ok) {
     return {
       error: result.reason === "weak" ? t("useAtLeastChars", { min: MIN_PASSWORD_LENGTH }) : t("linkExpiredOrUsed"),
     };
   }
 
+  // On the clinic's domain its app is the whole host, so home is "/".
+  if (hostClinic) redirect("/?password=updated");
   redirect(result.role === "CUSTOMER" && result.tenantSlug ? `/app/${result.tenantSlug}?password=updated` : "/login?reason=password-updated");
 }

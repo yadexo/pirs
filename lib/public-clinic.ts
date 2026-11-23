@@ -99,6 +99,19 @@ export function clientAppPathsFor(slug: string, requestHeaders: Headers): { base
 }
 
 
+/**
+ * The clinic whose own domain this request arrived on, or null anywhere else.
+ *
+ * Only the middleware sets this header (and replaces any copy a request
+ * brings), so it is the one trustworthy answer to "is this a clinic's
+ * domain, and whose". Anything that must behave differently there — the
+ * password pages bind themselves to this clinic's clients — reads it here,
+ * never from a form field.
+ */
+export async function currentClinicHostSlug(): Promise<string | null> {
+  return (await headers()).get(CLINIC_HOST_HEADER) || null;
+}
+
 /** Home-screen label: iOS truncates past roughly 12 characters. */
 export function shortAppName(name: string): string {
   return name.length <= 12 ? name : name.split(/\s+/)[0]!.slice(0, 12);

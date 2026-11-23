@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { currentClientBasePath } from "@/lib/public-clinic";
+import { currentClientBasePath, currentClinicHostSlug } from "@/lib/public-clinic";
 import { resolveLocale } from "@/lib/locale";
 import { GuestLocaleSwitcher } from "@/components/auth/guest-locale-switcher";
 import { isPortal } from "@/lib/portal-scope";
@@ -8,15 +8,20 @@ import { ForgotPasswordForm } from "./forgot-password-form";
 
 export default async function ForgotPasswordPage({ searchParams }: { searchParams: Promise<{ clinic?: string; portal?: string }> }) {
   const { clinic, portal } = await searchParams;
-  // Only a well-formed slug is carried into the form.
-  const slug = clinic && /^[a-z0-9-]{1,80}$/.test(clinic) ? clinic : null;
+  // On a clinic's own domain this is always that clinic's client door,
+  // whatever the address says (the action enforces the same). Elsewhere only
+  // a well-formed slug is carried into the form.
+  const hostClinic = await currentClinicHostSlug();
+  const slug = hostClinic ?? (clinic && /^[a-z0-9-]{1,80}$/.test(clinic) ? clinic : null);
   // Which door asked, so the reset goes to that kind of account and not to
   // another one that happens to share the address (lib/portal-scope.ts). A
   // clinic slug already says "a client of this clinic", so it wins.
   const door = slug ? null : isPortal(portal) && portal !== "customer" ? portal : "staff";
   // The clinic app's address on this host, so a client installed on the root
   // domain comes back inside their app rather than beside it.
-  const backToApp = slug ? await currentClientBasePath(slug) : "/login";
+  // On the clinic's own domain the base path is "" (the app is the host), and
+  // an empty href would point back at this page.
+  const backToApp = slug ? (await currentClientBasePath(slug)) || "/" : "/login";
   const t = await getTranslations("auth.resetPassword");
   const locale = await resolveLocale();
   const path = `/forgot-password${slug ? `?clinic=${encodeURIComponent(slug)}` : door ? `?portal=${encodeURIComponent(door)}` : ""}`;
