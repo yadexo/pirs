@@ -153,9 +153,16 @@ export function SelectField({
   );
 }
 
+/**
+ * A labelled checkbox. On its own it is a yes/no switch, sent as "on" when
+ * ticked. As one of a list under one `name` (read with getAll() on the server)
+ * it must have a `value` — without one every ticked box sends "on" instead of
+ * its id (tests/checkbox-list-values.test.ts).
+ */
 export function CheckboxField({
   label,
   name,
+  value,
   description,
   defaultChecked,
   checked,
@@ -163,6 +170,7 @@ export function CheckboxField({
 }: {
   label: string;
   name: string;
+  value?: string;
   description?: string;
   defaultChecked?: boolean;
   checked?: boolean;
@@ -173,6 +181,7 @@ export function CheckboxField({
       <input
         type="checkbox"
         name={name}
+        value={value}
         defaultChecked={checked === undefined ? defaultChecked : undefined}
         checked={checked}
         onChange={onChange ? (e) => onChange(e.target.checked) : undefined}

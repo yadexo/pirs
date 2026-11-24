@@ -142,6 +142,7 @@ export function PackageForm({ merchantId, currency, item, options, errors }: Ite
               <CheckboxField
                 key={s.id}
                 name="serviceIds"
+                value={s.id}
                 label={s.name}
                 checked={covered.has(s.id)}
                 onChange={(on) =>

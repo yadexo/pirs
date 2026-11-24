@@ -673,7 +673,7 @@ export function TeamSection({ merchantId, data, canEdit }: { merchantId: string;
                 {data.allPermissions
                   .filter((p) => p.category === c)
                   .map((p) => (
-                    <CheckboxField key={p.key} name="permissions" label={p.label} defaultChecked={roleEditor.permissions.includes(p.key)} />
+                    <CheckboxField key={p.key} name="permissions" value={p.key} label={p.label} defaultChecked={roleEditor.permissions.includes(p.key)} />
                   ))}
               </FormSection>
             ))}
