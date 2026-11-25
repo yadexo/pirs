@@ -696,6 +696,10 @@
       "switchLabel": "Meldingen",
       "sendTest": "Testmelding versturen",
       "sending": "Versturen…"
+    },
+    "unavailable": {
+      "title": "Tijdelijk niet beschikbaar",
+      "body": "De app van {name} is op dit moment niet beschikbaar. Probeer het later opnieuw."
     }
   },
   "portal": {
@@ -1948,5 +1952,10 @@
       "pleaseSignInAgain": "Log opnieuw in.",
       "searchFailed": "Zoeken mislukt. Probeer het opnieuw."
     }
+  },
+  "notFound": {
+    "title": "Pagina niet gevonden",
+    "body": "Deze pagina bestaat niet, of niet meer.",
+    "home": "Naar de startpagina"
   }
 }

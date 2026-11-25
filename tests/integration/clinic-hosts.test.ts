@@ -53,8 +53,11 @@ describe("the clinic host map", () => {
     expect((await readClinicHostMap()).hosts).not.toHaveProperty(hostOf("pending"));
   });
 
-  it("leaves out a suspended clinic, however verified its domain is", async () => {
-    expect((await readClinicHostMap()).hosts).not.toHaveProperty(hostOf("suspended"));
+  // A suspended clinic keeps its domain, so that domain can say the app is
+  // temporarily unavailable rather than stop resolving (fix round 1, item 8;
+  // tests/integration/unavailable-and-not-found.test.ts).
+  it("keeps a suspended clinic's verified domain", async () => {
+    expect((await readClinicHostMap()).hosts[hostOf("suspended")]).toBe(slugOf("suspended"));
   });
 
   it("carries nothing but hosts and slugs", async () => {

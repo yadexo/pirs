@@ -696,6 +696,10 @@
       "switchLabel": "Notifications",
       "sendTest": "Send test notification",
       "sending": "Sending…"
+    },
+    "unavailable": {
+      "title": "Temporarily unavailable",
+      "body": "The {name} app is not available right now. Please try again later."
     }
   },
   "portal": {
@@ -1948,5 +1952,10 @@
       "pleaseSignInAgain": "Please sign in again.",
       "searchFailed": "Search failed. Try again."
     }
+  },
+  "notFound": {
+    "title": "Page not found",
+    "body": "This page does not exist, or no longer does.",
+    "home": "Go to the home page"
   }
 }

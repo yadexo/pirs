@@ -33,7 +33,9 @@ let cached: { map: ClinicHostMap; at: number } | null = null;
 /** Reads the map from the database. No cache — `clinicHostMap` is the cached one. */
 export async function readClinicHostMap(): Promise<ClinicHostMap> {
   const rows = await rawDb.clinicDomain.findMany({
-    where: { status: "VERIFIED", type: "CLIENT", tenant: { status: "ACTIVE" } },
+    // A suspended clinic keeps its domain, which then says the app is
+    // temporarily unavailable (app/app/[merchantSlug]/layout.tsx).
+    where: { status: "VERIFIED", type: "CLIENT", tenant: { status: { in: ["ACTIVE", "SUSPENDED"] } } },
     select: { host: true, tenant: { select: { slug: true } } },
   });
   const hosts: Record<string, string> = Object.create(null);

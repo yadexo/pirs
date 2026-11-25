@@ -13,6 +13,9 @@ import { Onboarding } from "./onboarding";
 import { ClientAppShell } from "./shell";
 import "./client-app.css";
 import { clientAppDescription } from "@/lib/booking-copy";
+import { getTranslations } from "next-intl/server";
+import { getSuspendedClinic } from "@/lib/clinic-brand";
+import { UnavailableView } from "@/components/client-app/unavailable-view";
 
 type Params = { params: Promise<{ merchantSlug: string }> };
 
@@ -23,7 +26,7 @@ type Params = { params: Promise<{ merchantSlug: string }> };
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { merchantSlug } = await params;
   const clinic = await getPublicClinic(merchantSlug);
-  if (!clinic) return {};
+  if (!clinic) return { robots: { index: false } };
   const { base } = await currentClientAppPaths(clinic.slug);
   const v = `?v=${clinic.version}`;
   return {
@@ -54,6 +57,17 @@ export default async function ClientAppLayout({
   params: Promise<{ merchantSlug: string }>;
 }) {
   const { merchantSlug } = await params;
+  // A suspended clinic's app says it is temporarily unavailable, in its own
+  // colours, instead of the 404 below that reads as "never existed".
+  const suspended = await getSuspendedClinic(merchantSlug);
+  if (suspended) {
+    const t = await getTranslations("clientApp.unavailable");
+    return (
+      <div className="client-app" style={brandCssVars(brandTokens(suspended.color)) as React.CSSProperties}>
+        <UnavailableView name={suspended.name} logoUrl={suspended.logoUrl} title={t("title")} body={t("body", { name: suspended.name })} />
+      </div>
+    );
+  }
   const ctx = await getClientAppContext(merchantSlug);
   // Every link in the app hangs off this.
   // The worker controls the whole app, home page included — the same scope the
