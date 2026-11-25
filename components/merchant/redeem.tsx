@@ -43,8 +43,8 @@ export function RedeemButton() {
 
   return (
     <>
-      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-        <Ticket className="h-3.5 w-3.5" /> {t("redeem")}
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)} aria-label={t("redeem")}>
+        <Ticket className="h-3.5 w-3.5" aria-hidden="true" /> <span className="pk-toplab">{t("redeem")}</span>
       </Button>
       <Drawer open={open} onClose={() => setOpen(false)} title={t("redeemAnItem")} subtitle={t("scanSubtitle")}>
         {open && <RedeemFlow merchantId={merchantId} onClose={() => setOpen(false)} />}

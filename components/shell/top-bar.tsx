@@ -18,9 +18,9 @@ export async function PortalTopBar({ merchantSlug }: { merchantSlug: string }) {
     <header className="pk-topbar">
       <RedeemButton />
       <ScanQrButton />
-      <a className="pk-topbtn" href={`/app/${merchantSlug}`} target="_blank" rel="noreferrer">
-        <ExternalLink className="h-4 w-4" />
-        {t("viewApp")}
+      <a className="pk-topbtn" href={`/app/${merchantSlug}`} target="_blank" rel="noreferrer" aria-label={t("viewApp")}>
+        <ExternalLink className="h-4 w-4" aria-hidden="true" />
+        <span className="pk-toplab">{t("viewApp")}</span>
       </a>
     </header>
   );

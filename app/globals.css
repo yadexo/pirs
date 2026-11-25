@@ -300,12 +300,15 @@ body {
   .pk-navrow .lab {
     display: none;
   }
-  .pk-user .txt,
-  .pk-user .out {
+  .pk-user .txt {
     display: none;
   }
+  /* The sign-out button stays, under the avatar: a shared front-desk phone or
+     tablet must be able to sign out (tests/portal-phone.test.ts). */
   .pk-user {
+    flex-direction: column;
     justify-content: center;
+    gap: var(--space-2);
   }
 }
 
@@ -352,6 +355,32 @@ body {
   }
   .pk-page {
     padding: 0 24px 48px;
+  }
+}
+/* Phone: the three labelled actions need about 600px. Start them from the
+   left so the first one (Verzilveren) can never slide off under the sidebar,
+   and show icons only — the label stays for screen readers. */
+@media (max-width: 640px) {
+  .pk-topbar {
+    justify-content: flex-start;
+    padding: 0 12px;
+    gap: var(--space-1);
+  }
+  .pk-topbar .pk-topbtn,
+  .pk-topbar button {
+    height: 44px;
+    padding: 0 var(--space-3);
+  }
+  .pk-toplab {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 }
 

@@ -39,8 +39,8 @@ export function ScanQrButton() {
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
-        <QrCode className="h-3.5 w-3.5" /> {t("scanQr")}
+      <Button size="sm" onClick={() => setOpen(true)} aria-label={t("scanQr")}>
+        <QrCode className="h-3.5 w-3.5" aria-hidden="true" /> <span className="pk-toplab">{t("scanQr")}</span>
       </Button>
       <Drawer open={open} onClose={() => setOpen(false)} title={t("checkInAClient")} subtitle={t("scanSubtitle")}>
         {open && <CheckInFlow merchantId={merchantId} onClose={() => setOpen(false)} />}
