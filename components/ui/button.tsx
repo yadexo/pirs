@@ -33,9 +33,13 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "primary", size = "md", loading, disabled, children, ...props }, ref) => (
+  // type="button" unless told otherwise: an HTML button without a type submits
+  // the form around it, and drawers here sit inside forms (the photo cropper
+  // inside the product form used to save the product on "use this crop").
+  ({ className, variant = "primary", size = "md", loading, disabled, children, type = "button", ...props }, ref) => (
     <button
       ref={ref}
+      type={type}
       disabled={disabled || loading}
       className={cn(
         "inline-flex items-center justify-center gap-2 rounded-[14px] font-semibold transition-colors",
