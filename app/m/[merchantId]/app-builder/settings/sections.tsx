@@ -42,7 +42,6 @@ import { DailyLimitField } from "./daily-limit";
 import { DEFAULT_WINDOW_END, DEFAULT_WINDOW_START } from "@/lib/marketing-window";
 import { SendingWindowFields } from "./sending-window";
 import { useClinicTimeZone } from "@/components/clinic-time-zone";
-import { useInAppBookings } from "@/components/in-app-bookings";
 
 type Data<S extends SettingsData["section"]> = Extract<SettingsData, { section: S }>;
 type SaveFn = (merchantId: string, fd: FormData) => Promise<ActionResult>;
@@ -951,7 +950,6 @@ export function BookingSection({ merchantId, data, canEdit, currency }: { mercha
 
 export function NotificationsSection({ merchantId, data, canEdit }: { merchantId: string; data: Data<"notifications">; canEdit: boolean }) {
   const t = useTranslations("portal.appBuilder.settings.sections.notifications");
-  const inAppBookings = useInAppBookings();
   const s = data.settings;
   const on = (v: boolean | undefined) => v ?? true;
   return (
@@ -963,13 +961,9 @@ export function NotificationsSection({ merchantId, data, canEdit }: { merchantId
         {() => (
           <FormSection title={t("sendWhenTitle")}>
             <p className="text-[12px] text-ink-muted">{t("respectedHint")}</p>
-            {/* Appointment messages only for a clinic that books in the app; the save keeps them as they are otherwise. */}
-            {inAppBookings && (
-              <>
-                <CheckboxField name="notifyBookingConfirmations" label={t("bookingLabel")} defaultChecked={on(s?.notifyBookingConfirmations)} />
-                <CheckboxField name="notifyAppointmentReminders" label={t("reminderLabel")} defaultChecked={on(s?.notifyAppointmentReminders)} />
-              </>
-            )}
+            {/* No booking-confirmation or appointment-reminder toggles: nothing
+                sends either message yet, so a switch would promise one. The
+                stored values are kept (saveNotificationSettingsAction). */}
             <CheckboxField name="notifyPointsEarned" label={t("pointsLabel")} defaultChecked={on(s?.notifyPointsEarned)} />
             <CheckboxField name="notifyMembershipBilling" label={t("membershipLabel")} defaultChecked={on(s?.notifyMembershipBilling)} />
           </FormSection>

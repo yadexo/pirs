@@ -825,7 +825,6 @@ function NotificationsSheet({
   onSaved: () => void;
 }) {
   const t = useTranslations("clientApp.profile");
-  const inAppBookings = useInAppBookings();
   const [state, setState] = React.useState({
     emailConsent: summary.emailConsent,
     smsConsent: summary.smsConsent,
@@ -844,9 +843,11 @@ function NotificationsSheet({
       });
   }, [open, summary]);
 
+  // No SMS row: real SMS delivery is not built (lib/providers/notifications/
+  // sms.ts), so a switch would promise messages that never come. The stored
+  // consent still goes back unchanged with the others.
   const rows: [keyof typeof state, string][] = [
     ["emailConsent", t("email")],
-    ["smsConsent", t("sms")],
     ["pushConsent", t("pushNotifications")],
     ["marketingConsent", t("offersAndPromotions")],
   ];
@@ -878,7 +879,6 @@ function NotificationsSheet({
           {label}
         </button>
       ))}
-      {inAppBookings && <p style={{ color: "var(--muted)", fontSize: 14, paddingTop: 12 }}>{t("appointmentRemindersNote")}</p>}
     </Sheet>
   );
 }

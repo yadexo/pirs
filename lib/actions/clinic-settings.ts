@@ -738,14 +738,10 @@ export async function saveNotificationSettingsAction(merchantId: string, fd: For
   if (!validArgs(args([arg.id, arg.formData]), [merchantId, fd])) return { error: INVALID_REQUEST };
   return runAction(async () => {
     const ctx = await requireMerchantAction(merchantId, "owner");
-    // The appointment toggles are only on the form for a clinic that books in
-    // the app; otherwise they keep their stored values rather than being
-    // cleared by a form that does not show them.
-    const bookings = await inAppBookingsOn(merchantId);
+    // notifyBookingConfirmations and notifyAppointmentReminders are not on
+    // the form — nothing sends either message yet — and keep their stored
+    // values rather than being written from a form that does not show them.
     const data = {
-      ...(bookings
-        ? { notifyBookingConfirmations: formBool(fd, "notifyBookingConfirmations"), notifyAppointmentReminders: formBool(fd, "notifyAppointmentReminders") }
-        : {}),
       notifyPointsEarned: formBool(fd, "notifyPointsEarned"),
       ...marketingWindow(fd),
       birthdayMessageEnabled: formBool(fd, "birthdayMessageEnabled"),
