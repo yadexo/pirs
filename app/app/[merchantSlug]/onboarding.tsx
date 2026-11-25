@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useActionState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { BlackButton } from "@/components/client-app/primitives";
 import { isStandalone } from "@/components/client-app/pwa";
@@ -68,15 +68,40 @@ export function Onboarding({ merchantSlug, merchantName, logoUrl }: { merchantSl
   );
 }
 
+/**
+ * The page the client was asked to sign in on, path and query, so the action
+ * can send them back to it (an email link to "my items", say). The server
+ * only honours it inside this clinic's app (clientNext).
+ */
+function useHere(): string {
+  const pathname = usePathname();
+  const query = useSearchParams().toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
+/**
+ * A form field whose value lives in state. React resets an uncontrolled form
+ * once its action has run, which wiped everything typed whenever the server
+ * said no; a controlled field keeps it.
+ */
+function useField(): { value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void } {
+  const [value, setValue] = React.useState("");
+  return { value, onChange: (e) => setValue(e.target.value) };
+}
+
 function SignInForm({ merchantSlug }: { merchantSlug: string }) {
   const t = useTranslations("clientApp.onboarding");
   const action = customerSignInAction.bind(null, merchantSlug);
   const [state, formAction, pending] = useActionState(action, undefined);
+  const here = useHere();
+  const email = useField();
+  const password = useField();
 
   return (
     <form action={formAction} className="space-y-3">
-      <input name="email" type="email" placeholder={t("email")} autoComplete="email" required className={field} />
-      <input name="password" type="password" placeholder={t("password")} autoComplete="current-password" required className={field} />
+      <input type="hidden" name="next" value={here} />
+      <input name="email" value={email.value} onChange={email.onChange} type="email" placeholder={t("email")} autoComplete="email" required className={field} />
+      <input name="password" value={password.value} onChange={password.onChange} type="password" placeholder={t("password")} autoComplete="current-password" required className={field} />
       {state?.error && <p className="text-[13px] text-[var(--danger)]">{state.error}</p>}
       <BlackButton type="submit" loading={pending} className="w-full">
         {t("signIn")}
@@ -95,15 +120,21 @@ function RegisterForm({ merchantSlug }: { merchantSlug: string }) {
   const t = useTranslations("clientApp.onboarding");
   const action = customerRegisterAction.bind(null, merchantSlug);
   const [state, formAction, pending] = useActionState(action, undefined);
+  const here = useHere();
+  const firstName = useField();
+  const lastName = useField();
+  const email = useField();
+  const password = useField();
 
   return (
     <form action={formAction} className="space-y-3">
+      <input type="hidden" name="next" value={here} />
       <div className="flex gap-3">
-        <input name="firstName" placeholder={t("firstName")} required className={field} />
-        <input name="lastName" placeholder={t("lastName")} required className={field} />
+        <input name="firstName" value={firstName.value} onChange={firstName.onChange} placeholder={t("firstName")} required className={field} />
+        <input name="lastName" value={lastName.value} onChange={lastName.onChange} placeholder={t("lastName")} required className={field} />
       </div>
-      <input name="email" type="email" placeholder={t("email")} autoComplete="email" required className={field} />
-      <input name="password" type="password" placeholder={t("password")} autoComplete="new-password" required minLength={8} className={field} />
+      <input name="email" value={email.value} onChange={email.onChange} type="email" placeholder={t("email")} autoComplete="email" required className={field} />
+      <input name="password" value={password.value} onChange={password.onChange} type="password" placeholder={t("password")} autoComplete="new-password" required minLength={8} className={field} />
       {state?.error && <p className="text-[13px] text-[var(--danger)]">{state.error}</p>}
       <BlackButton type="submit" loading={pending} className="w-full">
         {t("createAccount")}

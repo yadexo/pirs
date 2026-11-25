@@ -10,7 +10,7 @@ import { TWO_FACTOR_REQUIRED_MESSAGE, INVALID_TWO_FACTOR_CODE_MESSAGE, RATE_LIMI
 import { hashPassword, spendPasswordCheck } from "@/lib/password";
 import { rateLimit, retryAfterParts } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request-ip";
-import { resolveDestination, canReach, safeNext } from "@/lib/login-destination";
+import { resolveDestination, canReach, safeNext, clientNext } from "@/lib/login-destination";
 import { audienceFor, chooseAccount, isPortal, portalRoles, slugFromNext, type Portal } from "@/lib/portal-scope";
 import { recordActivity } from "@/lib/activity";
 import { currentClientBasePath } from "@/lib/public-clinic";
@@ -74,9 +74,10 @@ export async function customerSignInAction(tenantSlug: string, _prevState: unkno
   if (!validArgs(args([arg.slug, arg.prevState, arg.formData]), [tenantSlug, _prevState, formData])) return { error: INVALID_REQUEST };
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
-  // `next` is form input, so only a same-origin path is honoured; the default
-  // is the client app itself (the old /:tenant customer app no longer exists).
-  const next = safeNext(String(formData.get("next") ?? "") || undefined) ?? (await currentClientBasePath(tenantSlug));
+  // `next` is form input: where the client was when asked to sign in (an
+  // email link, say). Only a path inside this clinic's app counts; anything
+  // else is the app's home.
+  const next = clientNext(await currentClientBasePath(tenantSlug), String(formData.get("next") ?? ""));
   if (!email || !password) return { error: "Email and password are required." };
   const result = await signInOrError({ portal: "customer", tenantSlug, email, password }, next, "client");
   // Clients are never asked to set up 2FA — CUSTOMER accounts never have a
@@ -307,7 +308,8 @@ export async function customerRegisterAction(tenantSlug: string, _prevState: unk
     .then((result) => logEmailSend("welcome_client", result))
     .catch((err) => console.error("[register] welcome email not sent:", err instanceof Error ? err.message : err));
 
-  const result = await signInOrError({ portal: "customer", tenantSlug, email, password }, await currentClientBasePath(tenantSlug), "client");
+  const next = clientNext(await currentClientBasePath(tenantSlug), String(formData.get("next") ?? ""));
+  const result = await signInOrError({ portal: "customer", tenantSlug, email, password }, next, "client");
   // See the identical narrowing in customerSignInAction above — clients
   // never have a confirmed 2FA secret, so this branch is unreachable, but
   // the return type doesn't know that on its own.

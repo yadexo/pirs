@@ -18,6 +18,20 @@ export function safeNext(next: string | undefined): string | null {
   return next;
 }
 
+/**
+ * Where a client goes after signing in or up in a clinic's app: the page
+ * they were on (an email link to "my items", say), if it is inside that
+ * clinic's app at `base`, otherwise the app's home. `base` is "" on the
+ * clinic's own domain, where the whole host is the app.
+ */
+export function clientNext(base: string, next: string | null | undefined): string {
+  const home = base || "/";
+  const path = safeNext(next ?? undefined);
+  if (!path || /[\\\s]/.test(path)) return home;
+  if (base === "") return path;
+  return path === base || path.startsWith(`${base}/`) || path.startsWith(`${base}?`) ? path : home;
+}
+
 export interface PortalDescription {
   /** Stable, locale-independent key — for keying UI (e.g. the "wrong account" sentence), never rendered directly. */
   kind: "admin" | "clinic" | "client";
