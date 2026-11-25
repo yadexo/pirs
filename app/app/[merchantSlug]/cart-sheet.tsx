@@ -1,5 +1,6 @@
 "use client";
 
+import { cartLineAmounts } from "@/lib/money-display";
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
@@ -135,7 +136,9 @@ export function CartSheet({
     rewardDiscountCents: discount,
     autoDiscountCents: autoDiscount?.discountCents ?? 0,
     creditAvailableCents: credit,
-    useCredit,
+    // Credit only on the checkout step, where its line and its switch are
+    // shown — on the cart step the lines must add up to the total (QA M1).
+    useCredit: useCredit && stage !== "cart",
     vatRateBasisPoints,
   });
   const pointsToEarn = Math.floor(total * pointsPerCents);
@@ -418,6 +421,8 @@ export function CartSheet({
 function CartRow({ line, currency, onQty }: { line: CartLine; currency: string; onQty: (id: string, qty: number) => Promise<void> }) {
   const t = useTranslations("clientApp.cart");
   const locale = useLocale();
+  const fmtLocale = locale === "nl" ? "nl" : "en";
+  const amounts = cartLineAmounts(line.unitPriceCents, line.quantity);
   const [dx, setDx] = React.useState(0);
   const startX = React.useRef<number | null>(null);
 
@@ -450,9 +455,15 @@ function CartRow({ line, currency, onQty }: { line: CartLine; currency: string; 
         </div>
         <div className="info">
           <b>{line.name}</b>
+          {/* The line's own amount on the right; the unit price here only when it differs (QA report K3). */}
+          {amounts.showUnit && (
+            <span className="tabular" style={{ display: "block", fontSize: 14, color: "var(--muted)" }}>
+              {line.quantity} × {money(amounts.unitCents, currency, fmtLocale)}
+            </span>
+          )}
         </div>
         <div className="right">
-          <b className="tabular">{money(line.unitPriceCents, currency, locale === "nl" ? "nl" : "en")}</b>
+          <b className="tabular">{money(amounts.lineCents, currency, fmtLocale)}</b>
           <Stepper value={line.quantity} min={0} onChange={(q) => void onQty(line.id, q)} />
         </div>
       </div>

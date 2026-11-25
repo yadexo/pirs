@@ -28,6 +28,7 @@ import { useClinicTimeZone } from "../base-path";
 import { useInAppBookings } from "@/components/in-app-bookings";
 import { bookingKey } from "@/lib/booking-copy";
 import { deleteWordFor, isDeleteConfirmation } from "@/lib/account-closure";
+import { orderRefundState } from "@/lib/money-display";
 
 export interface ApptRow {
   id: string;
@@ -271,7 +272,8 @@ export function ProfileView({
                     </span>
                   </div>
                   <span style={{ marginLeft: "auto", flex: "none", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
-                    <span className="status-pill">{tp("paid")}</span>
+                    {/* From the refunds, not a fixed "paid" (QA report P3). */}
+                    <span className="status-pill">{tp({ paid: "paid", partlyRefunded: "orderPartlyRefunded", refunded: "orderRefunded" }[orderRefundState(o.totalCents, o.refundedCents ?? 0)])}</span>
                     <button onClick={() => setReceipt(o)} style={{ color: "var(--muted)", fontSize: 14, fontWeight: 500 }}>
                       {tp("viewReceipt")}
                     </button>

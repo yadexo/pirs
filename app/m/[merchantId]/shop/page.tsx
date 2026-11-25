@@ -14,6 +14,11 @@ import { resolveLocale } from "@/lib/locale";
 import { clinicZone } from "@/lib/clinic-zone";
 import { addDays, todayIn } from "@/lib/clinic-time";
 
+/** What has been refunded on an order, across its payments. */
+function refundedCentsOf(order: { payments: { refunds: { amountCents: number }[] }[] }): number {
+  return order.payments.flatMap((p) => p.refunds).reduce((sum, r) => sum + r.amountCents, 0);
+}
+
 export default async function ShopSummaryPage({
   params,
   searchParams,
@@ -42,7 +47,12 @@ export default async function ShopSummaryPage({
     ctx.db.order.findMany({
       orderBy: { placedAt: "desc" },
       take: 50,
-      include: { customerProfile: { select: { firstName: true, lastName: true } }, items: { select: { id: true } } },
+      include: {
+        customerProfile: { select: { firstName: true, lastName: true } },
+        items: { select: { id: true } },
+        // What was refunded, so the row says so rather than showing the full amount (QA report SH6).
+        payments: { select: { refunds: { select: { amountCents: true } } } },
+      },
     }),
     // Who collected what, and how — a manual redemption with no code shown
     // is the one an owner might want to ask about.
@@ -154,7 +164,12 @@ export default async function ShopSummaryPage({
                         {o.customerProfile.firstName} {o.customerProfile.lastName}
                       </td>
                       <td className="px-5 py-3 text-ink-muted">{o.items.length}</td>
-                      <td className="tabular px-5 py-3">{formatMoney(o.totalCents, currency)}</td>
+                      <td className="tabular px-5 py-3">
+                        {formatMoney(o.totalCents, currency)}
+                        {refundedCentsOf(o) > 0 && (
+                          <span className="block text-[11px] text-ink-muted">{t("refundedAmount", { amount: formatMoney(refundedCentsOf(o), currency) })}</span>
+                        )}
+                      </td>
                       <td className="px-5 py-3">
                         <Pill tone={o.status === "PAID" ? "green" : o.status === "FAILED" ? "red" : "neutral"}>
                           {t(`statusLabel.${o.status}`)}

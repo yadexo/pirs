@@ -1,5 +1,6 @@
 "use client";
 
+import { memberSavingCopy } from "@/lib/money-display";
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
@@ -252,7 +253,9 @@ export function ShopView({
       </section>
     );
 
-  const memberRate = pitchPlan ? Math.max(pitchPlan.serviceDiscountPercent ?? 0, pitchPlan.productDiscountPercent ?? 0) : 0;
+  // Only what the plan really discounts: "on everything" for a plan that
+  // only discounts treatments was a false price claim (QA report M2).
+  const memberCopy = pitchPlan ? memberSavingCopy(pitchPlan.serviceDiscountPercent, pitchPlan.productDiscountPercent) : null;
 
   return (
     <div className="v2-shop">
@@ -282,13 +285,18 @@ export function ShopView({
             </div>
           )}
 
-          {!isMember && memberRate > 0 && (
+          {!isMember && memberCopy && (
             <button type="button" className="v2-memberstrip" onClick={() => go("memberships")}>
               <span className="ic" aria-hidden="true">
                 <Icon name="star" size={20} />
               </span>
               <span className="txt">
-                {t.rich("membersSave", { rate: memberRate, name: merchantName, b: (chunks) => <b>{chunks}</b> })}
+                {t.rich(memberCopy.key as "membersSaveAll" | "membersSaveTreatments" | "membersSaveProducts" | "membersSaveSplit", {
+                  rate: memberCopy.rate,
+                  productRate: memberCopy.key === "membersSaveSplit" ? memberCopy.productRate : 0,
+                  name: merchantName,
+                  b: (chunks) => <b>{chunks}</b>,
+                })}
               </span>
               <Icon name="chevR" size={20} />
             </button>

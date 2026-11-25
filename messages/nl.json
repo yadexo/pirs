@@ -368,6 +368,8 @@
       "reschedule": "Verzetten",
       "cancel": "Annuleren",
       "paid": "Betaald",
+      "orderPartlyRefunded": "Deels terugbetaald",
+      "orderRefunded": "Terugbetaald",
       "viewReceipt": "Bon bekijken",
       "membershipHeading": "Lidmaatschap",
       "nextBilling": "Volgende afschrijving {date}",
@@ -473,7 +475,10 @@
       },
       "sectionsLabel": "Shoponderdelen",
       "all": "Alle",
-      "membersSave": "<b>Leden besparen {rate}%</b> op alles bij {name}",
+      "membersSaveAll": "<b>Leden besparen {rate}%</b> op alles bij {name}",
+      "membersSaveTreatments": "<b>Leden besparen {rate}%</b> op behandelingen bij {name}",
+      "membersSaveProducts": "<b>Leden besparen {rate}%</b> op producten bij {name}",
+      "membersSaveSplit": "<b>Leden besparen {rate}%</b> op behandelingen en {productRate}% op producten bij {name}",
       "shopBeingStocked": "De shop wordt gevuld",
       "shopBeingStockedSub": "Kom snel terug — nieuwe behandelingen en producten zijn onderweg.",
       "sessionPackages": "Sessiepakketten",
@@ -1712,6 +1717,7 @@
         "typedCode": "Code getypt",
         "byStaff": "Door medewerker"
       },
+      "refundedAmount": "{amount} terugbetaald",
       "statusLabel": {
         "PENDING": "In behandeling",
         "PAID": "Betaald",

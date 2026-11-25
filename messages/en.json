@@ -368,6 +368,8 @@
       "reschedule": "Reschedule",
       "cancel": "Cancel",
       "paid": "Paid",
+      "orderPartlyRefunded": "Partly refunded",
+      "orderRefunded": "Refunded",
       "viewReceipt": "View receipt",
       "membershipHeading": "Membership",
       "nextBilling": "Next billing {date}",
@@ -473,7 +475,10 @@
       },
       "sectionsLabel": "Shop sections",
       "all": "All",
-      "membersSave": "<b>Members save {rate}%</b> on everything at {name}",
+      "membersSaveAll": "<b>Members save {rate}%</b> on everything at {name}",
+      "membersSaveTreatments": "<b>Members save {rate}%</b> on treatments at {name}",
+      "membersSaveProducts": "<b>Members save {rate}%</b> on products at {name}",
+      "membersSaveSplit": "<b>Members save {rate}%</b> on treatments and {productRate}% on products at {name}",
       "shopBeingStocked": "The shop is being stocked",
       "shopBeingStockedSub": "Check back soon — new treatments and products are on their way.",
       "sessionPackages": "Session packages",
@@ -1712,6 +1717,7 @@
         "typedCode": "Typed code",
         "byStaff": "By staff"
       },
+      "refundedAmount": "{amount} refunded",
       "statusLabel": {
         "PENDING": "Pending",
         "PAID": "Paid",

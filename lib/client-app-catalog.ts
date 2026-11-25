@@ -254,7 +254,9 @@ export async function getCatalog(
         id: t.id,
         name: t.name,
         // What the viewer would pay for one of these today.
-        singlePriceCents: t.memberPriceCents ?? t.viewerPriceCents,
+        // What this viewer pays — never the member teaser a non-member is shown
+        // (that made every non-member saving look smaller; QA report S1).
+        singlePriceCents: t.viewerPriceCents,
         bookingUrl: t.bookingUrl,
       }));
     const saving = packageSaving({

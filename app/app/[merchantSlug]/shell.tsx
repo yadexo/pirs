@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { Icon, ToastProvider, money } from "@/components/client-app/ui";
 import { BasePathProvider, ClinicTimeZoneProvider, useBasePath, useHomePath } from "./base-path";
@@ -12,6 +12,7 @@ import { CartProvider, useCart } from "./cart-context";
 import { SearchSheet } from "./search-sheet";
 import { CartSheet } from "./cart-sheet";
 import { InAppBookingsProvider } from "@/components/in-app-bookings";
+import { clientCartExtrasAction } from "@/lib/actions/client-app";
 
 const TABS = [
   { key: "home", icon: "home" },
@@ -141,6 +142,24 @@ function Frame({
   // What is in the cart, VAT included. Credit and rewards are chosen inside
   // the sheet, so the bar shows the lines rather than a total it cannot know.
   const subtotal = items.reduce((sum, i) => sum + i.unitPriceCents * i.quantity, 0);
+  // The member price or offer the server takes off, the same figure the cart
+  // shows — so the bar and the cart's total agree (QA report X5). Credit and
+  // rewards are chosen at checkout and are not in either.
+  const [autoDiscountCents, setAutoDiscountCents] = React.useState(0);
+  const locale = useLocale();
+  React.useEffect(() => {
+    if (count === 0) {
+      setAutoDiscountCents(0);
+      return;
+    }
+    let live = true;
+    clientCartExtrasAction()
+      .then((extras) => live && setAutoDiscountCents(extras.discount?.discountCents ?? 0))
+      .catch(() => live && setAutoDiscountCents(0));
+    return () => {
+      live = false;
+    };
+  }, [count, subtotal]);
   const [searchOpen, setSearchOpen] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
@@ -224,7 +243,7 @@ function Frame({
           <span className="lab">
             {t("cart.view")} <span className="count tabular">{t("cart.itemCount", { count })}</span>
           </span>
-          <span className="total tabular">{money(subtotal, currency)}</span>
+          <span className="total tabular">{money(subtotal - autoDiscountCents, currency, locale === "nl" ? "nl" : "en")}</span>
         </button>
       )}
 
