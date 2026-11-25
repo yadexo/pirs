@@ -27,6 +27,7 @@ import { formatDay, formatTime } from "@/lib/client-format";
 import { useClinicTimeZone } from "../base-path";
 import { useInAppBookings } from "@/components/in-app-bookings";
 import { bookingKey } from "@/lib/booking-copy";
+import { deleteWordFor, isDeleteConfirmation } from "@/lib/account-closure";
 
 export interface ApptRow {
   id: string;
@@ -593,11 +594,18 @@ export function ProfileView({
           <button
             className="btn-black"
             style={{ background: "var(--danger)" }}
-            disabled={deleteText.trim() !== "DELETE" || pending}
+            disabled={!isDeleteConfirmation(deleteText) || pending}
             onClick={async () => {
               setPending(true);
-              await clientDeleteAccountAction(merchantSlug);
+              const res = await clientDeleteAccountAction(merchantSlug, deleteText);
               setPending(false);
+              if ("error" in res) {
+                // Nothing was closed — usually the payment provider would not
+                // stop the membership. The client stays signed in to retry.
+                toast(res.error);
+                return;
+              }
+              toast(tp("accountClosed"));
               await signOutOfClinicAction(merchantSlug);
             }}
           >
@@ -612,7 +620,7 @@ export function ProfileView({
           <input
             value={deleteText}
             onChange={(e) => setDeleteText(e.target.value)}
-            placeholder="DELETE"
+            placeholder={deleteWordFor(locale === "en" ? "en" : "nl")}
             aria-label={tp("typeDeleteToConfirm")}
             style={{ letterSpacing: "0.08em" }}
           />

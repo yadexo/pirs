@@ -152,7 +152,7 @@ describe("client actions refuse what the app would never send", () => {
     for (const bad of ["../../agency", "", "A".repeat(200), 7, null, ["riverside"]]) {
       expect(await call(clientApp.clientReviewAction, bad), String(bad)).toEqual({ error: INVALID_REQUEST });
       expect(await call(clientApp.clientCancelPlanAction, bad), String(bad)).toEqual({ error: INVALID_REQUEST });
-      await expect(call(clientApp.clientDeleteAccountAction, bad), String(bad)).rejects.toBeInstanceOf(InvalidActionArgsError);
+      expect(await call(clientApp.clientDeleteAccountAction, bad, "delete"), String(bad)).toEqual({ error: INVALID_REQUEST });
     }
     // The account was not closed by any of those.
     expect((await rawDb.user.findUniqueOrThrow({ where: { id: userId } })).status).toBe("ACTIVE");

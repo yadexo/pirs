@@ -42,6 +42,11 @@ import { recordInstallEvent } from "@/lib/install-nudge-data";
 import { rateLimit } from "@/lib/rate-limit";
 import { addableQuantity, chargeableLine, MAX_CART_QUANTITY, settableQuantity } from "@/lib/cart-quantity";
 import { arg, args, INVALID_REQUEST, InvalidActionArgsError, validArgs } from "@/lib/action-args";
+import { isDeleteConfirmation } from "@/lib/account-closure";
+import { accountClosedEmail } from "@/lib/emails/templates";
+import { senderFor } from "@/lib/emails/sender";
+import { logEmailSend } from "@/lib/emails/send-log";
+import { getEmailProvider } from "@/lib/providers/notifications";
 
 /**
  * Every mutating action the client app can perform.
@@ -1703,10 +1708,51 @@ export async function clientRecordInstallEventAction(
  * marketing consent rather than hard-deleting, so the clinic keeps the
  * financial and clinical history it is legally required to retain. The
  * deletion request itself is recorded in the audit log.
+ *
+ * Every membership that could still bill is ended first, immediately, on the
+ * clinic's own Stripe account (decisions D1–D2: now, no refund of the current
+ * period). A closed account can no longer sign in to cancel, so leaving a
+ * subscription running would keep charging someone who has left. If Stripe
+ * refuses, nothing is changed and the client is told; the account is never
+ * closed while a subscription might still charge. Unused credit, items and
+ * package sessions lapse with the account (D3); one last service email says
+ * so (D4). The confirmation word is checked here too (lib/account-closure.ts).
  */
-export async function clientDeleteAccountAction(slug: string): Promise<{ ok: true }> {
-  if (!validArgs(args([arg.slug]), [slug])) throw new InvalidActionArgsError();
+export async function clientDeleteAccountAction(slug: string, confirmation: string): Promise<{ ok: true } | { error: string }> {
+  if (!validArgs(args([arg.slug, arg.text(40)]), [slug, confirmation])) return { error: INVALID_REQUEST };
+  if (!isDeleteConfirmation(confirmation)) return { error: "Type the confirmation word to close your account." };
   const { db, user } = await requireCustomerContext();
+
+  const memberships = await db.customerMembership.findMany({
+    where: { customerProfileId: user.customerProfileId!, status: { in: [...MEMBERSHIP_HOLDS_SLOT] } },
+    select: { id: true, stripeSubscriptionId: true, membershipPlan: { select: { name: true } } },
+  });
+  if (memberships.length > 0) {
+    const clinic = await rawDb.tenant.findUnique({ where: { id: user.tenantId! }, select: { stripeAccountId: true } });
+    for (const m of memberships) {
+      if (!m.stripeSubscriptionId) continue;
+      try {
+        if (clinic?.stripeAccountId && m.stripeSubscriptionId.startsWith("sub_")) {
+          await cancelMembershipSubscription(clinic.stripeAccountId, m.stripeSubscriptionId);
+        } else {
+          await getPaymentProvider().cancelSubscription(m.stripeSubscriptionId);
+        }
+      } catch (err) {
+        console.error("[account-closure] the membership could not be cancelled; the account stays open:", err instanceof Error ? err.message : err);
+        return { error: "We couldn't stop your membership with the payment provider, so your account is still open. Please try again, or contact the clinic." };
+      }
+    }
+    const now = new Date();
+    await db.customerMembership.updateMany({
+      where: { id: { in: memberships.map((m) => m.id) } },
+      data: { status: "CANCELLED", cancelledAt: now, cancelAtPeriodEnd: false },
+    });
+    for (const m of memberships) {
+      await db.membershipBillingEvent.create({
+        data: { customerMembershipId: m.id, type: "STATUS_CHANGE", description: "Cancelled: the client closed their account" } as never,
+      });
+    }
+  }
 
   await db.customerProfile.updateMany({
     where: { id: user.customerProfileId! },
@@ -1730,6 +1776,30 @@ export async function clientDeleteAccountAction(slug: string): Promise<{ ok: tru
     reason: "Requested by client from the client app",
   });
 
+  await sendAccountClosedEmail(user.id, user.tenantId!, memberships.map((m) => m.membershipPlan?.name).filter((n): n is string => !!n));
+
   revalidateClient(slug);
   return { ok: true };
+}
+
+/** The last, service-only email to a client who closed their account. Never fails the closure. */
+async function sendAccountClosedEmail(userId: string, tenantId: string, planNames: string[]): Promise<void> {
+  try {
+    const [account, tenant] = await Promise.all([
+      rawDb.user.findUnique({ where: { id: userId }, select: { email: true, locale: true, customerProfile: { select: { firstName: true } } } }),
+      rawDb.tenant.findUnique({ where: { id: tenantId }, select: { name: true, branding: { select: { businessName: true, logoUrl: true, primaryColor: true } } } }),
+    ]);
+    if (!account?.email || !tenant) return;
+    const name = tenant.branding?.businessName ?? tenant.name;
+    const template = accountClosedEmail({
+      branding: { name, logoUrl: tenant.branding?.logoUrl ?? null, color: tenant.branding?.primaryColor ?? null },
+      firstName: account.customerProfile?.firstName ?? null,
+      planNames,
+      locale: account.locale === "en" ? "en" : "nl",
+    });
+    const result = await getEmailProvider().send({ to: account.email, subject: template.subject, body: template.text, html: template.html, from: senderFor(name) });
+    logEmailSend("account_closed", result);
+  } catch (err) {
+    console.error("[account-closure] closing email not sent:", err instanceof Error ? err.message : err);
+  }
 }

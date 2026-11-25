@@ -229,6 +229,12 @@ Details and reasoning are in the last section.
   - the portal keeps counting them in "Totaal actieve leden" (MB2).
 - **Where:** `lib/actions/client-app.ts:1707-1737` (`clientDeleteAccountAction`).
 - **Fix:** cancel active memberships (Stripe `cancelSubscription`) in the same action, and say so in the confirmation text.
+- **What happens on closure, as fixed in round 1** (decisions D1–D5; **to be confirmed by the lawyer**):
+  - any membership that could still bill is cancelled immediately on Stripe, and nothing more is charged;
+  - the current period is **not refunded**; the clinic can still refund manually from the portal;
+  - **prepaid credit, unused items and unused package sessions lapse** with the account and are not paid out. The confirmation text tells the client this and suggests contacting the clinic first;
+  - treatment and payment history stays with the clinic where the law requires it;
+  - one last service email confirms the closure.
 
 **X2 — "Account verwijderen" and "Uitloggen" are covered by the floating cart bar** · Annoying
 - **Steps:** have something in the cart → Profiel → Account → scroll to the bottom → tap "Account verwijderen".

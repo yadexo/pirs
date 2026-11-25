@@ -124,6 +124,33 @@ export function passwordResetEmail(params: { branding: EmailBranding; resetUrl: 
 }
 
 /**
+ * The last email to a client who closed their account: it is closed, any
+ * membership has ended, and nothing more will be charged. A service message,
+ * so it is sent although every consent was just withdrawn.
+ */
+export function accountClosedEmail(params: { branding: EmailBranding; firstName: string | null; planNames: string[]; locale: AppLocale }): EmailTemplate {
+  const { branding, firstName, planNames, locale } = params;
+  const nl = locale === "nl";
+  const plans = planNames.join(", ");
+  const closed = nl ? `Je account bij ${branding.name} is gesloten.` : `Your account with ${branding.name} is closed.`;
+  const membership =
+    planNames.length === 0
+      ? null
+      : nl
+        ? `Je lidmaatschap ${plans} is beëindigd en er wordt niets meer afgeschreven. Het lopende tijdvak wordt niet terugbetaald.`
+        : `Your ${plans} membership has ended and nothing more will be charged. The current period is not refunded.`;
+  const lapsed = nl
+    ? "Ongebruikt tegoed, items en sessies zijn met het account vervallen. Je behandel- en betaalgeschiedenis blijft bij de kliniek waar dat wettelijk verplicht is."
+    : "Unused credit, items and sessions lapsed with the account. Your treatment and payment history stays with the clinic where the law requires it.";
+  const contact = nl ? `Was dit niet de bedoeling? Neem contact op met ${branding.name}.` : `Didn't mean to? Contact ${branding.name}.`;
+  const lines = [`${greeting(locale, firstName ?? "")} ${closed}`, membership, lapsed, contact].filter((l): l is string => !!l);
+  const html = lines.map((l) => emailParagraph(l)).join("");
+  const text = lines.join("\n\n");
+  const subject = nl ? `Je account bij ${branding.name} is gesloten` : `Your account with ${branding.name} is closed`;
+  return { subject, html: emailLayout({ branding, preheader: closed, bodyHtml: html, locale }), text };
+}
+
+/**
  * To someone who already has an account, when the sign-up form was sent with
  * their address.
  *

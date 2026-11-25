@@ -22,7 +22,8 @@ export type EmailKind =
   | "welcome_clinic_owner"
   | "platform_admin_invite"
   | "staff_invite"
-  | "client_notice";
+  | "client_notice"
+  | "account_closed";
 
 /** The same plain-label rule as lib/signin-log.ts. */
 const SAFE = /^[A-Za-z0-9_+-]{1,64}$/;

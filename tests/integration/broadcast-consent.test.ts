@@ -144,7 +144,7 @@ describe("a clinic's broadcast", () => {
       });
       expect(await rawDb.pushSubscription.count({ where: { userId: leaving.userId } })).toBe(1);
 
-      expect(await clientDeleteAccountAction(slug)).toEqual({ ok: true });
+      expect(await clientDeleteAccountAction(slug, "delete")).toEqual({ ok: true });
 
       expect(await rawDb.pushSubscription.count({ where: { userId: leaving.userId } })).toBe(0);
       expect(await rawDb.customerProfile.findUniqueOrThrow({ where: { id: leaving.profileId } })).toMatchObject({ marketingConsent: false, pushConsent: false });
